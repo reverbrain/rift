@@ -1,5 +1,5 @@
-#ifndef IOREMAP_RIFT_AUTH_HPP
-#define IOREMAP_RIFT_AUTH_HPP
+#ifndef __IOREMAP_RIFT_AUTH_HPP
+#define __IOREMAP_RIFT_AUTH_HPP
 
 // must be the first, since thevoid internally uses X->boost::buffer conversion,
 // which must be present at compile time
@@ -50,4 +50,4 @@ private:
 } // namespace rift
 } // namespace ioremap
 
-#endif // IOREMAP_RIFT_AUTH_HPP
+#endif // __IOREMAP_RIFT_AUTH_HPP
