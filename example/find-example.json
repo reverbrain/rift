@@ -1,0 +1,8 @@
+{
+    "type": "and",
+    "view": "extended",
+    "indexes": [
+        "fast",
+        "distributed"
+    ]
+}
