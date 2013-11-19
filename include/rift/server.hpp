@@ -45,6 +45,8 @@ public:
 	elliptics::session session() const;
 	virtual swarm::http_response::status_type process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session) const;
 
+	std::vector<int> metadata_groups() const;
+
 protected:
 	virtual bool prepare_config(const rapidjson::Value &config, dnet_config &node_config);
 	virtual bool prepare_node(const rapidjson::Value &config, elliptics::node &node);
@@ -57,6 +59,7 @@ private:
 	auth_interface *m_auth;
 	std::unique_ptr<elliptics::node> m_node;
 	std::unique_ptr<elliptics::session> m_session;
+	std::vector<int> m_metadata_groups;
 };
 
 }} // namespace ioremap::rift

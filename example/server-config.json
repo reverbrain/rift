@@ -24,10 +24,10 @@
         "groups": [
             2
         ],
+        "metadata-groups": [
+            1
+        ],
         "cache": {
-            "groups": [
-                1
-            ],
             "name": "cache"
         },
         "signatures": [

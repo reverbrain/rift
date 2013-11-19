@@ -51,14 +51,13 @@ inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const st
 }
 }
 
-namespace ioremap {
-namespace rift {
+using namespace ioremap::rift;
 
 cache::cache()
 {
 }
 
-bool cache::initialize(const rapidjson::Value &application_config, const ioremap::elliptics::node &node, const swarm::logger &logger)
+bool cache::initialize(const rapidjson::Value &application_config, const elliptics::node &node, const swarm::logger &logger, const std::vector<int> &groups)
 {
 	m_logger = logger;
 
@@ -69,8 +68,8 @@ bool cache::initialize(const rapidjson::Value &application_config, const ioremap
 
 	const rapidjson::Value &config = application_config["cache"];
 
-	if (!config.HasMember("groups")) {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.cache.groups\" field is missed");
+	if (!groups.size()) {
+		m_logger.log(swarm::SWARM_LOG_ERROR, "invalid cache-groups size 0");
 		return false;
 	}
 
@@ -85,13 +84,8 @@ bool cache::initialize(const rapidjson::Value &application_config, const ioremap
 		m_timeout = config["timeout"].GetInt();
 	}
 
-	auto &groupsArray = config["groups"];
-	std::transform(groupsArray.Begin(), groupsArray.End(),
-		std::back_inserter(m_groups),
-		std::bind(&rapidjson::Value::GetInt, std::placeholders::_1));
-
-	m_session.reset(new ioremap::elliptics::session(node));
-	m_session->set_groups(m_groups);
+	m_session.reset(new elliptics::session(node));
+	m_session->set_groups(groups);
 
 	m_thread = boost::thread(std::bind(&cache::sync_thread, shared_from_this()));
 
@@ -104,7 +98,7 @@ void cache::stop()
 	m_thread.join();
 }
 
-std::vector<int> cache::groups(const ioremap::elliptics::key &key)
+std::vector<int> cache::groups(const elliptics::key &key)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 	auto it = m_cache_groups.find(key.raw_id());
@@ -118,7 +112,7 @@ std::vector<int> cache::groups(const ioremap::elliptics::key &key)
 void cache::sync_thread()
 {
 	while (!m_need_exit) {
-		ioremap::elliptics::session session = m_session->clone();
+		elliptics::session session = m_session->clone();
 		session.read_data(m_key, 0, 0).connect(std::bind(
 			&cache::on_read_finished, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
         
@@ -129,14 +123,14 @@ void cache::sync_thread()
 	}
 }
 
-void cache::on_read_finished(const ioremap::elliptics::sync_read_result &result, const ioremap::elliptics::error_info &error)
+void cache::on_read_finished(const elliptics::sync_read_result &result, const elliptics::error_info &error)
 {
 	if (error) {
 		m_logger.log(swarm::SWARM_LOG_ERROR, "Failed to access groups file: %s", error.message().c_str());
 		return;
 	}
 
-	const ioremap::elliptics::read_result_entry &entry = result[0];
+	const elliptics::read_result_entry &entry = result[0];
 	auto file = entry.file();
 
 	unordered_map cache_groups;
@@ -164,5 +158,3 @@ bool cache::equal_impl::operator() (const dnet_raw_id &first, const dnet_raw_id 
 {
 	return memcmp(first.id, second.id, DNET_ID_SIZE) == 0;
 }
-
-}} // namespace ioremap::rift

@@ -67,7 +67,7 @@ public:
 
 		if (config.HasMember("cache")) {
 			m_cache = std::make_shared<rift::cache>();
-			if (!m_cache->initialize(config, m_elliptics.node(), logger()))
+			if (!m_cache->initialize(config, m_elliptics.node(), logger(), m_elliptics.metadata_groups()))
 				return false;
 		}
 
@@ -210,6 +210,7 @@ private:
 	std::unique_ptr<rift::auth> m_auth;
 	elliptics_impl m_elliptics;
 	rift::signature m_signature;
+	std::vector<int> m_groups;
 };
 
 int main(int argc, char **argv)

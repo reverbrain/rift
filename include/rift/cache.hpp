@@ -21,7 +21,7 @@ class cache : public std::enable_shared_from_this<cache>
 public:
 	cache();
 
-	bool initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node, const swarm::logger &logger);
+	bool initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node, const swarm::logger &logger, const std::vector<int> &groups);
 	void stop();
 
 	std::vector<int> groups(const ioremap::elliptics::key &key);
@@ -46,7 +46,6 @@ private:
 	swarm::logger m_logger;
 	ioremap::elliptics::key m_key;
 	std::unique_ptr<ioremap::elliptics::session> m_session;
-	std::vector<int> m_groups;
 	std::mutex m_mutex;
 	unordered_map m_cache_groups;
 	int m_timeout;

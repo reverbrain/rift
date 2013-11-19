@@ -130,18 +130,29 @@ bool elliptics_base::prepare_node(const rapidjson::Value &config, elliptics::nod
 bool elliptics_base::prepare_session(const rapidjson::Value &config, elliptics::session &session)
 {
 	if (!config.HasMember("groups")) {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "\"groups\" field is missed");
+		m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.groups\" field is missed");
+		return false;
+	}
+
+	if (!config.HasMember("metadata-groups")) {
+		m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.metadata-groups\" field is missed");
 		return false;
 	}
 
 	std::vector<int> groups;
 
-	auto &groupsArray = config["groups"];
-	std::transform(groupsArray.Begin(), groupsArray.End(),
+	auto &groups_array = config["groups"];
+	std::transform(groups_array.Begin(), groups_array.End(),
 		std::back_inserter(groups),
 		std::bind(&rapidjson::Value::GetInt, std::placeholders::_1));
 
 	session.set_groups(groups);
+
+	auto &groups_meta_array = config["metadata-groups"];
+	std::transform(groups_meta_array.Begin(), groups_meta_array.End(),
+		std::back_inserter(m_metadata_groups),
+		std::bind(&rapidjson::Value::GetInt, std::placeholders::_1));
+
 
 	return true;
 }
@@ -149,4 +160,9 @@ bool elliptics_base::prepare_session(const rapidjson::Value &config, elliptics::
 swarm::logger elliptics_base::logger() const
 {
 	return m_logger;
+}
+
+std::vector<int> elliptics_base::metadata_groups() const
+{
+	return m_metadata_groups;
 }
