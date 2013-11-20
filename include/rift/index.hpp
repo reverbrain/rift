@@ -9,9 +9,10 @@
 namespace ioremap { namespace rift { namespace index { 
 
 // set indexes for given ID
-template <typename T>
-struct on_update : public thevoid::simple_request_stream<T>, public std::enable_shared_from_this<on_update<T>>
+template <typename Server, typename Stream>
+class on_update_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
+public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) req;
 
@@ -45,7 +46,7 @@ struct on_update : public thevoid::simple_request_stream<T>, public std::enable_
 		}
 
 		sess.set_indexes(id, indexes_entries)
-				.connect(std::bind(&on_update::on_update_finished,
+				.connect(std::bind(&on_update_base::on_update_finished,
 							this->shared_from_this(), std::placeholders::_2));
 	}
 
@@ -57,6 +58,12 @@ struct on_update : public thevoid::simple_request_stream<T>, public std::enable_
 
 		this->send_reply(swarm::http_response::ok);
 	}
+};
+
+template <typename Server>
+class on_update : public on_update_base<Server, on_update<Server>>
+{
+public:
 };
 
 struct read_result_cmp {
@@ -140,10 +147,10 @@ struct find_serializer {
 };
 
 // find (using 'AND' or 'OR' operator) indexes, which contain given ID
-template <typename T>
-struct on_find : public thevoid::simple_request_stream<T>, public std::enable_shared_from_this<on_find<T>>
+template <typename Server, typename Stream>
+class on_find_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
-
+public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) req;
 
@@ -186,7 +193,7 @@ struct on_find : public thevoid::simple_request_stream<T>, public std::enable_sh
 		}
 
 		(type == "and" ? sess.find_all_indexes(indexes) : sess.find_any_indexes(indexes))
-				.connect(std::bind(&on_find::on_find_finished,
+				.connect(std::bind(&on_find_base::on_find_finished,
 					this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 	}
 
@@ -205,7 +212,7 @@ struct on_find : public thevoid::simple_request_stream<T>, public std::enable_sh
 			m_result = result;
 
 			elliptics::session sess = this->server()->elliptics()->session();
-			sess.bulk_read(ids).connect(std::bind(&on_find::on_ready_to_parse_indexes,
+			sess.bulk_read(ids).connect(std::bind(&on_find_base::on_ready_to_parse_indexes,
 					this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 		} else {
 			elliptics::sync_read_result data;
@@ -242,6 +249,12 @@ struct on_find : public thevoid::simple_request_stream<T>, public std::enable_sh
 	elliptics::id_to_name_map_t m_map;
 	std::string m_view;
 	elliptics::sync_find_indexes_result m_result;
+};
+
+template <typename Server>
+class on_find : public on_find_base<Server, on_find<Server>>
+{
+public:
 };
 
 }}} // namespace ioremap::rift::index

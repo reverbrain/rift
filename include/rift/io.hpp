@@ -16,7 +16,7 @@
 
 namespace ioremap { namespace rift { namespace io {
 
-static elliptics::data_pointer create_data(const boost::asio::const_buffer &buffer)
+static inline elliptics::data_pointer create_data(const boost::asio::const_buffer &buffer)
 {
 	return elliptics::data_pointer::from_raw(
 		const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
@@ -25,9 +25,10 @@ static elliptics::data_pointer create_data(const boost::asio::const_buffer &buff
 }
 
 // read data object
-template <typename T>
-struct on_get : public thevoid::simple_request_stream<T>, public std::enable_shared_from_this<on_get<T>>
+template <typename Server, typename Stream>
+class on_get_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
+public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
@@ -55,7 +56,7 @@ struct on_get : public thevoid::simple_request_stream<T>, public std::enable_sha
 		}
 
 		sess.read_data(key, offset, size).connect(std::bind(
-			&on_get::on_read_finished, this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+			&on_get_base::on_read_finished, this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 	}
 
 	virtual void on_read_finished(const elliptics::sync_read_result &result,
@@ -233,10 +234,17 @@ struct on_get : public thevoid::simple_request_stream<T>, public std::enable_sha
 	}
 };
 
-// write data object, get file-info json in response
-template <typename T>
-struct on_upload : public thevoid::simple_request_stream<T>, public std::enable_shared_from_this<on_upload<T>>
+template <typename Server>
+class on_get : public on_get_base<Server, on_get<Server>>
 {
+public:
+};
+
+// write data object, get file-info json in response
+template <typename Server, typename Stream>
+class on_upload_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
+{
+public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		auto data = elliptics::data_pointer::from_raw(
 			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
@@ -253,7 +261,7 @@ struct on_upload : public thevoid::simple_request_stream<T>, public std::enable_
 
 		try {
 			write_data(req, sess, key, data).connect(
-				std::bind(&on_upload::on_write_finished, this->shared_from_this(),
+				std::bind(&on_upload_base::on_write_finished, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
 			this->log(swarm::SWARM_LOG_ERROR, "GET request, invalid cast: %s", e.what());
@@ -340,7 +348,7 @@ struct on_upload : public thevoid::simple_request_stream<T>, public std::enable_
 		}
 
 		rift::JsonValue result_object;
-		on_upload::fill_upload_reply(result, result_object, result_object.GetAllocator());
+		on_upload_base::fill_upload_reply(result, result_object, result_object.GetAllocator());
 
 		auto data = result_object.ToString();
 
@@ -353,9 +361,15 @@ struct on_upload : public thevoid::simple_request_stream<T>, public std::enable_
 	}
 };
 
+template <typename Server>
+class on_upload : public on_upload_base<Server, on_upload<Server>>
+{
+public:
+};
+
 // write data object, get file-info json in response
-template <typename T>
-struct on_buffered_upload : public thevoid::buffered_request_stream<T>, public std::enable_shared_from_this<on_buffered_upload<T>>
+template <typename Server, typename Stream>
+class on_buffered_upload_base : public thevoid::buffered_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
 	virtual void on_request(const swarm::http_request &request)
@@ -390,7 +404,7 @@ public:
 
 		this->log(swarm::SWARM_LOG_INFO, "on_chunk: size: %zu, m_offset: %llu, flags: %u", data.size(), (unsigned long long)m_offset, flags);
 
-		if (flags & thevoid::buffered_request_stream<T>::first_chunk) {
+		if (flags & thevoid::buffered_request_stream<Server>::first_chunk) {
 			m_groups = sess.get_groups();
 		} else {
 			sess.set_groups(m_groups);
@@ -399,10 +413,12 @@ public:
 		elliptics::async_write_result result = write(sess, data, flags);
 		m_offset += data.size();
 
-		if (flags & thevoid::buffered_request_stream<T>::last_chunk) {
-			result.connect(std::bind(&on_buffered_upload::on_write_finished, this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+		if (flags & thevoid::buffered_request_stream<Server>::last_chunk) {
+			result.connect(std::bind(&on_buffered_upload_base::on_write_finished, this->shared_from_this(),
+				std::placeholders::_1, std::placeholders::_2));
 		} else {
-			result.connect(std::bind(&on_buffered_upload::on_write_partial, this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+			result.connect(std::bind(&on_buffered_upload_base::on_write_partial, this->shared_from_this(),
+				std::placeholders::_1, std::placeholders::_2));
 		}
 	}
 
@@ -412,13 +428,13 @@ public:
 	{
 		typedef unsigned long long ull;
 
-		if (flags == thevoid::buffered_request_stream<T>::single_chunk) {
+		if (flags == thevoid::buffered_request_stream<Server>::single_chunk) {
 			return sess.write_data(m_key, data, m_offset);
 		} else if (m_size > 0) {
-			if (flags & thevoid::buffered_request_stream<T>::first_chunk) {
+			if (flags & thevoid::buffered_request_stream<Server>::first_chunk) {
 				this->log(swarm::SWARM_LOG_INFO, "prepare, offset: %llu, size: %llu", ull(m_offset), ull(m_size));
 				return sess.write_prepare(m_key, data, m_offset, m_offset + m_size);
-			} else if (flags & thevoid::buffered_request_stream<T>::last_chunk) {
+			} else if (flags & thevoid::buffered_request_stream<Server>::last_chunk) {
 				this->log(swarm::SWARM_LOG_INFO, "commit, offset: %llu, size: %llu", ull(m_offset), ull(m_offset + data.size()));
 				return sess.write_commit(m_key, data, m_offset, m_offset + data.size());
 			} else {
@@ -482,10 +498,17 @@ private:
 	uint64_t m_size;
 };
 
-// perform lookup, get file-info json in response
-template <typename T>
-struct on_download_info : public thevoid::simple_request_stream<T>, public std::enable_shared_from_this<on_download_info<T>>
+template <typename Server>
+class on_buffered_upload : public on_buffered_upload_base<Server, on_buffered_upload<Server>>
 {
+public:
+};
+
+// perform lookup, get file-info json in response
+template <typename Server, typename Stream>
+class on_download_info_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
+{
+public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &) {
 		elliptics::session sess = this->server()->elliptics()->session();
 		elliptics::key key;
@@ -496,7 +519,8 @@ struct on_download_info : public thevoid::simple_request_stream<T>, public std::
 			return;
 		}
 
-		sess.lookup(key).connect(std::bind(&on_download_info::on_lookup_finished, this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+		sess.lookup(key).connect(std::bind(&on_download_info_base::on_lookup_finished, this->shared_from_this(),
+			std::placeholders::_1, std::placeholders::_2));
 	}
 
 	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time, std::string *url_ptr) {
@@ -557,7 +581,7 @@ struct on_download_info : public thevoid::simple_request_stream<T>, public std::
 		}
 
 		rift::JsonValue result_object;
-		on_upload<T>::fill_upload_reply(result[0], result_object, result_object.GetAllocator());
+		on_upload<Server>::fill_upload_reply(result[0], result_object, result_object.GetAllocator());
 
 		dnet_time time;
 		dnet_current_time(&time);
@@ -583,9 +607,15 @@ struct on_download_info : public thevoid::simple_request_stream<T>, public std::
 	}
 };
 
+template <typename Server>
+class on_download_info : public on_download_info_base<Server, on_download_info<Server>>
+{
+public:
+};
+
 // perform lookup, redirect in response
-template <typename T>
-class on_redirectable_get : public on_download_info<T>
+template <typename Server>
+class on_redirectable_get : public on_download_info<Server>
 {
 public:
 	virtual void on_lookup_finished(const elliptics::sync_lookup_result &result,
@@ -612,11 +642,11 @@ public:
 	}
 };
 
-template <typename T>
-class on_buffered_get : public thevoid::simple_request_stream<T>, public std::enable_shared_from_this<on_buffered_get<T>>
+template <typename Server, typename Stream>
+class on_buffered_get_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	on_buffered_get() : m_buffer_size(5 * 1025 * 1024)
+	on_buffered_get_base() : m_buffer_size(5 * 1025 * 1024)
 	{
 	}
 
@@ -631,7 +661,7 @@ public:
 		}
 
 		sess.lookup(m_key).connect(std::bind(
-			&on_buffered_get::on_lookup_finished, this->shared_from_this(), std::placeholders::_1,  std::placeholders::_2));
+			&on_buffered_get_base::on_lookup_finished, this->shared_from_this(), std::placeholders::_1,  std::placeholders::_2));
 	}
 
 	void on_lookup_finished(const elliptics::sync_lookup_result &result, const elliptics::error_info &error)
@@ -688,7 +718,8 @@ public:
 			auto first_part = file.slice(0, file.size() / 2);
 			auto second_part = file.slice(first_part.size(), file.size() - first_part.size());
 
-			this->send_data(std::move(first_part), std::bind(&on_buffered_get::on_part_sent, this->shared_from_this(), offset + file.size(), std::placeholders::_1));
+			this->send_data(std::move(first_part), std::bind(&on_buffered_get_base::on_part_sent, this->shared_from_this(),
+				offset + file.size(), std::placeholders::_1));
 			this->send_data(std::move(second_part), std::function<void (const boost::system::error_code &)>());
 		}
 	}
@@ -705,13 +736,20 @@ public:
 		elliptics::session sess = this->server()->elliptics()->session();
 
 		sess.read_data(m_key, offset, std::min(m_size - offset, m_buffer_size)).connect(std::bind(
-			&on_buffered_get::on_read_finished, this->shared_from_this(), offset, std::placeholders::_1, std::placeholders::_2));
+			&on_buffered_get_base::on_read_finished, this->shared_from_this(),
+			offset, std::placeholders::_1, std::placeholders::_2));
 	}
 
 protected:
 	elliptics::key m_key;
 	uint64_t m_size;
 	uint64_t m_buffer_size;
+};
+
+template <typename Server>
+class on_buffered_get : public on_buffered_get_base<Server, on_buffered_get<Server>>
+{
+public:
 };
 
 }}} // ioremap::rift::io
