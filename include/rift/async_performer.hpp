@@ -23,6 +23,8 @@ public:
 
 	void initialize(const swarm::logger &logger);
 
+	void stop();
+
 	/*!
 	 * Invoke \a handler every \a timeout seconds. First call will be done
 	 * right now from another thread.

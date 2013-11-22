@@ -53,49 +53,27 @@ inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const st
 
 using namespace ioremap::rift;
 
-cache::cache() : m_async(NULL)
+cache::cache()
 {
 }
 
-bool cache::initialize(const rapidjson::Value &application_config, const elliptics::node &node,
+bool cache::initialize(const rapidjson::Value &config, const elliptics::node &node,
 	const swarm::logger &logger, async_performer *async, const std::vector<int> &groups)
 {
-	m_logger = logger;
-	m_async = async;
-
-	if (!application_config.HasMember("cache")) {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.cache\" field is missed");
-		return false;
-	}
-
-	const rapidjson::Value &config = application_config["cache"];
-
-	if (!groups.size()) {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "invalid cache-groups size 0");
+	if (!metadata_updater::initialize(config, node, logger, async, groups)) {
 		return false;
 	}
 
 	if (!config.HasMember("name")) {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.cache.groups\" field is missed");
+		logger.log(swarm::SWARM_LOG_ERROR, "\"application.cache.name\" field is missed");
 		return false;
 	}
 
 	m_key = std::string(config["name"].GetString());
-	m_timeout = 30;
-	if (config.HasMember("timeout")) {
-		m_timeout = config["timeout"].GetInt();
-	}
 
-	m_session.reset(new elliptics::session(node));
-	m_session->set_groups(groups);
-
-	m_async->add_action(std::bind(&cache::on_sync_action, shared_from_this()), m_timeout);
+	add_action(std::bind(&cache::on_sync_action, shared_from_this()));
 
 	return true;
-}
-
-void cache::stop()
-{
 }
 
 std::vector<int> cache::groups(const elliptics::key &key)
@@ -111,7 +89,7 @@ std::vector<int> cache::groups(const elliptics::key &key)
 
 void cache::on_sync_action()
 {
-	elliptics::session session = m_session->clone();
+	elliptics::session session = create_session();
 	session.read_data(m_key, 0, 0).connect(std::bind(
 		&cache::on_read_finished, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 }
@@ -119,7 +97,7 @@ void cache::on_sync_action()
 void cache::on_read_finished(const elliptics::sync_read_result &result, const elliptics::error_info &error)
 {
 	if (error) {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "Failed to access groups file: %s", error.message().c_str());
+		logger().log(swarm::SWARM_LOG_ERROR, "Failed to access groups file: %s", error.message().c_str());
 		return;
 	}
 

@@ -2,6 +2,7 @@ set(RIFT_SOURCES
         async_performer.cpp
 	auth.cpp
 	cache.cpp
+        metadata_updater.cpp
 	server.cpp
 	signature.cpp
 )

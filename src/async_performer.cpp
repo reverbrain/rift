@@ -9,9 +9,6 @@ async_performer::async_performer() : m_need_exit(false)
 
 async_performer::~async_performer()
 {
-	m_need_exit = true;
-	m_thread.join();
-
 	std::lock_guard<std::mutex> guard(m_lock);
 	m_set.clear();
 }
@@ -20,6 +17,12 @@ void async_performer::initialize(const swarm::logger &logger)
 {
 	m_logger = logger;
 	m_thread = boost::thread(std::bind(&async_performer::action_thread, this));
+}
+
+void async_performer::stop()
+{
+	m_need_exit = true;
+	m_thread.join();
 }
 
 void async_performer::add_action(const std::function<void ()> &handler, int timeout)

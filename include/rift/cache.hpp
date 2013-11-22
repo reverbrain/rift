@@ -5,7 +5,7 @@
 // which must be present at compile time
 #include "rift/asio.hpp"
 
-#include "async_performer.hpp"
+#include "metadata_updater.hpp"
 
 #include <elliptics/session.hpp>
 #include <swarm/logger.hpp>
@@ -18,14 +18,13 @@
 namespace ioremap {
 namespace rift {
 
-class cache : public std::enable_shared_from_this<cache>
+class cache : public metadata_updater, public std::enable_shared_from_this<cache>
 {
 public:
 	cache();
 
 	bool initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node,
 		const swarm::logger &logger, async_performer *async, const std::vector<int> &groups);
-	void stop();
 
 	std::vector<int> groups(const ioremap::elliptics::key &key);
 
@@ -45,13 +44,9 @@ private:
 
 	typedef std::unordered_map<dnet_raw_id, std::vector<int>, hash_impl, equal_impl> unordered_map;
 
-	async_performer *m_async;
-	swarm::logger m_logger;
 	ioremap::elliptics::key m_key;
-	std::unique_ptr<ioremap::elliptics::session> m_session;
 	std::mutex m_mutex;
 	unordered_map m_cache_groups;
-	int m_timeout;
 };
 
 } // namespace cache

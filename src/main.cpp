@@ -32,10 +32,8 @@ public:
 	}
 
 	~example_server() {
-		if (m_cache) {
-			m_cache->stop();
-			m_cache.reset();
-		}
+		m_async.stop();
+		m_cache.reset();
 	}
 
 	virtual bool initialize(const rapidjson::Value &config) {
@@ -69,7 +67,7 @@ public:
 
 		if (config.HasMember("cache")) {
 			m_cache = std::make_shared<rift::cache>();
-			if (!m_cache->initialize(config, m_elliptics.node(), logger(), &m_async, m_elliptics.metadata_groups()))
+			if (!m_cache->initialize(config["cache"], m_elliptics.node(), logger(), &m_async, m_elliptics.metadata_groups()))
 				return false;
 		}
 
