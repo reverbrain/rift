@@ -53,13 +53,15 @@ inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const st
 
 using namespace ioremap::rift;
 
-cache::cache()
+cache::cache() : m_async(NULL)
 {
 }
 
-bool cache::initialize(const rapidjson::Value &application_config, const elliptics::node &node, const swarm::logger &logger, const std::vector<int> &groups)
+bool cache::initialize(const rapidjson::Value &application_config, const elliptics::node &node,
+	const swarm::logger &logger, async_performer *async, const std::vector<int> &groups)
 {
 	m_logger = logger;
+	m_async = async;
 
 	if (!application_config.HasMember("cache")) {
 		m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.cache\" field is missed");
@@ -87,15 +89,13 @@ bool cache::initialize(const rapidjson::Value &application_config, const ellipti
 	m_session.reset(new elliptics::session(node));
 	m_session->set_groups(groups);
 
-	m_thread = boost::thread(std::bind(&cache::sync_thread, shared_from_this()));
+	m_async->add_action(std::bind(&cache::on_sync_action, shared_from_this()), m_timeout);
 
 	return true;
 }
 
 void cache::stop()
 {
-	m_need_exit = true;
-	m_thread.join();
 }
 
 std::vector<int> cache::groups(const elliptics::key &key)
@@ -109,18 +109,11 @@ std::vector<int> cache::groups(const elliptics::key &key)
 	return std::vector<int>();
 }
 
-void cache::sync_thread()
+void cache::on_sync_action()
 {
-	while (!m_need_exit) {
-		elliptics::session session = m_session->clone();
-		session.read_data(m_key, 0, 0).connect(std::bind(
-			&cache::on_read_finished, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
-        
-        int timeout = m_timeout;
-		while (!m_need_exit && timeout-- > 0) {
-			sleep(1);
-		}
-	}
+	elliptics::session session = m_session->clone();
+	session.read_data(m_key, 0, 0).connect(std::bind(
+		&cache::on_read_finished, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 }
 
 void cache::on_read_finished(const elliptics::sync_read_result &result, const elliptics::error_info &error)

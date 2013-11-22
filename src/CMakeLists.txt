@@ -1,4 +1,5 @@
 set(RIFT_SOURCES
+        async_performer.cpp
 	auth.cpp
 	cache.cpp
 	server.cpp

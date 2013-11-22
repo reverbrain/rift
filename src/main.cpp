@@ -44,6 +44,8 @@ public:
 		if (!m_elliptics.initialize(config, logger()))
 			return false;
 
+		m_async.initialize(logger());
+
 		if (config.HasMember("signatures")) {
 			auto &signatures = config["signatures"];
 			for (auto it = signatures.Begin(); it != signatures.End(); ++it) {
@@ -67,7 +69,7 @@ public:
 
 		if (config.HasMember("cache")) {
 			m_cache = std::make_shared<rift::cache>();
-			if (!m_cache->initialize(config, m_elliptics.node(), logger(), m_elliptics.metadata_groups()))
+			if (!m_cache->initialize(config, m_elliptics.node(), logger(), &m_async, m_elliptics.metadata_groups()))
 				return false;
 		}
 
@@ -202,6 +204,7 @@ public:
 	};
 
 private:
+	rift::async_performer m_async;
 	std::vector<signature_info> m_signatures;
 	bool m_redirect_read;
 	int m_redirect_port;

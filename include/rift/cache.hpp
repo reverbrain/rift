@@ -5,6 +5,8 @@
 // which must be present at compile time
 #include "rift/asio.hpp"
 
+#include "async_performer.hpp"
+
 #include <elliptics/session.hpp>
 #include <swarm/logger.hpp>
 #include <thevoid/server.hpp>
@@ -21,13 +23,14 @@ class cache : public std::enable_shared_from_this<cache>
 public:
 	cache();
 
-	bool initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node, const swarm::logger &logger, const std::vector<int> &groups);
+	bool initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node,
+		const swarm::logger &logger, async_performer *async, const std::vector<int> &groups);
 	void stop();
 
 	std::vector<int> groups(const ioremap::elliptics::key &key);
 
 protected:
-	void sync_thread();
+	void on_sync_action();
 	void on_read_finished(const ioremap::elliptics::sync_read_result &result, const ioremap::elliptics::error_info &error);
 
 private:
@@ -42,14 +45,13 @@ private:
 
 	typedef std::unordered_map<dnet_raw_id, std::vector<int>, hash_impl, equal_impl> unordered_map;
 
-	boost::thread m_thread;
+	async_performer *m_async;
 	swarm::logger m_logger;
 	ioremap::elliptics::key m_key;
 	std::unique_ptr<ioremap::elliptics::session> m_session;
 	std::mutex m_mutex;
 	unordered_map m_cache_groups;
 	int m_timeout;
-	bool m_need_exit;
 };
 
 } // namespace cache
