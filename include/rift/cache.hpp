@@ -5,13 +5,12 @@
 // which must be present at compile time
 #include "rift/asio.hpp"
 
-#include "metadata_updater.hpp"
+#include "rift/metadata_updater.hpp"
 
 #include <elliptics/session.hpp>
 #include <swarm/logger.hpp>
 #include <thevoid/server.hpp>
 
-#include <boost/thread.hpp>
 #include <mutex>
 #include <unordered_map>
 

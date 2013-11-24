@@ -3,8 +3,9 @@
 
 // must be the first, since thevoid internally uses X->boost::buffer conversion,
 // which must be present at compile time
-#include "asio.hpp"
+#include "rift/asio.hpp"
 
+#include "rift/bucket.hpp"
 #include "rift/common.hpp"
 #include "rift/io.hpp"
 #include "rift/index.hpp"
@@ -16,15 +17,12 @@
 namespace ioremap {
 namespace rift {
 
-class auth_interface;
-
 class elliptics_base
 {
 public:
 	elliptics_base();
 
 	bool initialize(const rapidjson::Value &config, const swarm::logger &logger);
-	void set_auth(auth_interface *auth);
 
 	elliptics::node node() const;
 	elliptics::session session() const;
@@ -41,10 +39,10 @@ protected:
 
 private:
 	swarm::logger m_logger;
-	auth_interface *m_auth;
 	std::unique_ptr<elliptics::node> m_node;
 	std::unique_ptr<elliptics::session> m_session;
 	std::vector<int> m_metadata_groups;
+	std::unique_ptr<rift::bucket> m_bucket;
 };
 
 }} // namespace ioremap::rift

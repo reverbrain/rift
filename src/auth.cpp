@@ -3,92 +3,37 @@
 namespace ioremap {
 namespace rift {
 
-simple_password_auth::simple_password_auth()
-{
-}
-
-bool simple_password_auth::initialize(const rapidjson::Value &config, const swarm::logger &logger)
-{
-	m_logger = logger;
-
-	if (!config.HasMember("auth")) {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.auth\" field is missed");
-		return false;
-	}
-
-	const rapidjson::Value &auth = config["auth"];
-
-	if (!auth.IsArray()) {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.auth\" is not array");
-		return false;
-	}
-
-	for (size_t i = 0; i < auth.Size(); ++i) {
-		const rapidjson::Value &value = auth[i];
-		if (!value.IsObject()) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.auth[%zu]\" is not object", i);
-			return false;
-		}
-
-		if (!value.HasMember("namespace")) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.auth[%zu].namespace\" field is missed", i);
-			return false;
-		}
-
-		if (!value.HasMember("key")) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.auth[%zu].key\" field is missed", i);
-			return false;
-		}
-
-		auto &ns = value["namespace"];
-		auto &key = value["key"];
-		if (!ns.IsString()) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.auth[%zu].namespace\" field is not string", i);
-			return false;
-		}
-		if (!key.IsString()) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.auth[%zu].key\" field is not string", i);
-			return false;
-		}
-
-		m_keys[ns.GetString()] = key.GetString();
-	}
-
-	return true;
-}
-
-bool simple_password_auth::check(const swarm::http_request &request)
-{
-	if (auto ns = request.url().query().item_value("namespace")) {
-		if (auto auth = request.headers().get("Authorization")) {
-			auto it = m_keys.find(*ns);
-			return it != m_keys.end() && it->second == *auth;
-		}
-	}
-
-	return false;
-}
-
 auth::auth()
 {
 }
 
-bool auth::initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node, const swarm::logger &logger)
+bool auth::initialize(const swarm::logger &logger)
 {
-	m_node.reset(new ioremap::elliptics::node(node));
-	return simple_password_auth::initialize(config, logger);
+	m_logger = logger;
+	return true;
+}
+
+void auth::add_key(const std::string &key, const std::string &token)
+{
+	std::lock_guard<std::mutex> guard(m_lock);
+	m_keys[key] = token;
 }
 
 bool auth::check(const swarm::http_request &request)
 {
+	std::unique_lock<std::mutex> guard(m_lock);
+
 	if (auto ns = request.url().query().item_value("namespace")) {
 		auto it = m_keys.find(*ns);
 		if (it == m_keys.end()) {
 			return false;
 		}
 
+		std::string token = it->second;
+		guard.unlock();
+
 		if (auto auth = request.headers().get("Authorization")) {
-			auto key = generate_signature(request, it->second);
+			auto key = http_auth::generate_signature(request, token);
 
 			return *auth == key;
 		}
@@ -105,18 +50,16 @@ static std::string to_lower(const std::string &str)
 	return result;
 }
 
-static void check_hash(const swarm::logger &logger, const std::string &name, const std::string &message)
+static void check_hash(const std::string &message)
 {
 	dnet_raw_id signature;
 	char signature_str[DNET_ID_SIZE * 2 + 1];
 
 	dnet_digest_transform_raw(message.c_str(), message.size(), signature.id, DNET_ID_SIZE);
 	dnet_dump_id_len_raw(signature.id, DNET_ID_SIZE, signature_str);
-
-	logger.log(swarm::SWARM_LOG_DATA, "name: \"%s\", result: \"%s\"", name.c_str(), signature_str);
 }
 
-std::string auth::generate_signature(const swarm::http_request &request, const std::string &key) const
+std::string http_auth::generate_signature(const swarm::http_request &request, const std::string &key)
 {
 	const auto &url = request.url();
 	const auto &query = url.query();
@@ -160,16 +103,14 @@ std::string auth::generate_signature(const swarm::http_request &request, const s
 		text += '\n';
 	}
 
-	check_hash(m_logger, "key", key);
-	check_hash(m_logger, "message", text);
+	check_hash(key);
+	check_hash(text);
 
 	dnet_raw_id signature;
 	char signature_str[DNET_ID_SIZE * 2 + 1];
 
 	dnet_digest_auth_transform_raw(text.c_str(), text.size(), key.c_str(), key.size(), signature.id, DNET_ID_SIZE);
 	dnet_dump_id_len_raw(signature.id, DNET_ID_SIZE, signature_str);
-
-	m_logger.log(swarm::SWARM_LOG_DATA, "signature: \"%s\", result: \"%s\"", text.c_str(), signature_str);
 
 	return signature_str;
 }

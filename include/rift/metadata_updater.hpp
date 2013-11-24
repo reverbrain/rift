@@ -26,7 +26,6 @@ public:
 	bool initialize(const rapidjson::Value &config, const elliptics::node &node,
 		const swarm::logger &logger, async_performer *async, const std::vector<int> &groups);
 
-protected:
 	void add_action(const std::function<void ()> &handler);
 	swarm::logger logger() const;
 	elliptics::session create_session() const;

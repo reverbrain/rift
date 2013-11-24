@@ -1,6 +1,7 @@
 set(RIFT_SOURCES
         async_performer.cpp
 	auth.cpp
+	bucket.cpp
 	cache.cpp
         metadata_updater.cpp
 	server.cpp

@@ -13,10 +13,9 @@
  * GNU General Public License for more details.
  */
 
-#include "rift/auth.hpp"
+#include "rift/bucket.hpp"
 #include "rift/cache.hpp"
 #include "rift/server.hpp"
-#include "rift/signature.hpp"
 
 using namespace ioremap;
 
@@ -67,15 +66,16 @@ public:
 
 		if (config.HasMember("cache")) {
 			m_cache = std::make_shared<rift::cache>();
-			if (!m_cache->initialize(config["cache"], m_elliptics.node(), logger(), &m_async, m_elliptics.metadata_groups()))
+			if (!m_cache->initialize(config["cache"], m_elliptics.node(), logger(),
+						&m_async, m_elliptics.metadata_groups()))
 				return false;
 		}
 
-		if (config.HasMember("auth")) {
-			m_auth.reset(new rift::auth);
-			if (!m_auth->initialize(config, m_elliptics.node(), logger()))
+		if (config.HasMember("bucket")) {
+			m_bucket = std::make_shared<rift::bucket>();
+			if (!m_bucket->initialize(config["bucket"], m_elliptics.node(), logger(),
+						&m_async, m_elliptics.metadata_groups()))
 				return false;
-			m_elliptics.set_auth(m_auth.get());
 		}
 
 		if (config.HasMember("redirect")) {

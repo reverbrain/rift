@@ -16,7 +16,6 @@
 #include <elliptics/utils.hpp>
 
 #include "rift/logger.hpp"
-#include "rift/auth.hpp"
 #include "rift/server.hpp"
 
 #include <iostream>
@@ -24,7 +23,7 @@
 using namespace ioremap;
 using namespace ioremap::rift;
 
-elliptics_base::elliptics_base() : m_auth(NULL)
+elliptics_base::elliptics_base()
 {
 }
 
@@ -54,11 +53,6 @@ bool elliptics_base::initialize(const rapidjson::Value &config, const swarm::log
 	return true;
 }
 
-void elliptics_base::set_auth(auth_interface *auth)
-{
-	m_auth = auth;
-}
-
 elliptics::node elliptics_base::node() const
 {
 	return *m_node;
@@ -71,7 +65,7 @@ elliptics::session elliptics_base::session() const
 
 swarm::http_response::status_type elliptics_base::process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session) const
 {
-	if (m_auth && !m_auth->check(request)) {
+	if (m_bucket.check(request)) {
 		return swarm::http_response::forbidden;
 	}
 
