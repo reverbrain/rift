@@ -27,7 +27,7 @@ public:
 		std::string path;
 	};
 
-	example_server() : m_elliptics(this) {
+	example_server() {
 	}
 
 	~example_server() {
@@ -167,41 +167,31 @@ public:
 		return std::move(url);
 	}
 
-	const rift::elliptics_base *elliptics() {
+	const rift::elliptics_base *elliptics() const {
 		return &m_elliptics;
 	}
 
-	class elliptics_impl : public rift::elliptics_base
-	{
-	public:
-		elliptics_impl(example_server *server) : m_server(server) {
+	void process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session,
+		const rift::continue_handler_t &handler) const {
+
+		auto result = prepare(request, key, session);
+		if (result != swarm::http_response::ok) {
+			handler(request, result);
+			return;
 		}
 
-		virtual void process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session,
-			const rift::continue_handler_t &handler) const {
-
-			auto result = elliptics_base::prepare(request, key, session);
-			if (result != swarm::http_response::ok) {
-				handler(request, result);
-				return;
+		if (m_cache) {
+			auto cache_groups = m_cache->groups(key);
+			if (!cache_groups.empty()) {
+				auto groups = session.get_groups();
+				groups.insert(groups.end(), cache_groups.begin(), cache_groups.end());
+				session.set_groups(groups);
 			}
-
-			if (m_server->m_cache) {
-				auto cache_groups = m_server->m_cache->groups(key);
-				if (!cache_groups.empty()) {
-					auto groups = session.get_groups();
-					groups.insert(groups.end(), cache_groups.begin(), cache_groups.end());
-					session.set_groups(groups);
-				}
-			}
-
-			if (m_server->m_bucket)
-				m_server->m_bucket->check(request, session, handler);
 		}
 
-	private:
-		example_server *m_server;
-	};
+		if (m_bucket)
+			m_bucket->check(request, session, handler);
+	}
 
 private:
 	rift::async_performer m_async;
@@ -211,9 +201,37 @@ private:
 	bool m_secured_http;
 	std::shared_ptr<rift::cache> m_cache;
 	std::shared_ptr<rift::bucket> m_bucket;
-	elliptics_impl m_elliptics;
+	rift::elliptics_base m_elliptics;
 	rift::signature m_signature;
 	std::vector<int> m_groups;
+
+	swarm::http_response::status_type prepare(const swarm::http_request &request,
+			elliptics::key &key, elliptics::session &sess) const
+	{
+		const auto &query = request.url().query();
+
+		if (auto name = query.item_value("name")) {
+			key = *name;
+		} else if (auto sid = query.item_value("id")) {
+			struct dnet_id id;
+			memset(&id, 0, sizeof(struct dnet_id));
+
+			dnet_parse_numeric_id(sid->c_str(), id.id);
+
+			key = id;
+		} else {
+			return swarm::http_response::bad_request;
+		}
+
+		sess.transform(key);
+
+		if (auto ns = query.item_value("namespace")) {
+			sess.set_namespace(ns->c_str(), ns->size());
+		}
+
+		return swarm::http_response::ok;
+	}
+
 };
 
 int main(int argc, char **argv)

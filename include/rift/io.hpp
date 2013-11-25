@@ -34,7 +34,7 @@ public:
 
 		elliptics::session sess = this->server()->elliptics()->session();
 
-		this->server()->elliptics()->process(req, m_key, sess,
+		this->server()->process(req, m_key, sess,
 				std::bind(&bucket_processing::checked, this->shared_from_this(), sess,
 					std::placeholders::_1, std::placeholders::_2));
 	}

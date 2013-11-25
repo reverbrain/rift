@@ -63,33 +63,6 @@ elliptics::session elliptics_base::session() const
 	return m_session->clone();
 }
 
-swarm::http_response::status_type elliptics_base::prepare(const swarm::http_request &request,
-		elliptics::key &key, elliptics::session &sess) const
-{
-	const auto &query = request.url().query();
-
-	if (auto name = query.item_value("name")) {
-		key = *name;
-	} else if (auto sid = query.item_value("id")) {
-		struct dnet_id id;
-		memset(&id, 0, sizeof(struct dnet_id));
-
-		dnet_parse_numeric_id(sid->c_str(), id.id);
-
-		key = id;
-	} else {
-		return swarm::http_response::bad_request;
-	}
-
-	sess.transform(key);
-
-	if (auto ns = query.item_value("namespace")) {
-		sess.set_namespace(ns->c_str(), ns->size());
-	}
-
-	return swarm::http_response::ok;
-}
-
 bool elliptics_base::prepare_config(const rapidjson::Value &config, dnet_config &node_config)
 {
 	(void) config;

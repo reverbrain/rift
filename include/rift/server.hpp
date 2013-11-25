@@ -26,10 +26,6 @@ public:
 
 	elliptics::node node() const;
 	elliptics::session session() const;
-	swarm::http_response::status_type prepare(const swarm::http_request &request,
-			elliptics::key &key, elliptics::session &sess) const;
-	virtual void process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session,
-			const rift::continue_handler_t &handler) const = 0;
 
 	std::vector<int> metadata_groups() const;
 
