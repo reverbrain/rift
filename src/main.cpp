@@ -182,7 +182,7 @@ public:
 
 			auto result = elliptics_base::prepare(request, key, session);
 			if (result != swarm::http_response::ok) {
-				handler(request, false);
+				handler(request, result);
 				return;
 			}
 

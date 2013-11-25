@@ -80,13 +80,13 @@ void bucket_meta::check_and_run(const swarm::http_request &request, elliptics::s
 	sess.set_groups(m_raw.groups);
 
 	std::unique_lock<std::mutex> guard(m_lock);
-	bool verdict = this->verdict();
+	auto verdict = this->verdict();
 	guard.unlock();
 
-	if (!verdict) {
+	if (verdict != swarm::http_response::ok) {
 		update(sess);
 	} else {
-		handler(request, true);
+		handler(request, verdict);
 	}
 }
 
@@ -98,9 +98,9 @@ void bucket_meta::update(elliptics::session &sess)
 		&bucket_meta::update_finished, this, sess, std::placeholders::_1, std::placeholders::_2));
 }
 
-bool bucket_meta::verdict()
+swarm::http_response::status_type bucket_meta::verdict()
 {
-	bool verdict = false;
+	auto verdict = swarm::http_response::bad_request;
 
 	auto auth = m_request.headers().get("Authorization");
 	if (!auth)
@@ -108,7 +108,7 @@ bool bucket_meta::verdict()
 
 	auto key = http_auth::generate_signature(m_request, m_raw.token);
 	if (key == *auth)
-		verdict = true;
+		verdict = swarm::http_response::ok;
 
 	return verdict;
 }
@@ -117,7 +117,7 @@ void bucket_meta::update_finished(elliptics::session &sess,
 		const ioremap::elliptics::sync_read_result &result,
 				const ioremap::elliptics::error_info &error)
 {
-	bool verdict = false;
+	auto verdict = swarm::http_response::bad_request;
 
 	if (error) {
 		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "bucket-update-failed: bucket: %s, error: %s",
@@ -168,11 +168,13 @@ bool bucket::initialize(const rapidjson::Value &config, const ioremap::elliptics
 
 void bucket::check(const swarm::http_request &request, elliptics::session &sess, const continue_handler_t &continue_handler)
 {
-	logger().log(swarm::SWARM_LOG_ERROR, "check: start");
 	auto ns = request.url().query().item_value("namespace");
 	if (!ns) {
-		logger().log(swarm::SWARM_LOG_ERROR, "check: no namespace");
-		continue_handler(request, m_noauth_allowed);
+		auto verdict = swarm::http_response::bad_request;
+		if (m_noauth_allowed)
+			verdict = swarm::http_response::ok;
+
+		continue_handler(request, verdict);
 		return;
 	}
 

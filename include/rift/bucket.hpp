@@ -32,7 +32,7 @@ struct bucket_meta_raw {
 
 class bucket;
 
-typedef std::function<void (const swarm::http_request, bool verdict)> continue_handler_t;
+typedef std::function<void (const swarm::http_request, swarm::http_response::status_type verdict)> continue_handler_t;
 
 class bucket_meta
 {
@@ -55,7 +55,7 @@ class bucket_meta
 				const ioremap::elliptics::sync_read_result &result,
 				const ioremap::elliptics::error_info &error);
 
-		bool verdict();
+		swarm::http_response::status_type verdict();
 };
 
 class bucket : public metadata_updater, public std::enable_shared_from_this<bucket>
