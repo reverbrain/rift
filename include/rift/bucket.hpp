@@ -40,6 +40,7 @@ class bucket_meta
 		bucket_meta(const std::string &key, bucket *b);
 
 		void check_and_run(const swarm::http_request &request, elliptics::session &sess, const continue_handler_t &handler);
+		void set_continuation(const swarm::http_request &request, const continue_handler_t &handler);
 
 		void update(elliptics::session &sess);
 	private:

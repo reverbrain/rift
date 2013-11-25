@@ -195,7 +195,8 @@ public:
 				}
 			}
 
-			m_server->m_bucket->check(request, session, handler);
+			if (m_server->m_bucket)
+				m_server->m_bucket->check(request, session, handler);
 		}
 
 	private:

@@ -67,10 +67,15 @@ bucket_meta::bucket_meta(const std::string &key, bucket *b) : m_bucket(b)
 	m_raw.key = key;
 }
 
-void bucket_meta::check_and_run(const swarm::http_request &request, elliptics::session &sess, const continue_handler_t &handler)
+void bucket_meta::set_continuation(const swarm::http_request &request, const continue_handler_t &handler)
 {
 	m_request = request;
 	m_continue = handler;
+}
+
+void bucket_meta::check_and_run(const swarm::http_request &request, elliptics::session &sess, const continue_handler_t &handler)
+{
+	set_continuation(request, handler);
 
 	sess.set_groups(m_raw.groups);
 
@@ -81,7 +86,7 @@ void bucket_meta::check_and_run(const swarm::http_request &request, elliptics::s
 	if (!verdict) {
 		update(sess);
 	} else {
-		handler(m_request, true);
+		handler(request, true);
 	}
 }
 
@@ -152,6 +157,8 @@ bool bucket::initialize(const rapidjson::Value &config, const ioremap::elliptics
 		return false;
 	}
 
+	metadata_updater::logger().log(swarm::SWARM_LOG_ERROR, "bucket: init");
+
 	if (config.HasMember("noauth")) {
 		m_noauth_allowed = std::string(config["noauth"].GetString()) == "allowed";
 	}
@@ -161,22 +168,27 @@ bool bucket::initialize(const rapidjson::Value &config, const ioremap::elliptics
 
 void bucket::check(const swarm::http_request &request, elliptics::session &sess, const continue_handler_t &continue_handler)
 {
+	logger().log(swarm::SWARM_LOG_ERROR, "check: start");
 	auto ns = request.url().query().item_value("namespace");
-
 	if (!ns) {
+		logger().log(swarm::SWARM_LOG_ERROR, "check: no namespace");
 		continue_handler(request, m_noauth_allowed);
 		return;
 	}
 
-	std::lock_guard<std::mutex> guard(m_lock);
+	std::unique_lock<std::mutex> guard(m_lock);
 
 	auto lookup = m_meta.find(*ns);
 	if (lookup == m_meta.end()) {
 		auto meta = std::make_shared<bucket_meta>(*ns, this);
 		m_meta[*ns] = meta;
 
+		meta->set_continuation(request, continue_handler);
+
+		guard.unlock();
 		add_action(std::bind(&bucket_meta::update, meta, sess));
 	} else {
+		guard.unlock();
 		lookup->second->check_and_run(request, sess, continue_handler);
 	}
 }

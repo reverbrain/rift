@@ -28,22 +28,24 @@ template <typename Server, typename Stream>
 class bucket_processing : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	bucket_processing() : m_session(this->server()->elliptics()->session()) {}
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		m_request = req;
 		m_buffer = buffer;
 
-		this->server()->elliptics()->process(req, m_key, m_session,
-				std::bind(&bucket_processing::checked, this->shared_from_this(),
+		elliptics::session sess = this->server()->elliptics()->session();
+
+		this->server()->elliptics()->process(req, m_key, sess,
+				std::bind(&bucket_processing::checked, this->shared_from_this(), sess,
 					std::placeholders::_1, std::placeholders::_2));
 	}
 
-	virtual void checked(const swarm::http_request &req, bool verdict) {
+	virtual void checked(elliptics::session &sess, const swarm::http_request &req, bool verdict) {
+		this->log(swarm::SWARM_LOG_ERROR, "bucket-processing: checked: verdict: %d", verdict);
+		this->send_reply(swarm::http_response::bad_request);
 	}
 
 protected:
 	elliptics::key m_key;
-	elliptics::session m_session;
 	swarm::http_request m_request;
 	boost::asio::const_buffer m_buffer;
 };
@@ -53,7 +55,7 @@ template <typename Server, typename Stream>
 class on_get_base : public bucket_processing<Server, Stream>
 {
 public:
-	virtual void checked(const swarm::http_request &req, bool verdict) {
+	virtual void checked(elliptics::session &sess, const swarm::http_request &req, bool verdict) {
 		const auto &query = req.url().query();
 
 		if (!verdict) {
@@ -73,7 +75,7 @@ public:
 			return;
 		}
 
-		bucket_processing<Server, Stream>::m_session.read_data(bucket_processing<Server, Stream>::m_key, offset, size).connect(std::bind(
+		sess.read_data(bucket_processing<Server, Stream>::m_key, offset, size).connect(std::bind(
 			&on_get_base::on_read_finished, this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 	}
 

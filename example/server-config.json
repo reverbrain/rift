@@ -30,18 +30,9 @@
         "cache": {
             "name": "cache"
         },
-        "signatures": [
-            {
-                "key": "some-cool-key",
-                "path": ""
-            }
-        ],
-        "redirect": false,
-        "auth": [
-            {
-                "namespace": "qwerty",
-                "key": "trello"
-            }
-        ]
+        "bucket": {
+		"noauth" : "forbidden"
+        },
+        "redirect": false
     }
 }
