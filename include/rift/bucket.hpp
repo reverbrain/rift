@@ -39,9 +39,9 @@ class bucket_meta
 	public:
 		bucket_meta(const std::string &key, bucket *b);
 
-		void check_and_run(const swarm::http_request &request, const continue_handler_t &handler);
+		void check_and_run(const swarm::http_request &request, elliptics::session &sess, const continue_handler_t &handler);
 
-		void update();
+		void update(elliptics::session &sess);
 	private:
 		std::mutex m_lock;
 		bucket_meta_raw m_raw;
@@ -50,7 +50,8 @@ class bucket_meta
 		swarm::http_request m_request;
 		continue_handler_t m_continue;
 
-		void update_finished(const ioremap::elliptics::sync_read_result &result,
+		void update_finished(elliptics::session &sess,
+				const ioremap::elliptics::sync_read_result &result,
 				const ioremap::elliptics::error_info &error);
 
 		bool verdict();
@@ -63,7 +64,7 @@ class bucket : public metadata_updater, public std::enable_shared_from_this<buck
 
 		bool initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node,
 			const swarm::logger &logger, async_performer *async, const std::vector<int> &groups);
-		void check(const swarm::http_request &request, const continue_handler_t &continue_handler);
+		void check(const swarm::http_request &request, elliptics::session &sess, const continue_handler_t &continue_handler);
 
 	private:
 		bool m_noauth_allowed;

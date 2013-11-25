@@ -67,29 +67,30 @@ bucket_meta::bucket_meta(const std::string &key, bucket *b) : m_bucket(b)
 	m_raw.key = key;
 }
 
-void bucket_meta::check_and_run(const swarm::http_request &request, const continue_handler_t &handler)
+void bucket_meta::check_and_run(const swarm::http_request &request, elliptics::session &sess, const continue_handler_t &handler)
 {
-
 	m_request = request;
 	m_continue = handler;
+
+	sess.set_groups(m_raw.groups);
 
 	std::unique_lock<std::mutex> guard(m_lock);
 	bool verdict = this->verdict();
 	guard.unlock();
 
 	if (!verdict) {
-		update();
+		update(sess);
 	} else {
 		handler(m_request, true);
 	}
 }
 
-void bucket_meta::update()
+void bucket_meta::update(elliptics::session &sess)
 {
 	elliptics::session session = m_bucket->create_session();
 
 	session.read_data(m_raw.key, 0, 0).connect(std::bind(
-		&bucket_meta::update_finished, this, std::placeholders::_1, std::placeholders::_2));
+		&bucket_meta::update_finished, this, sess, std::placeholders::_1, std::placeholders::_2));
 }
 
 bool bucket_meta::verdict()
@@ -107,7 +108,8 @@ bool bucket_meta::verdict()
 	return verdict;
 }
 
-void bucket_meta::update_finished(const ioremap::elliptics::sync_read_result &result,
+void bucket_meta::update_finished(elliptics::session &sess,
+		const ioremap::elliptics::sync_read_result &result,
 				const ioremap::elliptics::error_info &error)
 {
 	bool verdict = false;
@@ -125,6 +127,7 @@ void bucket_meta::update_finished(const ioremap::elliptics::sync_read_result &re
 
 			std::lock_guard<std::mutex> guard(m_lock);
 			msg.get().convert(&m_raw);
+			sess.set_groups(m_raw.groups);
 
 			verdict = this->verdict();
 
@@ -156,7 +159,7 @@ bool bucket::initialize(const rapidjson::Value &config, const ioremap::elliptics
 	return true;
 }
 
-void bucket::check(const swarm::http_request &request, const continue_handler_t &continue_handler)
+void bucket::check(const swarm::http_request &request, elliptics::session &sess, const continue_handler_t &continue_handler)
 {
 	auto ns = request.url().query().item_value("namespace");
 
@@ -171,10 +174,9 @@ void bucket::check(const swarm::http_request &request, const continue_handler_t 
 	if (lookup == m_meta.end()) {
 		auto meta = std::make_shared<bucket_meta>(*ns, this);
 		m_meta[*ns] = meta;
-		meta->check_and_run(request, continue_handler);
 
-		add_action(std::bind(&bucket_meta::update, meta));
+		add_action(std::bind(&bucket_meta::update, meta, sess));
 	} else {
-		lookup->second->check_and_run(request, continue_handler);
+		lookup->second->check_and_run(request, sess, continue_handler);
 	}
 }

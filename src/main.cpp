@@ -177,12 +177,13 @@ public:
 		elliptics_impl(example_server *server) : m_server(server) {
 		}
 
-		virtual swarm::http_response::status_type process(const swarm::http_request &request,
-			elliptics::key &key, elliptics::session &session) const	{
-			auto result = elliptics_base::process(request, key, session);
+		virtual void process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session,
+			const rift::continue_handler_t &handler) const {
 
+			auto result = elliptics_base::prepare(request, key, session);
 			if (result != swarm::http_response::ok) {
-				return result;
+				handler(request, false);
+				return;
 			}
 
 			if (m_server->m_cache) {
@@ -194,7 +195,7 @@ public:
 				}
 			}
 
-			return swarm::http_response::ok;
+			m_server->m_bucket->check(request, session, handler);
 		}
 
 	private:
@@ -208,7 +209,7 @@ private:
 	int m_redirect_port;
 	bool m_secured_http;
 	std::shared_ptr<rift::cache> m_cache;
-	std::unique_ptr<rift::auth> m_auth;
+	std::shared_ptr<rift::bucket> m_bucket;
 	elliptics_impl m_elliptics;
 	rift::signature m_signature;
 	std::vector<int> m_groups;

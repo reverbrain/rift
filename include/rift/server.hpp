@@ -26,7 +26,10 @@ public:
 
 	elliptics::node node() const;
 	elliptics::session session() const;
-	virtual swarm::http_response::status_type process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session) const;
+	swarm::http_response::status_type prepare(const swarm::http_request &request,
+			elliptics::key &key, elliptics::session &sess) const;
+	virtual void process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session,
+			const rift::continue_handler_t &handler) const = 0;
 
 	std::vector<int> metadata_groups() const;
 
@@ -42,7 +45,6 @@ private:
 	std::unique_ptr<elliptics::node> m_node;
 	std::unique_ptr<elliptics::session> m_session;
 	std::vector<int> m_metadata_groups;
-	std::unique_ptr<rift::bucket> m_bucket;
 };
 
 }} // namespace ioremap::rift

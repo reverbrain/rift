@@ -63,12 +63,9 @@ elliptics::session elliptics_base::session() const
 	return m_session->clone();
 }
 
-swarm::http_response::status_type elliptics_base::process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session) const
+swarm::http_response::status_type elliptics_base::prepare(const swarm::http_request &request,
+		elliptics::key &key, elliptics::session &sess) const
 {
-	if (m_bucket.check(request)) {
-		return swarm::http_response::forbidden;
-	}
-
 	const auto &query = request.url().query();
 
 	if (auto name = query.item_value("name")) {
@@ -84,10 +81,10 @@ swarm::http_response::status_type elliptics_base::process(const swarm::http_requ
 		return swarm::http_response::bad_request;
 	}
 
-	session.transform(key);
+	sess.transform(key);
 
 	if (auto ns = query.item_value("namespace")) {
-		session.set_namespace(ns->c_str(), ns->size());
+		sess.set_namespace(ns->c_str(), ns->size());
 	}
 
 	return swarm::http_response::ok;

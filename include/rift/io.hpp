@@ -24,22 +24,40 @@ static inline elliptics::data_pointer create_data(const boost::asio::const_buffe
 	);
 }
 
-// read data object
 template <typename Server, typename Stream>
-class on_get_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
+class bucket_processing : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
+	bucket_processing() : m_session(this->server()->elliptics()->session()) {}
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		(void) buffer;
+		m_request = req;
+		m_buffer = buffer;
 
+		this->server()->elliptics()->process(req, m_key, m_session,
+				std::bind(&bucket_processing::checked, this->shared_from_this(),
+					std::placeholders::_1, std::placeholders::_2));
+	}
+
+	virtual void checked(const swarm::http_request &req, bool verdict) {
+	}
+
+protected:
+	elliptics::key m_key;
+	elliptics::session m_session;
+	swarm::http_request m_request;
+	boost::asio::const_buffer m_buffer;
+};
+
+// read data object
+template <typename Server, typename Stream>
+class on_get_base : public bucket_processing<Server, Stream>
+{
+public:
+	virtual void checked(const swarm::http_request &req, bool verdict) {
 		const auto &query = req.url().query();
 
-		elliptics::session sess = this->server()->elliptics()->session();
-		elliptics::key key;
-
-		auto status = this->server()->elliptics()->process(req, key, sess);
-		if (status != swarm::http_response::ok) {
-			this->send_reply(status);
+		if (!verdict) {
+			this->send_reply(swarm::http_response::forbidden);
 			return;
 		}
 
@@ -55,7 +73,7 @@ public:
 			return;
 		}
 
-		sess.read_data(key, offset, size).connect(std::bind(
+		bucket_processing<Server, Stream>::m_session.read_data(bucket_processing<Server, Stream>::m_key, offset, size).connect(std::bind(
 			&on_get_base::on_read_finished, this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 	}
 
@@ -252,13 +270,13 @@ public:
 
 		elliptics::session sess = this->server()->elliptics()->session();
 		elliptics::key key;
-
+#if 0
 		auto status = this->server()->elliptics()->process(req, key, sess);
 		if (status != swarm::http_response::ok) {
 			this->send_reply(status);
 			return;
 		}
-
+#endif
 		try {
 			write_data(req, sess, key, data).connect(
 				std::bind(&on_upload_base::on_write_finished, this->shared_from_this(),
@@ -378,14 +396,14 @@ public:
 		this->set_chunk_size(10 * 1024 * 1024);
 
 		m_session.reset(new elliptics::session(this->server()->elliptics()->session()));
-
+#if 0
 		auto status = this->server()->elliptics()->process(request, m_key, *m_session);
 		if (status != swarm::http_response::ok) {
 			m_session.reset();
 			this->send_reply(status);
 			return;
 		}
-
+#endif
 		m_offset = query.item_value("offset", 0llu);
 		if (auto size = request.headers().content_length())
 			m_size = *size;
@@ -512,13 +530,13 @@ public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &) {
 		elliptics::session sess = this->server()->elliptics()->session();
 		elliptics::key key;
-
+#if 0
 		auto status = this->server()->elliptics()->process(req, key, sess);
 		if (status != swarm::http_response::ok) {
 			this->send_reply(status);
 			return;
 		}
-
+#endif
 		sess.lookup(key).connect(std::bind(&on_download_info_base::on_lookup_finished, this->shared_from_this(),
 			std::placeholders::_1, std::placeholders::_2));
 	}
@@ -653,13 +671,13 @@ public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &)
 	{
 		elliptics::session sess = this->server()->elliptics()->session();
-
+#if 0
 		auto status = this->server()->elliptics()->process(req, m_key, sess);
 		if (status != swarm::http_response::ok) {
 			this->send_reply(status);
 			return;
 		}
-
+#endif
 		sess.lookup(m_key).connect(std::bind(
 			&on_buffered_get_base::on_lookup_finished, this->shared_from_this(), std::placeholders::_1,  std::placeholders::_2));
 	}
