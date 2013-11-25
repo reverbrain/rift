@@ -3,45 +3,6 @@
 namespace ioremap {
 namespace rift {
 
-auth::auth()
-{
-}
-
-bool auth::initialize(const swarm::logger &logger)
-{
-	m_logger = logger;
-	return true;
-}
-
-void auth::add_key(const std::string &key, const std::string &token)
-{
-	std::lock_guard<std::mutex> guard(m_lock);
-	m_keys[key] = token;
-}
-
-bool auth::check(const swarm::http_request &request)
-{
-	std::unique_lock<std::mutex> guard(m_lock);
-
-	if (auto ns = request.url().query().item_value("namespace")) {
-		auto it = m_keys.find(*ns);
-		if (it == m_keys.end()) {
-			return false;
-		}
-
-		std::string token = it->second;
-		guard.unlock();
-
-		if (auto auth = request.headers().get("Authorization")) {
-			auto key = http_auth::generate_signature(request, token);
-
-			return *auth == key;
-		}
-	}
-
-	return false;
-}
-
 static std::string to_lower(const std::string &str)
 {
 	std::string result;
