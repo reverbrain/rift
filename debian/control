@@ -18,7 +18,7 @@ Description: Rift is an HTTP access point to elliptics distributed network
 Package: rift-dev
 Section: libdevel
 Architecture: any
-Depends: rift (= ${binary:Version}), libthevoid2, libboost-system-dev
+Depends: rift (= ${binary:Version}), libthevoid-dev, libboost-system-dev
 Description: Rift is an HTTP access point to elliptics distributed network (devel)
  Development files
 
