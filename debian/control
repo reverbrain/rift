@@ -28,3 +28,10 @@ Section: debug
 Depends: ${shlibs:Depends}, ${misc:Depends}, libswarm2 (= ${binary:Version})
 Description: Rift is an HTTP access point to elliptics distributed network (debug)
  Debug files and symbols.
+
+Package: librift-dbg
+Architecture: any
+Section: debug
+Depends: ${shlibs:Depends}, ${misc:Depends}, libswarm2 (= ${binary:Version})
+Description: Rift is an HTTP access point to elliptics distributed network (debug)
+ Debug files and symbols.
