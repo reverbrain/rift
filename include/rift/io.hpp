@@ -29,23 +29,26 @@ class bucket_processing : public thevoid::simple_request_stream<Server>, public 
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		m_request = req;
-		m_buffer = buffer;
+		elliptics::key key = this->server();
 
-		elliptics::session sess = this->server()->elliptics()->session();
+		if (ns)
+			sess.set_namespace(ns->c_str(), ns->size());
 
-		this->server()->process(req, m_key, sess,
-				std::bind(&bucket_processing::checked, this->shared_from_this(), sess,
-					std::placeholders::_1, std::placeholders::_2));
+		if (m_noauth_allowed)
+			verdict = prepare_key(request, key, session);
+
+		this->server()->process(req, buffer, std::bind(&bucket_processing::checked, this->shared_from_this(),
+					std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 std::placeholders::_4));
 	}
 
-	virtual void checked(elliptics::session &sess, const swarm::http_request &req, bool verdict) {
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer, const elliptics::session &sess, bool verdict) {
 		this->log(swarm::SWARM_LOG_ERROR, "bucket-processing: checked: verdict: %d", verdict);
 		this->send_reply(swarm::http_response::bad_request);
+
+
 	}
 
 protected:
-	elliptics::key m_key;
 	swarm::http_request m_request;
 	boost::asio::const_buffer m_buffer;
 };
@@ -55,8 +58,18 @@ template <typename Server, typename Stream>
 class on_get_base : public bucket_processing<Server, Stream>
 {
 public:
-	virtual void checked(elliptics::session &sess, const swarm::http_request &req, bool verdict) {
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer, const elliptics::session &sess, bool verdict) {
 		const auto &query = req.url().query();
+
+		if (m_cache) {
+			auto cache_groups = m_cache->groups(key);
+			if (!cache_groups.empty()) {
+				auto groups = session.get_groups();
+				groups.insert(groups.end(), cache_groups.begin(), cache_groups.end());
+				session.set_groups(groups);
+			}
+		}
+
 
 		if (!verdict) {
 			this->send_reply(swarm::http_response::forbidden);

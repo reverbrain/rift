@@ -73,8 +73,7 @@ public:
 
 		if (config.HasMember("bucket")) {
 			m_bucket = std::make_shared<rift::bucket>();
-			if (!m_bucket->initialize(config["bucket"], m_elliptics.node(), logger(),
-						&m_async, m_elliptics.metadata_groups()))
+			if (!m_bucket->initialize(config["bucket"], m_elliptics, logger(), &m_async))
 				return false;
 		}
 
@@ -171,26 +170,18 @@ public:
 		return &m_elliptics;
 	}
 
-	void process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session,
-		const rift::continue_handler_t &handler) const {
+	void process(const swarm::http_request &request, const boost::asio::const_buffer &buffer, const rift::continue_handler_t &handler) const {
+		auto ns = request.url().query().item_value("namespace");
+		if (!ns || !m_bucket) {
+			auto verdict = swarm::http_response::bad_request;
+			if (m_noauth_allowed)
+				verdict = swarm::http_response::ok;
 
-		auto result = prepare(request, key, session);
-		if (result != swarm::http_response::ok) {
-			handler(request, result);
-			return;
+			auto sess = m_elliptics.session();
+			continue_handler(request, buffer, sess, verdict);
+		} else {
+			m_bucket->check(request, buffer, handler);
 		}
-
-		if (m_cache) {
-			auto cache_groups = m_cache->groups(key);
-			if (!cache_groups.empty()) {
-				auto groups = session.get_groups();
-				groups.insert(groups.end(), cache_groups.begin(), cache_groups.end());
-				session.set_groups(groups);
-			}
-		}
-
-		if (m_bucket)
-			m_bucket->check(request, session, handler);
 	}
 
 private:
@@ -202,13 +193,10 @@ private:
 	std::shared_ptr<rift::cache> m_cache;
 	std::shared_ptr<rift::bucket> m_bucket;
 	rift::elliptics_base m_elliptics;
-	rift::signature m_signature;
-	std::vector<int> m_groups;
 
-	swarm::http_response::status_type prepare(const swarm::http_request &request,
-			elliptics::key &key, elliptics::session &sess) const
-	{
+	elliptics::key extract_key(const swarm::http_request &request) const {
 		const auto &query = request.url().query();
+		elliptics::key key;
 
 		if (auto name = query.item_value("name")) {
 			key = *name;
@@ -219,17 +207,9 @@ private:
 			dnet_parse_numeric_id(sid->c_str(), id.id);
 
 			key = id;
-		} else {
-			return swarm::http_response::bad_request;
 		}
 
-		sess.transform(key);
-
-		if (auto ns = query.item_value("namespace")) {
-			sess.set_namespace(ns->c_str(), ns->size());
-		}
-
-		return swarm::http_response::ok;
+		return key;
 	}
 
 };

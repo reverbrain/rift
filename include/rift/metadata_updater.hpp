@@ -28,7 +28,7 @@ public:
 
 	void add_action(const std::function<void ()> &handler);
 	swarm::logger logger() const;
-	elliptics::session create_session() const;
+	elliptics::session metadata_session() const;
 
 private:
 	async_performer *m_async;

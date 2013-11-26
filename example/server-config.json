@@ -22,10 +22,10 @@
             "localhost:1025:2"
         ],
         "groups": [
-            2
+            3,4
         ],
         "metadata-groups": [
-            1
+            1,2
         ],
         "cache": {
             "name": "cache"

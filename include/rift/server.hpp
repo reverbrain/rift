@@ -29,12 +29,12 @@ public:
 
 	std::vector<int> metadata_groups() const;
 
+	swarm::logger logger() const;
+
 protected:
 	virtual bool prepare_config(const rapidjson::Value &config, dnet_config &node_config);
 	virtual bool prepare_node(const rapidjson::Value &config, elliptics::node &node);
 	virtual bool prepare_session(const rapidjson::Value &config, elliptics::session &session);
-
-	swarm::logger logger() const;
 
 private:
 	swarm::logger m_logger;
