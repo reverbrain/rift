@@ -29,6 +29,12 @@ class bucket_processing : public thevoid::simple_request_stream<Server>, public 
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+		elliptics::key key = this->server()->extract_key(req);
+		if (key == elliptics::key()) {
+			this->send_reply(swarm::http_response::bad_request);
+			return;
+		}
+
 		this->server()->process(req, buffer, std::bind(&bucket_processing::checked, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
 	}
