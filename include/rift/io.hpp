@@ -60,7 +60,7 @@ public:
 
 		(void) buffer;
 
-		elliptics::key key = this->server()->extract_key(req);
+		elliptics::key key = this->server()->extract_key(req, base_sess);
 
 		elliptics::session sess = base_sess;
 		this->server()->check_cache(key, sess);

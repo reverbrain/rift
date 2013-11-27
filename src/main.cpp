@@ -171,6 +171,12 @@ public:
 		return key;
 	}
 
+	elliptics::key extract_key(const swarm::http_request &request, const elliptics::session &sess) const {
+		elliptics::key key = extract_key(request);
+		sess.transform(key);
+		return key;
+	}
+
 
 private:
 	rift::async_performer m_async;
