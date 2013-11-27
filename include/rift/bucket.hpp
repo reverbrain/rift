@@ -74,7 +74,6 @@ class bucket : public metadata_updater, public std::enable_shared_from_this<buck
 				const continue_handler_t &continue_handler);
 
 	private:
-		bool m_noauth_allowed;
 		std::mutex m_lock;
 		std::map<std::string, std::shared_ptr<bucket_meta>> m_meta;
 };
