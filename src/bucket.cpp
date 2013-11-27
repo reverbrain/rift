@@ -62,45 +62,52 @@ inline bucket_meta_raw &operator >>(msgpack::object o, bucket_meta_raw &m)
 
 } // namespace msgpack
 
-bucket_meta::bucket_meta(const std::string &key, bucket *b) : m_bucket(b)
+bucket_meta::bucket_meta(const std::string &key, bucket *b, const swarm::http_request &request, const continue_handler_t &continue_handler) : m_bucket(b), m_request(request), m_continue(continue_handler)
 {
 	m_raw.key = key;
+	m_bucket->add_action(std::bind(&bucket_meta::update, this));
 }
 
-void bucket_meta::set_continuation(const swarm::http_request &request, const continue_handler_t &handler)
+void bucket_meta::check_and_run_raw(const swarm::http_request &request, const continue_handler_t &continue_handler, bool uptodate)
 {
-	m_request = request;
-	m_continue = handler;
-}
-
-void bucket_meta::check_and_run(const swarm::http_request &request, elliptics::session &sess, const continue_handler_t &handler)
-{
-	set_continuation(request, handler);
-
-	sess.set_groups(m_raw.groups);
+	// metadata_session() clones metadata session, we have to update its namespace and groups
+	elliptics::session sess = m_bucket->metadata_session();
 
 	std::unique_lock<std::mutex> guard(m_lock);
-	bool verdict = this->verdict();
+	sess.set_groups(m_raw.groups);
+	sess.set_namespace(m_raw.key.c_str(), m_raw.key.size());
+
+	auto v = verdict();
 	guard.unlock();
 
-	if (!verdict) {
-		update(sess);
+	if ((v != swarm::http_response::ok) && !uptodate) {
+		// something went wrong, reread metadata, probably security token was updated
+		// save request data, it will be used in continuation handler when update() has been completed
+		m_request = request;
+		m_continue = continue_handler;
+
+		update();
 	} else {
-		handler(request, true);
+		continue_handler(request, sess, v);
 	}
 }
 
-void bucket_meta::update(elliptics::session &sess)
+void bucket_meta::check_and_run(const swarm::http_request &request, const continue_handler_t &continue_handler)
 {
-	elliptics::session session = m_bucket->create_session();
-
-	session.read_data(m_raw.key, 0, 0).connect(std::bind(
-		&bucket_meta::update_finished, this, sess, std::placeholders::_1, std::placeholders::_2));
+	check_and_run_raw(request, continue_handler, false);
 }
 
-bool bucket_meta::verdict()
+void bucket_meta::update(void)
 {
-	bool verdict = false;
+	// metadata_session() clones metadata session
+	elliptics::session sess = m_bucket->metadata_session();
+
+	sess.read_data(m_raw.key, 0, 0).connect(std::bind(&bucket_meta::update_finished, this, std::placeholders::_1, std::placeholders::_2));
+}
+
+swarm::http_response::status_type bucket_meta::verdict()
+{
+	auto verdict = swarm::http_response::bad_request;
 
 	auto auth = m_request.headers().get("Authorization");
 	if (!auth)
@@ -108,17 +115,14 @@ bool bucket_meta::verdict()
 
 	auto key = http_auth::generate_signature(m_request, m_raw.token);
 	if (key == *auth)
-		verdict = true;
+		verdict = swarm::http_response::ok;
 
 	return verdict;
 }
 
-void bucket_meta::update_finished(elliptics::session &sess,
-		const ioremap::elliptics::sync_read_result &result,
+void bucket_meta::update_finished(const ioremap::elliptics::sync_read_result &result,
 				const ioremap::elliptics::error_info &error)
 {
-	bool verdict = false;
-
 	if (error) {
 		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "bucket-update-failed: bucket: %s, error: %s",
 				m_raw.key.c_str(), error.message().c_str());
@@ -132,9 +136,6 @@ void bucket_meta::update_finished(elliptics::session &sess,
 
 			std::lock_guard<std::mutex> guard(m_lock);
 			msg.get().convert(&m_raw);
-			sess.set_groups(m_raw.groups);
-
-			verdict = this->verdict();
 
 		} catch (const std::exception &e) {
 			m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "bucket-update-failed: read exception: "
@@ -143,17 +144,16 @@ void bucket_meta::update_finished(elliptics::session &sess,
 		}
 	}
 
-	m_continue(m_request, verdict);
+	check_and_run_raw(m_request, m_continue, true);
 }
 
 bucket::bucket() : m_noauth_allowed(false)
 {
 }
 
-bool bucket::initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node,
-			const swarm::logger &logger, async_performer *async, const std::vector<int> &groups)
+bool bucket::initialize(const rapidjson::Value &config, const elliptics_base &base, async_performer *async)
 {
-	if (!metadata_updater::initialize(config, node, logger, async, groups)) {
+	if (!metadata_updater::initialize(config, base.node(), base.logger(), async, base.metadata_groups())) {
 		return false;
 	}
 
@@ -166,29 +166,17 @@ bool bucket::initialize(const rapidjson::Value &config, const ioremap::elliptics
 	return true;
 }
 
-void bucket::check(const swarm::http_request &request, elliptics::session &sess, const continue_handler_t &continue_handler)
+void bucket::check(const swarm::http_request &request, const boost::asio::const_buffer &buffer, const continue_handler_t &continue_handler)
 {
-	logger().log(swarm::SWARM_LOG_ERROR, "check: start");
-	auto ns = request.url().query().item_value("namespace");
-	if (!ns) {
-		logger().log(swarm::SWARM_LOG_ERROR, "check: no namespace");
-		continue_handler(request, m_noauth_allowed);
-		return;
-	}
-
 	std::unique_lock<std::mutex> guard(m_lock);
 
 	auto lookup = m_meta.find(*ns);
 	if (lookup == m_meta.end()) {
-		auto meta = std::make_shared<bucket_meta>(*ns, this);
+		auto meta = std::make_shared<bucket_meta>(*ns, this, request, continue_handler);
 		m_meta[*ns] = meta;
-
-		meta->set_continuation(request, continue_handler);
-
-		guard.unlock();
-		add_action(std::bind(&bucket_meta::update, meta, sess));
 	} else {
 		guard.unlock();
-		lookup->second->check_and_run(request, sess, continue_handler);
+
+		lookup->second->check_and_run(request, continue_handler);
 	}
 }

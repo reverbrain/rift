@@ -26,19 +26,15 @@ public:
 
 	elliptics::node node() const;
 	elliptics::session session() const;
-	swarm::http_response::status_type prepare(const swarm::http_request &request,
-			elliptics::key &key, elliptics::session &sess) const;
-	virtual void process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session,
-			const rift::continue_handler_t &handler) const = 0;
 
 	std::vector<int> metadata_groups() const;
+
+	swarm::logger logger() const;
 
 protected:
 	virtual bool prepare_config(const rapidjson::Value &config, dnet_config &node_config);
 	virtual bool prepare_node(const rapidjson::Value &config, elliptics::node &node);
 	virtual bool prepare_session(const rapidjson::Value &config, elliptics::session &session);
-
-	swarm::logger logger() const;
 
 private:
 	swarm::logger m_logger;

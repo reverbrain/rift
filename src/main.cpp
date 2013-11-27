@@ -27,7 +27,7 @@ public:
 		std::string path;
 	};
 
-	example_server() : m_elliptics(this) {
+	example_server() {
 	}
 
 	~example_server() {
@@ -73,8 +73,7 @@ public:
 
 		if (config.HasMember("bucket")) {
 			m_bucket = std::make_shared<rift::bucket>();
-			if (!m_bucket->initialize(config["bucket"], m_elliptics.node(), logger(),
-						&m_async, m_elliptics.metadata_groups()))
+			if (!m_bucket->initialize(config["bucket"], m_elliptics, logger(), &m_async))
 				return false;
 		}
 
@@ -167,41 +166,23 @@ public:
 		return std::move(url);
 	}
 
-	const rift::elliptics_base *elliptics() {
+	const rift::elliptics_base *elliptics() const {
 		return &m_elliptics;
 	}
 
-	class elliptics_impl : public rift::elliptics_base
-	{
-	public:
-		elliptics_impl(example_server *server) : m_server(server) {
+	void process(const swarm::http_request &request, const boost::asio::const_buffer &buffer, const rift::continue_handler_t &handler) const {
+		auto ns = request.url().query().item_value("namespace");
+		if (!ns || !m_bucket) {
+			auto verdict = swarm::http_response::bad_request;
+			if (m_noauth_allowed)
+				verdict = swarm::http_response::ok;
+
+			auto sess = m_elliptics.session();
+			continue_handler(request, buffer, sess, verdict);
+		} else {
+			m_bucket->check(request, buffer, handler);
 		}
-
-		virtual void process(const swarm::http_request &request, elliptics::key &key, elliptics::session &session,
-			const rift::continue_handler_t &handler) const {
-
-			auto result = elliptics_base::prepare(request, key, session);
-			if (result != swarm::http_response::ok) {
-				handler(request, false);
-				return;
-			}
-
-			if (m_server->m_cache) {
-				auto cache_groups = m_server->m_cache->groups(key);
-				if (!cache_groups.empty()) {
-					auto groups = session.get_groups();
-					groups.insert(groups.end(), cache_groups.begin(), cache_groups.end());
-					session.set_groups(groups);
-				}
-			}
-
-			if (m_server->m_bucket)
-				m_server->m_bucket->check(request, session, handler);
-		}
-
-	private:
-		example_server *m_server;
-	};
+	}
 
 private:
 	rift::async_performer m_async;
@@ -211,9 +192,26 @@ private:
 	bool m_secured_http;
 	std::shared_ptr<rift::cache> m_cache;
 	std::shared_ptr<rift::bucket> m_bucket;
-	elliptics_impl m_elliptics;
-	rift::signature m_signature;
-	std::vector<int> m_groups;
+	rift::elliptics_base m_elliptics;
+
+	elliptics::key extract_key(const swarm::http_request &request) const {
+		const auto &query = request.url().query();
+		elliptics::key key;
+
+		if (auto name = query.item_value("name")) {
+			key = *name;
+		} else if (auto sid = query.item_value("id")) {
+			struct dnet_id id;
+			memset(&id, 0, sizeof(struct dnet_id));
+
+			dnet_parse_numeric_id(sid->c_str(), id.id);
+
+			key = id;
+		}
+
+		return key;
+	}
+
 };
 
 int main(int argc, char **argv)

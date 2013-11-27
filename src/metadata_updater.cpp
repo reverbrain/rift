@@ -38,7 +38,7 @@ ioremap::swarm::logger metadata_updater::logger() const
 	return m_logger;
 }
 
-ioremap::elliptics::session metadata_updater::create_session() const
+ioremap::elliptics::session metadata_updater::metadata_session() const
 {
 	return m_session->clone();
 }
