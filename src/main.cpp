@@ -1,5 +1,8 @@
 #include "rift/bucket.hpp"
 #include "rift/cache.hpp"
+#include "rift/common.hpp"
+#include "rift/index.hpp"
+#include "rift/io.hpp"
 #include "rift/server.hpp"
 
 using namespace ioremap;
@@ -135,8 +138,8 @@ public:
 			if (m_noauth_allowed)
 				verdict = swarm::http_response::ok;
 
-			auto sess = m_elliptics.session();
-			continue_handler(request, buffer, sess, verdict);
+			rift::bucket_meta_raw meta;
+			continue_handler(request, buffer, meta, verdict);
 		} else {
 			m_bucket->check(*ns, request, buffer, continue_handler);
 		}
@@ -153,9 +156,20 @@ public:
 		}
 	}
 
-	elliptics::key extract_key(const swarm::http_request &request) const {
+	bool query_ok(const swarm::http_request &request) const {
 		const auto &query = request.url().query();
-		elliptics::key key;
+
+		if (auto name = query.item_value("name")) {
+			return true;
+		} else if (auto sid = query.item_value("id")) {
+			return true;
+		}
+
+		return false;
+	}
+
+	elliptics::session extract_key(const swarm::http_request &request, const rift::bucket_meta_raw &meta, elliptics::key &key) const {
+		const auto &query = request.url().query();
 
 		if (auto name = query.item_value("name")) {
 			key = *name;
@@ -168,15 +182,13 @@ public:
 			key = id;
 		}
 
-		return key;
-	}
+		elliptics::session session = m_elliptics.session();
+		session.set_namespace(meta.key.c_str(), meta.key.size());
+		session.set_groups(meta.groups);
+		session.transform(key);
 
-	elliptics::key extract_key(const swarm::http_request &request, const elliptics::session &sess) const {
-		elliptics::key key = extract_key(request);
-		sess.transform(key);
-		return key;
+		return session;
 	}
-
 
 private:
 	rift::async_performer m_async;

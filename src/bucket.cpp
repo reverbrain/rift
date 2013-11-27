@@ -72,13 +72,7 @@ bucket_meta::bucket_meta(const std::string &key, bucket *b, const swarm::http_re
 void bucket_meta::check_and_run_raw(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
 		const continue_handler_t &continue_handler, bool uptodate)
 {
-	// metadata_session() clones metadata session, we have to update its namespace and groups
-	elliptics::session sess = m_bucket->metadata_session();
-
 	std::unique_lock<std::mutex> guard(m_lock);
-	sess.set_groups(m_raw.groups);
-	sess.set_namespace(m_raw.key.c_str(), m_raw.key.size());
-
 	auto v = verdict(request);
 	guard.unlock();
 
@@ -88,7 +82,7 @@ void bucket_meta::check_and_run_raw(const swarm::http_request &request, const bo
 	if ((v != swarm::http_response::ok) && !uptodate) {
 		update_and_check(request, buffer, continue_handler);
 	} else {
-		continue_handler(request, buffer, sess, v);
+		continue_handler(request, buffer, m_raw, v);
 	}
 }
 
@@ -165,12 +159,8 @@ void bucket_meta::update_and_check_completed(const swarm::http_request &request,
 	update_finished(result, error);
 
 	if (error) {
-		elliptics::session sess = m_bucket->metadata_session();
-		std::vector<int> empty;
-		sess.set_groups(empty);
-		sess.set_namespace(m_raw.key.c_str(), m_raw.key.size());
-
-		continue_handler(request, buffer, sess, swarm::http_response::forbidden);
+		bucket_meta_raw meta;
+		continue_handler(request, buffer, meta, swarm::http_response::forbidden);
 	} else {
 		check_and_run_raw(request, buffer, continue_handler, true);
 	}

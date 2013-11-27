@@ -5,10 +5,6 @@
 // which must be present at compile time
 #include "rift/asio.hpp"
 
-#include "rift/common.hpp"
-#include "rift/io.hpp"
-#include "rift/index.hpp"
-
 #include <thevoid/server.hpp>
 #include <swarm/logger.hpp>
 #include <elliptics/session.hpp>

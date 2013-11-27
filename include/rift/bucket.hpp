@@ -32,7 +32,7 @@ struct bucket_meta_raw {
 
 class bucket;
 
-typedef std::function<void (const swarm::http_request, const boost::asio::const_buffer &buffer, elliptics::session &sess, swarm::http_response::status_type verdict)> continue_handler_t;
+typedef std::function<void (const swarm::http_request, const boost::asio::const_buffer &buffer, const bucket_meta_raw &meta, swarm::http_response::status_type verdict)> continue_handler_t;
 
 class bucket_meta
 {

@@ -6,6 +6,7 @@
 #include "rift/asio.hpp"
 
 #include "rift/jsonvalue.hpp"
+#include "rift/bucket.hpp"
 
 #include <swarm/url.hpp>
 #include <swarm/url_query.hpp>
@@ -29,8 +30,7 @@ class bucket_processing : public thevoid::simple_request_stream<Server>, public 
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		elliptics::key key = this->server()->extract_key(req);
-		if (key == elliptics::key()) {
+		if (!this->server()->query_ok(req)) {
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
@@ -40,7 +40,7 @@ public:
 	}
 
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const elliptics::session &base_sess, swarm::http_response::status_type verdict) = 0;
+			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) = 0;
 };
 
 // read data object
@@ -49,7 +49,7 @@ class on_get_base : public bucket_processing<Server, Stream>
 {
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const elliptics::session &base_sess, swarm::http_response::status_type verdict) {
+			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
 		const auto &query = req.url().query();
 		this->log(swarm::SWARM_LOG_NOTICE, "get-base: checked: url: %s, verdict: %d", query.to_string().c_str(), verdict);
 
@@ -60,10 +60,10 @@ public:
 
 		(void) buffer;
 
-		elliptics::key key = this->server()->extract_key(req, base_sess);
+		elliptics::key key;
+		elliptics::session session = this->server()->extract_key(req, meta, key);
 
-		elliptics::session sess = base_sess;
-		this->server()->check_cache(key, sess);
+		this->server()->check_cache(key, session);
 
 		size_t offset = 0;
 		size_t size = 0;
@@ -72,12 +72,12 @@ public:
 			offset = query.item_value("offset", 0llu);
 			size = query.item_value("size", 0llu);
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "GET request, invalid cast: %s", e.what());
+			this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: url: %s: invalid size/offset cast: %s", query.to_string().c_str(), e.what());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
 
-		sess.read_data(key, offset, size).connect(std::bind(
+		session.read_data(key, offset, size).connect(std::bind(
 			&on_get_base::on_read_finished, this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 	}
 
@@ -264,29 +264,36 @@ public:
 
 // write data object, get file-info json in response
 template <typename Server, typename Stream>
-class on_upload_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
+class on_upload_base : public bucket_processing<Server, Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
+			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
 		auto data = elliptics::data_pointer::from_raw(
 			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
 			boost::asio::buffer_size(buffer));
 
-		elliptics::session sess = this->server()->elliptics()->session();
-		elliptics::key key;
-#if 0
-		auto status = this->server()->elliptics()->process(req, key, sess);
-		if (status != swarm::http_response::ok) {
-			this->send_reply(status);
+		const auto &query = req.url().query();
+		this->log(swarm::SWARM_LOG_NOTICE, "get-base: checked: url: %s, verdict: %d", query.to_string().c_str(), verdict);
+
+		if (verdict != swarm::http_response::ok) {
+			this->send_reply(verdict);
 			return;
 		}
-#endif
+
+		(void) buffer;
+
+		elliptics::key key;
+		elliptics::session session = this->server()->extract_key(req, meta, key);
+
+		this->server()->check_cache(key, session);
+
 		try {
-			write_data(req, sess, key, data).connect(
+			write_data(req, session, key, data).connect(
 				std::bind(&on_upload_base::on_write_finished, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "GET request, invalid cast: %s", e.what());
+			this->log(swarm::SWARM_LOG_NOTICE, "post-base: checked: url: %s, exception: %s", query.to_string().c_str(), e.what());
 			this->send_reply(swarm::http_response::bad_request);
 		}
 	}
@@ -528,54 +535,56 @@ public:
 
 // perform lookup, get file-info json in response
 template <typename Server, typename Stream>
-class on_download_info_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
+class on_download_info_base : public bucket_processing<Server, Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &) {
-		elliptics::session sess = this->server()->elliptics()->session();
-		elliptics::key key;
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
+			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+		const auto &query = req.url().query();
+		this->log(swarm::SWARM_LOG_NOTICE, "download-info-base: checked: url: %s, verdict: %d", query.to_string().c_str(), verdict);
 
-		(void) req;
-#if 0
-		auto status = this->server()->elliptics()->process(req, key, sess);
-		if (status != swarm::http_response::ok) {
-			this->send_reply(status);
+		if (verdict != swarm::http_response::ok) {
+			this->send_reply(verdict);
 			return;
 		}
-#endif
-		sess.lookup(key).connect(std::bind(&on_download_info_base::on_lookup_finished, this->shared_from_this(),
+
+		(void) buffer;
+
+		elliptics::key key;
+		elliptics::session session = this->server()->extract_key(req, meta, key);
+
+		this->server()->check_cache(key, session);
+
+		session.lookup(key).connect(std::bind(&on_download_info_base::on_lookup_finished, this->shared_from_this(), meta,
 			std::placeholders::_1, std::placeholders::_2));
 	}
 
-	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time, std::string *url_ptr) {
+	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time, const std::string &token, std::string *url_ptr) {
 		const auto name = this->request().url().query().item_value("name");
-		//auto key = this->server()->find_signature(*name);
-		std::string *key = NULL;
-
-		if (!key && !url_ptr) {
-			return std::string();
-		}
 
 		const dnet_file_info *info = entry.file_info();
 
 		swarm::url url = this->server()->generate_url_base(entry.address());
 		swarm::url_query &query = url.query();
 		query.add_item("file-path", entry.file_path());
-		if (key) {
-			query.add_item("key", *key);
-		}
 		query.add_item("offset", boost::lexical_cast<std::string>(info->offset));
 		query.add_item("size", boost::lexical_cast<std::string>(info->size));
 		query.add_item("time", time);
+
+		if (!token.empty())
+			query.add_item("token", token);
 
 		url.set_query(query);
 
 		auto sign_input = url.to_string();
 
-		if (!key) {
+		if (url_ptr) {
 			*url_ptr = std::move(sign_input);
 			return std::string();
 		}
+
+		if (token.empty())
+			return std::string();
 
 		dnet_raw_id signature_id;
 		dnet_transform_node(this->server()->elliptics()->node().get_native(),
@@ -589,17 +598,11 @@ public:
 
 		url.query().add_item("signature", signature);
 
-		if (url_ptr) {
-			// index of "key"
-			url.query().remove_item(1);
-			*url_ptr = std::move(url.to_string());
-		}
-
 		return std::move(signature);
 	}
 
-	virtual void on_lookup_finished(const elliptics::sync_lookup_result &result,
-		const elliptics::error_info &error) {
+	virtual void on_lookup_finished(const bucket_meta_raw &meta, const elliptics::sync_lookup_result &result,
+			const elliptics::error_info &error) {
 		if (error) {
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
@@ -612,11 +615,13 @@ public:
 		dnet_current_time(&time);
 		const std::string time_str = boost::lexical_cast<std::string>(time.tsec);
 
-		std::string signature = generate_signature(result[0], time_str, NULL);
+		if (!meta.token.empty()) {
+			std::string signature = generate_signature(result[0], time_str, meta.token, NULL);
 
-		if (!signature.empty()) {
-			rapidjson::Value signature_value(signature.c_str(), signature.size(), result_object.GetAllocator());
-			result_object.AddMember("signature", signature_value, result_object.GetAllocator());
+			if (!signature.empty()) {
+				rapidjson::Value signature_value(signature.c_str(), signature.size(), result_object.GetAllocator());
+				result_object.AddMember("signature", signature_value, result_object.GetAllocator());
+			}
 		}
 
 		result_object.AddMember("time", time_str.c_str(), result_object.GetAllocator());
@@ -643,8 +648,8 @@ template <typename Server>
 class on_redirectable_get : public on_download_info<Server>
 {
 public:
-	virtual void on_lookup_finished(const elliptics::sync_lookup_result &result,
-		const elliptics::error_info &error) {
+	virtual void on_lookup_finished(const bucket_meta_raw &meta, const elliptics::sync_lookup_result &result,
+			const elliptics::error_info &error) {
 		if (error) {
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
@@ -656,7 +661,7 @@ public:
 
 		std::string url;
 
-		this->generate_signature(result[0], time_str, &url);
+		this->generate_signature(result[0], time_str, meta.token, &url);
 
 		swarm::http_response reply;
 		reply.set_code(swarm::http_response::moved_temporarily);
