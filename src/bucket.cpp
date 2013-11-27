@@ -82,7 +82,7 @@ void bucket_meta::check_and_run_raw(const swarm::http_request &request, const bo
 	auto v = verdict(request);
 	guard.unlock();
 
-	m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "bucket: check-and-run-raw: bucket: %s, uptodate: %d, req: %s, verdict: %d",
+	m_bucket->logger().log(swarm::SWARM_LOG_INFO, "bucket: check-and-run-raw: bucket: %s, uptodate: %d, req: %s, verdict: %d",
 			m_raw.key.c_str(), uptodate, request.url().query().to_string().c_str(), v);
 
 	if ((v != swarm::http_response::ok) && !uptodate) {
@@ -170,7 +170,7 @@ void bucket_meta::update_and_check_completed(const swarm::http_request &request,
 		sess.set_groups(empty);
 		sess.set_namespace(m_raw.key.c_str(), m_raw.key.size());
 
-		continue_handler(request, buffer, sess, swarm::http_reponse::forbidden);
+		continue_handler(request, buffer, sess, swarm::http_response::forbidden);
 	} else {
 		check_and_run_raw(request, buffer, continue_handler, true);
 	}
@@ -185,8 +185,6 @@ bool bucket::initialize(const rapidjson::Value &config, const elliptics_base &ba
 	if (!metadata_updater::initialize(config, base.node(), base.logger(), async, base.metadata_groups())) {
 		return false;
 	}
-
-	metadata_updater::logger().log(swarm::SWARM_LOG_ERROR, "bucket: init");
 
 	return true;
 }

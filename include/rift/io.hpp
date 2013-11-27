@@ -44,7 +44,8 @@ class on_get_base : public bucket_processing<Server, Stream>
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const elliptics::session &base_sess, swarm::http_response::status_type verdict) {
-		this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: verdict: %d", verdict);
+		const auto &query = req.url().query();
+		this->log(swarm::SWARM_LOG_NOTICE, "get-base: checked: url: %s, verdict: %d", query.to_string().c_str(), verdict);
 
 		if (verdict != swarm::http_response::ok) {
 			this->send_reply(verdict);
@@ -53,7 +54,6 @@ public:
 
 		(void) buffer;
 
-		const auto &query = req.url().query();
 		elliptics::key key = this->server()->extract_key(req);
 
 		elliptics::session sess = base_sess;
