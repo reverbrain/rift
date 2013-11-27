@@ -82,6 +82,9 @@ void bucket_meta::check_and_run_raw(const swarm::http_request &request, const bo
 	auto v = verdict(request);
 	guard.unlock();
 
+	m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "bucket: check-and-run-raw: bucket: %s, uptodate: %d, req: %s, verdict: %d",
+			m_raw.key.c_str(), uptodate, request.url().query().to_string().c_str(), v);
+
 	if ((v != swarm::http_response::ok) && !uptodate) {
 		update_and_check(request, buffer, continue_handler);
 	} else {
@@ -160,7 +163,17 @@ void bucket_meta::update_and_check_completed(const swarm::http_request &request,
 			const ioremap::elliptics::error_info &error)
 {
 	update_finished(result, error);
-	check_and_run_raw(request, buffer, continue_handler, true);
+
+	if (error) {
+		elliptics::session sess = m_bucket->metadata_session();
+		std::vector<int> empty;
+		sess.set_groups(empty);
+		sess.set_namespace(m_raw.key.c_str(), m_raw.key.size());
+
+		continue_handler(request, buffer, sess, swarm::http_reponse::forbidden);
+	} else {
+		check_and_run_raw(request, buffer, continue_handler, true);
+	}
 }
 
 bucket::bucket()

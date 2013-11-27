@@ -34,10 +34,7 @@ public:
 	}
 
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const elliptics::session &base_sess, bool verdict) {
-		this->log(swarm::SWARM_LOG_ERROR, "bucket-processing: checked: verdict: %d", verdict);
-		this->send_reply(verdict);
-	}
+			const elliptics::session &base_sess, swarm::http_response::status_type verdict) = 0;
 };
 
 // read data object
@@ -46,7 +43,9 @@ class on_get_base : public bucket_processing<Server, Stream>
 {
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const elliptics::session &base_sess, bool verdict) {
+			const elliptics::session &base_sess, swarm::http_response::status_type verdict) {
+		this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: verdict: %d", verdict);
+
 		if (verdict != swarm::http_response::ok) {
 			this->send_reply(verdict);
 			return;
@@ -529,6 +528,8 @@ public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &) {
 		elliptics::session sess = this->server()->elliptics()->session();
 		elliptics::key key;
+
+		(void) req;
 #if 0
 		auto status = this->server()->elliptics()->process(req, key, sess);
 		if (status != swarm::http_response::ok) {
@@ -671,6 +672,7 @@ public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &)
 	{
 		elliptics::session sess = this->server()->elliptics()->session();
+		(void) req;
 #if 0
 		auto status = this->server()->elliptics()->process(req, m_key, sess);
 		if (status != swarm::http_response::ok) {
