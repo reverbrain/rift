@@ -12,7 +12,7 @@ public:
 		std::string path;
 	};
 
-	example_server() {
+	example_server() : m_noauth_allowed(false) {
 	}
 
 	~example_server() {
@@ -28,25 +28,8 @@ public:
 
 		m_async.initialize(logger());
 
-		if (config.HasMember("signatures")) {
-			auto &signatures = config["signatures"];
-			for (auto it = signatures.Begin(); it != signatures.End(); ++it) {
-				if (!it->HasMember("key")) {
-					logger().log(swarm::SWARM_LOG_ERROR, "\"signatures[i].key\" field is missed");
-					return false;
-				}
-				if (!it->HasMember("path")) {
-					logger().log(swarm::SWARM_LOG_ERROR, "\"signatures[i].path\" field is missed");
-					return false;
-				}
-
-				signature_info info = {
-					(*it)["key"].GetString(),
-					(*it)["path"].GetString()
-				};
-
-				m_signatures.emplace_back(std::move(info));
-			}
+		if (config.HasMember("noauth")) {
+			m_noauth_allowed = std::string(config["noauth"].GetString()) == "allowed";
 		}
 
 		if (config.HasMember("cache")) {
@@ -58,7 +41,7 @@ public:
 
 		if (config.HasMember("bucket")) {
 			m_bucket = std::make_shared<rift::bucket>();
-			if (!m_bucket->initialize(config["bucket"], m_elliptics, logger(), &m_async))
+			if (!m_bucket->initialize(config["bucket"], m_elliptics, &m_async))
 				return false;
 		}
 
@@ -127,17 +110,6 @@ public:
 		return true;
 	}
 
-	const std::string *find_signature(const std::string &path) {
-		for (auto it = m_signatures.begin(); it != m_signatures.end(); ++it) {
-			if (it->path.size() <= path.size()
-				&& path.compare(0, it->path.size(), it->path) == 0) {
-				return &it->key;
-			}
-		}
-
-		return NULL;
-	}
-
 	swarm::url generate_url_base(dnet_addr *addr) {
 		char buffer[128];
 
@@ -155,7 +127,8 @@ public:
 		return &m_elliptics;
 	}
 
-	void process(const swarm::http_request &request, const boost::asio::const_buffer &buffer, const rift::continue_handler_t &handler) const {
+	void process(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+			const rift::continue_handler_t &continue_handler) const {
 		auto ns = request.url().query().item_value("namespace");
 		if (!ns || !m_bucket) {
 			auto verdict = swarm::http_response::bad_request;
@@ -165,19 +138,20 @@ public:
 			auto sess = m_elliptics.session();
 			continue_handler(request, buffer, sess, verdict);
 		} else {
-			m_bucket->check(request, buffer, handler);
+			m_bucket->check(*ns, request, buffer, continue_handler);
 		}
 	}
 
-private:
-	rift::async_performer m_async;
-	std::vector<signature_info> m_signatures;
-	bool m_redirect_read;
-	int m_redirect_port;
-	bool m_secured_http;
-	std::shared_ptr<rift::cache> m_cache;
-	std::shared_ptr<rift::bucket> m_bucket;
-	rift::elliptics_base m_elliptics;
+	void check_cache(const elliptics::key &key, elliptics::session &sess) const {
+		if (m_cache) {
+			auto cache_groups = m_cache->groups(key);
+			if (!cache_groups.empty()) {
+				auto groups = sess.get_groups();
+				groups.insert(groups.end(), cache_groups.begin(), cache_groups.end());
+				sess.set_groups(groups);
+			}
+		}
+	}
 
 	elliptics::key extract_key(const swarm::http_request &request) const {
 		const auto &query = request.url().query();
@@ -197,6 +171,16 @@ private:
 		return key;
 	}
 
+
+private:
+	rift::async_performer m_async;
+	bool m_redirect_read;
+	int m_redirect_port;
+	bool m_secured_http;
+	std::shared_ptr<rift::cache> m_cache;
+	std::shared_ptr<rift::bucket> m_bucket;
+	rift::elliptics_base m_elliptics;
+	bool m_noauth_allowed;
 };
 
 int main(int argc, char **argv)

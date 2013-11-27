@@ -89,7 +89,7 @@ std::vector<int> cache::groups(const elliptics::key &key)
 
 void cache::on_sync_action()
 {
-	elliptics::session session = create_session();
+	elliptics::session session = metadata_session();
 	session.read_data(m_key, 0, 0).connect(std::bind(
 		&cache::on_read_finished, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 }

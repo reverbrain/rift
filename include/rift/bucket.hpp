@@ -6,7 +6,7 @@
 #include "rift/asio.hpp"
 
 #include "rift/auth.hpp"
-#include "rift/signature.hpp"
+#include "rift/server.hpp"
 #include "rift/metadata_updater.hpp"
 
 #include <elliptics/session.hpp>
@@ -37,25 +37,31 @@ typedef std::function<void (const swarm::http_request, const boost::asio::const_
 class bucket_meta
 {
 	public:
-		bucket_meta(const std::string &key, bucket *b, const swarm::http_request &request, const continue_handler_t &handler);
+		bucket_meta(const std::string &key, bucket *b, const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+				const continue_handler_t &continue_handler);
 
-		void check_and_run(const swarm::http_request &request, const continue_handler_t &handler);
+		void check_and_run(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+				const continue_handler_t &continue_handler);
 
 		void update(void);
+		void update_and_check(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+				const continue_handler_t &continue_handler);
 	private:
 		std::mutex m_lock;
 		bucket_meta_raw m_raw;
 
 		bucket *m_bucket;
-		swarm::http_request m_request;
-		continue_handler_t m_continue;
 
 		void update_finished(const ioremap::elliptics::sync_read_result &result,
 				const ioremap::elliptics::error_info &error);
+		void update_and_check_completed(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+				const continue_handler_t &continue_handler, const ioremap::elliptics::sync_read_result &result,
+				const ioremap::elliptics::error_info &error);
 
-		swarm::http_response::status_type verdict();
+		swarm::http_response::status_type verdict(const swarm::http_request &request);
 
-		void check_and_run_raw(const swarm::http_request &request, const continue_handler_t &handler, bool uptodate);
+		void check_and_run_raw(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+				const continue_handler_t &continue_handler, bool uptodate);
 };
 
 class bucket : public metadata_updater, public std::enable_shared_from_this<bucket>
@@ -63,9 +69,9 @@ class bucket : public metadata_updater, public std::enable_shared_from_this<buck
 	public:
 		bucket();
 
-		bool initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node,
-			const swarm::logger &logger, async_performer *async, const std::vector<int> &groups);
-		void check(const swarm::http_request &request, const boost::asio::const_buffer &buffer, const continue_handler_t &continue_handler);
+		bool initialize(const rapidjson::Value &config, const elliptics_base &base, async_performer *async);
+		void check(const std::string &ns, const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+				const continue_handler_t &continue_handler);
 
 	private:
 		bool m_noauth_allowed;

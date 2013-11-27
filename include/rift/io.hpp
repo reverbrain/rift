@@ -29,28 +29,15 @@ class bucket_processing : public thevoid::simple_request_stream<Server>, public 
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		elliptics::key key = this->server();
-
-		if (ns)
-			sess.set_namespace(ns->c_str(), ns->size());
-
-		if (m_noauth_allowed)
-			verdict = prepare_key(request, key, session);
-
 		this->server()->process(req, buffer, std::bind(&bucket_processing::checked, this->shared_from_this(),
-					std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 std::placeholders::_4));
+					std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
 	}
 
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer, const elliptics::session &sess, bool verdict) {
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
+			const elliptics::session &base_sess, bool verdict) {
 		this->log(swarm::SWARM_LOG_ERROR, "bucket-processing: checked: verdict: %d", verdict);
-		this->send_reply(swarm::http_response::bad_request);
-
-
+		this->send_reply(verdict);
 	}
-
-protected:
-	swarm::http_request m_request;
-	boost::asio::const_buffer m_buffer;
 };
 
 // read data object
@@ -58,23 +45,20 @@ template <typename Server, typename Stream>
 class on_get_base : public bucket_processing<Server, Stream>
 {
 public:
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer, const elliptics::session &sess, bool verdict) {
-		const auto &query = req.url().query();
-
-		if (m_cache) {
-			auto cache_groups = m_cache->groups(key);
-			if (!cache_groups.empty()) {
-				auto groups = session.get_groups();
-				groups.insert(groups.end(), cache_groups.begin(), cache_groups.end());
-				session.set_groups(groups);
-			}
-		}
-
-
-		if (!verdict) {
-			this->send_reply(swarm::http_response::forbidden);
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
+			const elliptics::session &base_sess, bool verdict) {
+		if (verdict != swarm::http_response::ok) {
+			this->send_reply(verdict);
 			return;
 		}
+
+		(void) buffer;
+
+		const auto &query = req.url().query();
+		elliptics::key key = this->server()->extract_key(req);
+
+		elliptics::session sess = base_sess;
+		this->server()->check_cache(key, sess);
 
 		size_t offset = 0;
 		size_t size = 0;
@@ -88,7 +72,7 @@ public:
 			return;
 		}
 
-		sess.read_data(bucket_processing<Server, Stream>::m_key, offset, size).connect(std::bind(
+		sess.read_data(key, offset, size).connect(std::bind(
 			&on_get_base::on_read_finished, this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 	}
 
@@ -558,7 +542,8 @@ public:
 
 	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time, std::string *url_ptr) {
 		const auto name = this->request().url().query().item_value("name");
-		auto key = this->server()->find_signature(*name);
+		//auto key = this->server()->find_signature(*name);
+		std::string *key = NULL;
 
 		if (!key && !url_ptr) {
 			return std::string();
