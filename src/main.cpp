@@ -135,7 +135,7 @@ public:
 		auto ns = request.url().query().item_value("namespace");
 		if (!ns || !m_bucket) {
 			auto verdict = swarm::http_response::bad_request;
-			if (m_noauth_allowed)
+			if (m_noauth_allowed || !m_bucket)
 				verdict = swarm::http_response::ok;
 
 			rift::bucket_meta_raw meta;
