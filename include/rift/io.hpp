@@ -262,15 +262,109 @@ class on_get : public on_get_base<Server, on_get<Server>>
 public:
 };
 
+class upload_completion {
+public:
+	template <typename Allocator>
+	static void fill_upload_reply(const elliptics::write_result_entry &entry, rapidjson::Value &result_object, Allocator &allocator) {
+		char id_str[2 * DNET_ID_SIZE + 1];
+		dnet_dump_id_len_raw(entry.command()->id.id, DNET_ID_SIZE, id_str);
+		rapidjson::Value id_str_value(id_str, 2 * DNET_ID_SIZE, allocator);
+		result_object.AddMember("id", id_str_value, allocator);
+
+		char csum_str[2 * DNET_ID_SIZE + 1];
+		dnet_dump_id_len_raw(entry.file_info()->checksum, DNET_ID_SIZE, csum_str);
+		rapidjson::Value csum_str_value(csum_str, 2 * DNET_ID_SIZE, allocator);
+		result_object.AddMember("csum", csum_str_value, allocator);
+
+		if (entry.file_path())
+			result_object.AddMember("filename", entry.file_path(), allocator);
+
+		result_object.AddMember("size", entry.file_info()->size, allocator);
+		result_object.AddMember("offset-within-data-file", entry.file_info()->offset,
+				allocator);
+
+		rapidjson::Value tobj;
+		JsonValue::set_time(tobj, allocator,
+				entry.file_info()->mtime.tsec,
+				entry.file_info()->mtime.tnsec / 1000);
+		result_object.AddMember("mtime", tobj, allocator);
+
+		char addr_str[128];
+		dnet_server_convert_dnet_addr_raw(entry.storage_address(), addr_str, sizeof(addr_str));
+		
+		rapidjson::Value server_addr(addr_str, strlen(addr_str), allocator);
+		result_object.AddMember("server", server_addr, allocator);
+	}
+
+	template <typename Allocator>
+	static void fill_upload_reply(const elliptics::sync_write_result &result, rapidjson::Value &result_object, Allocator &allocator) {
+		rapidjson::Value infos;
+		infos.SetArray();
+
+		for (auto it = result.begin(); it != result.end(); ++it) {
+			rapidjson::Value download_info;
+			download_info.SetObject();
+
+			fill_upload_reply(*it, download_info, allocator);
+
+			infos.PushBack(download_info, allocator);
+		}
+
+		result_object.AddMember("info", infos, allocator);
+	}
+
+	typedef std::function<void (const swarm::http_response::status_type, const std::string &)> upload_completion_callback_t;
+
+	static void upload_update_indexes(const elliptics::session &data_session, const bucket_meta_raw &meta,
+			const elliptics::key &key, const elliptics::sync_write_result &write_result,
+			const upload_completion_callback_t &callback) {
+		std::vector<std::string> indexes;
+		indexes.push_back(meta.key + ".index");
+
+		msgpack::sbuffer buf;
+		bucket_meta_index_data index_data;
+		index_data.key = key.to_string();
+		msgpack::pack(buf, index_data);
+
+		std::vector<elliptics::data_pointer> datas;
+		datas.emplace_back(elliptics::data_pointer::copy(buf.data(), buf.size()));
+
+		elliptics::session session = data_session;
+
+		// only update indexes in non-cached groups
+		session.set_namespace(meta.key.c_str(), meta.key.size());
+		session.set_groups(meta.groups);
+
+		session.update_indexes(key, indexes, datas).connect(
+			std::bind(&upload_completion::on_index_update_finished,
+				write_result, callback, std::placeholders::_1, std::placeholders::_2));
+	}
+
+	static void on_index_update_finished(const elliptics::sync_write_result &write_result,
+			const upload_completion_callback_t &callback,
+			const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error)
+	{
+		(void) result;
+
+		if (error) {
+			callback(swarm::http_response::internal_server_error, std::string());
+			return;
+		}
+
+		rift::JsonValue result_object;
+		upload_completion::fill_upload_reply(write_result, result_object, result_object.GetAllocator());
+
+		auto data = result_object.ToString();
+
+		callback(swarm::http_response::ok, data);
+	}
+
+};
+
 // write data object, get file-info json in response
 template <typename Server, typename Stream>
 class on_upload_base : public bucket_processing<Server, Stream>
 {
-	elliptics::key m_key;
-	bucket_meta_raw m_meta;
-	swarm::http_request m_req;
-	std::unique_ptr<elliptics::session> m_session;
-
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
@@ -328,53 +422,19 @@ public:
 		}
 	}
 
-	template <typename Allocator>
-	static void fill_upload_reply(const elliptics::write_result_entry &entry, rapidjson::Value &result_object, Allocator &allocator) {
-		char id_str[2 * DNET_ID_SIZE + 1];
-		dnet_dump_id_len_raw(entry.command()->id.id, DNET_ID_SIZE, id_str);
-		rapidjson::Value id_str_value(id_str, 2 * DNET_ID_SIZE, allocator);
-		result_object.AddMember("id", id_str_value, allocator);
-
-		char csum_str[2 * DNET_ID_SIZE + 1];
-		dnet_dump_id_len_raw(entry.file_info()->checksum, DNET_ID_SIZE, csum_str);
-		rapidjson::Value csum_str_value(csum_str, 2 * DNET_ID_SIZE, allocator);
-		result_object.AddMember("csum", csum_str_value, allocator);
-
-		if (entry.file_path())
-			result_object.AddMember("filename", entry.file_path(), allocator);
-
-		result_object.AddMember("size", entry.file_info()->size, allocator);
-		result_object.AddMember("offset-within-data-file", entry.file_info()->offset,
-				allocator);
-
-		rapidjson::Value tobj;
-		JsonValue::set_time(tobj, allocator,
-				entry.file_info()->mtime.tsec,
-				entry.file_info()->mtime.tnsec / 1000);
-		result_object.AddMember("mtime", tobj, allocator);
-
-		char addr_str[128];
-		dnet_server_convert_dnet_addr_raw(entry.storage_address(), addr_str, sizeof(addr_str));
-		
-		rapidjson::Value server_addr(addr_str, strlen(addr_str), allocator);
-		result_object.AddMember("server", server_addr, allocator);
-	}
-
-	template <typename Allocator>
-	static void fill_upload_reply(const elliptics::sync_write_result &result, rapidjson::Value &result_object, Allocator &allocator) {
-		rapidjson::Value infos;
-		infos.SetArray();
-
-		for (auto it = result.begin(); it != result.end(); ++it) {
-			rapidjson::Value download_info;
-			download_info.SetObject();
-
-			fill_upload_reply(*it, download_info, allocator);
-
-			infos.PushBack(download_info, allocator);
+	void completion(const swarm::http_response::status_type &status, const std::string &data) {
+		if (status != swarm::http_response::ok) {
+			this->send_reply(status);
+			return;
 		}
 
-		result_object.AddMember("info", infos, allocator);
+		swarm::http_response reply;
+
+		reply.set_code(swarm::http_response::ok);
+		reply.headers().set_content_type("text/json");
+		reply.headers().set_content_length(data.size());
+
+		this->send_reply(std::move(reply), std::move(data));
 	}
 
 	virtual void on_write_finished(const elliptics::sync_write_result &result,
@@ -385,60 +445,22 @@ public:
 		}
 
 		try {
-			std::vector<std::string> indexes;
-			indexes.push_back(m_meta.key + ".index");
-
-			msgpack::sbuffer buf;
-			bucket_meta_index_data index_data;
-			index_data.key = m_key.to_string();
-			msgpack::pack(buf, index_data);
-
-			std::vector<elliptics::data_pointer> datas;
-			datas.emplace_back(elliptics::data_pointer::copy(buf.data(), buf.size()));
-
-			elliptics::session session = this->server()->elliptics()->session();
-
-			// only update indexes in non-cached groups
-			session.set_namespace(m_meta.key.c_str(), m_meta.key.size());
-			session.set_groups(m_meta.groups);
-
-			session.update_indexes(m_key, indexes, datas).connect(
-				std::bind(&on_upload_base::on_index_update_finished, this->shared_from_this(),
-					result, std::placeholders::_1, std::placeholders::_2));
+			upload_completion::upload_update_indexes(*m_session, m_meta, m_key, result,
+					std::bind(&on_upload_base::completion, this->shared_from_this(),
+						std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
 			this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, exception: %s",
 					m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags, e.what());
+			m_session->remove(m_key);
 			this->send_reply(swarm::http_response::bad_request);
 		}
 	}
 
-	virtual void on_index_update_finished(const elliptics::sync_write_result &write_result,
-			const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error)
-	{
-		(void) result;
-
-		if (error) {
-			this->log(swarm::SWARM_LOG_DEBUG, "on_index_update_finished, removing object '%s' on error: %s",
-					m_key.to_string().c_str(), error.message().c_str());
-
-			m_session->remove(m_key);
-			this->send_reply(swarm::http_response::internal_server_error);
-			return;
-		}
-
-		rift::JsonValue result_object;
-		on_upload_base::fill_upload_reply(write_result, result_object, result_object.GetAllocator());
-
-		auto data = result_object.ToString();
-
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::ok);
-		reply.headers().set_content_type("text/json");
-		reply.headers().set_content_length(data.size());
-
-		this->send_reply(std::move(reply), std::move(data));
-	}
-
+private:
+	elliptics::key m_key;
+	bucket_meta_raw m_meta;
+	swarm::http_request m_req;
+	std::unique_ptr<elliptics::session> m_session;
 };
 
 template <typename Server>
@@ -452,45 +474,60 @@ template <typename Server, typename Stream>
 class on_buffered_upload_base : public thevoid::buffered_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &request)
-	{
-		const auto &query = request.url().query();
-		this->set_chunk_size(10 * 1024 * 1024);
-
-		m_session.reset(new elliptics::session(this->server()->elliptics()->session()));
-#if 0
-		auto status = this->server()->elliptics()->process(request, m_key, *m_session);
-		if (status != swarm::http_response::ok) {
-			m_session.reset();
-			this->send_reply(status);
+	virtual void on_request(const swarm::http_request &req) {
+		if (!this->server()->query_ok(req)) {
+			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
-#endif
+
+		boost::asio::const_buffer buffer;
+		this->server()->process(req, buffer, std::bind(&on_buffered_upload_base::checked, this->shared_from_this(),
+					std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+	}
+
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
+			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+		auto data = elliptics::data_pointer::from_raw(
+			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
+			boost::asio::buffer_size(buffer));
+
+		this->set_chunk_size(10 * 1024 * 1024);
+
+		const auto &query = req.url().query();
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-upload-base: checked: url: %s, flags: 0x%lx, verdict: %d", query.to_string().c_str(), meta.flags, verdict);
+
+		if ((verdict != swarm::http_response::ok) && !meta.noauth_all()) {
+			this->send_reply(verdict);
+			return;
+		}
+
+		(void) buffer;
+
+		m_req = req;
+		m_meta = meta;
+
+		m_session.reset(new elliptics::session(this->server()->extract_key(req, meta, m_key)));
+
+		this->server()->check_cache(m_key, *m_session);
+
 		m_offset = query.item_value("offset", 0llu);
-		if (auto size = request.headers().content_length())
+		if (auto size = req.headers().content_length())
 			m_size = *size;
 		else
 			m_size = 0;
 	}
 
-	virtual void on_chunk(const boost::asio::const_buffer &buffer, unsigned int flags)
-	{
-		if (!m_session) {
+	virtual void on_chunk(const boost::asio::const_buffer &buffer, unsigned int flags) {
+		if (!m_session)
 			return;
-		}
 
-		elliptics::session sess = m_session->clone();
 		const auto data = create_data(buffer);
 
-		this->log(swarm::SWARM_LOG_INFO, "on_chunk: size: %zu, m_offset: %llu, flags: %u", data.size(), (unsigned long long)m_offset, flags);
+		const auto &query = m_req.url().query();
+		this->log(swarm::SWARM_LOG_INFO, "on_chunk: url: %s, size: %zu, m_offset: %lu, flags: %u",
+				query.to_string().c_str(), data.size(), m_offset, flags);
 
-		if (flags & thevoid::buffered_request_stream<Server>::first_chunk) {
-			m_groups = sess.get_groups();
-		} else {
-			sess.set_groups(m_groups);
-		}
-
-		elliptics::async_write_result result = write(sess, data, flags);
+		elliptics::async_write_result result = write(data, flags);
 		m_offset += data.size();
 
 		if (flags & thevoid::buffered_request_stream<Server>::last_chunk) {
@@ -502,42 +539,44 @@ public:
 		}
 	}
 
-	elliptics::async_write_result write(elliptics::session &sess,
-		const elliptics::data_pointer &data,
-		unsigned int flags)
-	{
-		typedef unsigned long long ull;
+	elliptics::async_write_result write(const elliptics::data_pointer &data, unsigned int flags) {
+		const auto &query = m_req.url().query();
 
 		if (flags == thevoid::buffered_request_stream<Server>::single_chunk) {
-			return sess.write_data(m_key, data, m_offset);
+			return m_session->write_data(m_key, data, m_offset);
 		} else if (m_size > 0) {
 			if (flags & thevoid::buffered_request_stream<Server>::first_chunk) {
-				this->log(swarm::SWARM_LOG_INFO, "prepare, offset: %llu, size: %llu", ull(m_offset), ull(m_size));
-				return sess.write_prepare(m_key, data, m_offset, m_offset + m_size);
+				this->log(swarm::SWARM_LOG_INFO, "buffered-write: prepare: url: %s, offset: %lu, size: %lu",
+						query.to_string().c_str(), m_offset, m_size);
+				return m_session->write_prepare(m_key, data, m_offset, m_offset + m_size);
 			} else if (flags & thevoid::buffered_request_stream<Server>::last_chunk) {
-				this->log(swarm::SWARM_LOG_INFO, "commit, offset: %llu, size: %llu", ull(m_offset), ull(m_offset + data.size()));
-				return sess.write_commit(m_key, data, m_offset, m_offset + data.size());
+				this->log(swarm::SWARM_LOG_INFO, "buffered-write: commit: url: %s, offset: %lu, size: %lu",
+						query.to_string().c_str(), m_offset, m_offset + data.size());
+				return m_session->write_commit(m_key, data, m_offset, m_offset + data.size());
 			} else {
-				this->log(swarm::SWARM_LOG_INFO, "plain, offset: %llu", ull(m_offset));
-				return sess.write_plain(m_key, data, m_offset);
+				this->log(swarm::SWARM_LOG_INFO, "buffered-write: plain: url: %s, offset: %lu, size: %zu",
+						query.to_string().c_str(), m_offset, data.size());
+				return m_session->write_plain(m_key, data, m_offset);
 			}
 		} else {
-			this->log(swarm::SWARM_LOG_INFO, "write_data, offset: %llu", ull(m_offset));
-			return sess.write_data(m_key, data, m_offset);
+			this->log(swarm::SWARM_LOG_INFO, "buffered-write: write-data: url: %s, offset: %lu, size: %zu",
+					query.to_string().c_str(), m_offset, data.size());
+			return m_session->write_data(m_key, data, m_offset);
 		}
 	}
 
-	virtual void on_error(const boost::system::error_code &err)
-	{
-		this->log(swarm::SWARM_LOG_DEBUG, "on_error, error: %s", err.message().c_str());
+	virtual void on_error(const boost::system::error_code &error) {
+		const auto &query = m_req.url().query();
+		this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s, error: %s",
+				query.to_string().c_str(), error.message().c_str());
 	}
 
-	virtual void on_write_partial(const elliptics::sync_write_result &result, const elliptics::error_info &error)
-	{
-		this->log(swarm::SWARM_LOG_DEBUG, "on_write_partial, error: %s", error.message().c_str());
-
+	virtual void on_write_partial(const elliptics::sync_write_result &result, const elliptics::error_info &error) {
 		if (error) {
-			on_write_finished(result, error);
+			const auto &query = m_req.url().query();
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s, partial write error: %s",
+					query.to_string().c_str(), error.message().c_str());
+			this->on_write_finished(result, error);
 			return;
 		}
 
@@ -551,29 +590,52 @@ public:
 		}
 
 		using std::swap;
-		swap(m_groups, groups);
+		swap(m_meta.groups, groups);
 
 		this->try_next_chunk();
 	}
 
-	virtual void on_write_finished(const elliptics::sync_write_result &result, const elliptics::error_info &error)
-	{
-		(void) result;
-
-		this->log(swarm::SWARM_LOG_DEBUG, "on_write_finished, error: %s", error.message().c_str());
-
-		if (error) {
-			this->send_reply(swarm::http_response::internal_server_error);
+	void completion(const swarm::http_response::status_type &status, const std::string &data) {
+		if (status != swarm::http_response::ok) {
+			this->send_reply(status);
 			return;
 		}
 
-		this->send_reply(swarm::http_response::ok);
+		swarm::http_response reply;
+
+		reply.set_code(swarm::http_response::ok);
+		reply.headers().set_content_type("text/json");
+		reply.headers().set_content_length(data.size());
+
+		this->send_reply(std::move(reply), std::move(data));
 	}
 
+	virtual void on_write_finished(const elliptics::sync_write_result &result,
+			const elliptics::error_info &error) {
+		if (error) {
+			this->send_reply(swarm::http_response::service_unavailable);
+			return;
+		}
+
+		try {
+			upload_completion::upload_update_indexes(*m_session, m_meta, m_key, result,
+					std::bind(&on_buffered_upload_base::completion, this->shared_from_this(),
+						std::placeholders::_1, std::placeholders::_2));
+		} catch (std::exception &e) {
+			this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, exception: %s",
+					m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags, e.what());
+			m_session->remove(m_key);
+			this->send_reply(swarm::http_response::bad_request);
+		}
+	}
+
+
 private:
-	std::vector<int> m_groups;
-	std::unique_ptr<elliptics::session> m_session;
 	elliptics::key m_key;
+	bucket_meta_raw m_meta;
+	swarm::http_request m_req;
+	std::unique_ptr<elliptics::session> m_session;
+
 	uint64_t m_offset;
 	uint64_t m_size;
 };
@@ -662,7 +724,7 @@ public:
 		}
 
 		rift::JsonValue result_object;
-		on_upload<Server>::fill_upload_reply(result[0], result_object, result_object.GetAllocator());
+		upload_completion::fill_upload_reply(result[0], result_object, result_object.GetAllocator());
 
 		dnet_time time;
 		dnet_current_time(&time);
