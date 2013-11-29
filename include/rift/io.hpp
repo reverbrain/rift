@@ -578,17 +578,25 @@ public:
 			return;
 		}
 
-		std::vector<int> groups;
+		// continue only with the groups where update succeeded
+		std::vector<int> groups, rem_groups;
 
 		for (auto it = result.begin(); it != result.end(); ++it) {
 			elliptics::write_result_entry entry = *it;
 
-			if (!entry.error())
+			if (entry.error())
+				rem_groups.push_back(entry.command()->id.group_id);
+			else
 				groups.push_back(entry.command()->id.group_id);
 		}
 
+		elliptics::session tmp = *m_session;
+		tmp.set_groups(rem_groups);
+		tmp.remove(m_key);
+
 		using std::swap;
 		swap(m_meta.groups, groups);
+		m_session->set_groups(groups);
 
 		this->try_next_chunk();
 	}
