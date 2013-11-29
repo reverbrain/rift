@@ -342,8 +342,7 @@ public:
 
 	static void on_index_update_finished(const elliptics::sync_write_result &write_result,
 			const upload_completion_callback_t &callback,
-			const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error)
-	{
+			const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error) {
 		(void) result;
 
 		if (error) {
@@ -358,7 +357,6 @@ public:
 
 		callback(swarm::http_response::ok, data);
 	}
-
 };
 
 // write data object, get file-info json in response
