@@ -266,6 +266,11 @@ public:
 template <typename Server, typename Stream>
 class on_upload_base : public bucket_processing<Server, Stream>
 {
+	elliptics::key m_key;
+	bucket_meta_raw m_meta;
+	swarm::http_request m_req;
+	std::unique_ptr<elliptics::session> m_session;
+
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
@@ -283,17 +288,20 @@ public:
 
 		(void) buffer;
 
-		elliptics::key key;
-		elliptics::session session = this->server()->extract_key(req, meta, key);
+		m_req = req;
+		m_meta = meta;
 
-		this->server()->check_cache(key, session);
+		m_session.reset(new elliptics::session(this->server()->extract_key(req, meta, m_key)));
+
+		this->server()->check_cache(m_key, *m_session);
 
 		try {
-			write_data(req, session, key, data).connect(
-				std::bind(&on_upload_base::on_write_finished, this->shared_from_this(), key, meta,
-				std::placeholders::_1, std::placeholders::_2));
+			write_data(req, *m_session, m_key, data).connect(
+				std::bind(&on_upload_base::on_write_finished, this->shared_from_this(),
+					std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_NOTICE, "post-base: checked-write: url: %s, flags: 0x%lx, exception: %s", query.to_string().c_str(), meta.flags, e.what());
+			this->log(swarm::SWARM_LOG_NOTICE, "post-base: checked-write: url: %s, flags: 0x%lx, exception: %s",
+					query.to_string().c_str(), meta.flags, e.what());
 			this->send_reply(swarm::http_response::bad_request);
 		}
 	}
@@ -369,7 +377,7 @@ public:
 		result_object.AddMember("info", infos, allocator);
 	}
 
-	virtual void on_write_finished(const elliptics::key &key, const bucket_meta_raw &meta, const elliptics::sync_write_result &result,
+	virtual void on_write_finished(const elliptics::sync_write_result &result,
 			const elliptics::error_info &error) {
 		if (error) {
 			this->send_reply(swarm::http_response::service_unavailable);
@@ -378,11 +386,11 @@ public:
 
 		try {
 			std::vector<std::string> indexes;
-			indexes.push_back(meta.key + ".index");
+			indexes.push_back(m_meta.key + ".index");
 
 			msgpack::sbuffer buf;
 			bucket_meta_index_data index_data;
-			index_data.key = key.to_string();
+			index_data.key = m_key.to_string();
 			msgpack::pack(buf, index_data);
 
 			std::vector<elliptics::data_pointer> datas;
@@ -390,25 +398,30 @@ public:
 
 			elliptics::session session = this->server()->elliptics()->session();
 
-			session.set_namespace(meta.key.c_str(), meta.key.size());
-			session.set_groups(meta.groups);
+			// only update indexes in non-cached groups
+			session.set_namespace(m_meta.key.c_str(), m_meta.key.size());
+			session.set_groups(m_meta.groups);
 
-			session.update_indexes(key, indexes, datas).connect(
-				std::bind(&on_upload_base::on_index_update_finished, this->shared_from_this(), result,
-				std::placeholders::_1, std::placeholders::_2));
+			session.update_indexes(m_key, indexes, datas).connect(
+				std::bind(&on_upload_base::on_index_update_finished, this->shared_from_this(),
+					result, std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
 			this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, exception: %s",
-					key.to_string().c_str(), meta.key.c_str(), meta.flags, e.what());
+					m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags, e.what());
 			this->send_reply(swarm::http_response::bad_request);
 		}
 	}
 
-	virtual void on_index_update_finished(const elliptics::sync_write_result &write_result, const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error)
+	virtual void on_index_update_finished(const elliptics::sync_write_result &write_result,
+			const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error)
 	{
 		(void) result;
 
 		if (error) {
-			this->log(swarm::SWARM_LOG_DEBUG, "on_index_update_finished, error: %s", error.message().c_str());
+			this->log(swarm::SWARM_LOG_DEBUG, "on_index_update_finished, removing object '%s' on error: %s",
+					m_key.to_string().c_str(), error.message().c_str());
+
+			m_session->remove(m_key);
 			this->send_reply(swarm::http_response::internal_server_error);
 			return;
 		}
