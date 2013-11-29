@@ -51,9 +51,9 @@ public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
 		const auto &query = req.url().query();
-		this->log(swarm::SWARM_LOG_NOTICE, "get-base: checked: url: %s, verdict: %d", query.to_string().c_str(), verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "get-base: checked: url: %s, flags: 0x%lx, verdict: %d", query.to_string().c_str(), meta.flags, verdict);
 
-		if (verdict != swarm::http_response::ok) {
+		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
 			this->send_reply(verdict);
 			return;
 		}
@@ -72,7 +72,7 @@ public:
 			offset = query.item_value("offset", 0llu);
 			size = query.item_value("size", 0llu);
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: url: %s: invalid size/offset cast: %s", query.to_string().c_str(), e.what());
+			this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: url: %s, flags: 0x%lx, invalid size/offset cast: %s", query.to_string().c_str(), meta.flags, e.what());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
@@ -274,9 +274,9 @@ public:
 			boost::asio::buffer_size(buffer));
 
 		const auto &query = req.url().query();
-		this->log(swarm::SWARM_LOG_NOTICE, "get-base: checked: url: %s, verdict: %d", query.to_string().c_str(), verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "upload-base: checked: url: %s, flags: 0x%lx, verdict: %d", query.to_string().c_str(), meta.flags, verdict);
 
-		if (verdict != swarm::http_response::ok) {
+		if ((verdict != swarm::http_response::ok) && !meta.noauth_all()) {
 			this->send_reply(verdict);
 			return;
 		}
@@ -293,7 +293,7 @@ public:
 				std::bind(&on_upload_base::on_write_finished, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_NOTICE, "post-base: checked: url: %s, exception: %s", query.to_string().c_str(), e.what());
+			this->log(swarm::SWARM_LOG_NOTICE, "post-base: checked: url: %s, flags: 0x%lx, exception: %s", query.to_string().c_str(), meta.flags, e.what());
 			this->send_reply(swarm::http_response::bad_request);
 		}
 	}
@@ -541,9 +541,9 @@ public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
 		const auto &query = req.url().query();
-		this->log(swarm::SWARM_LOG_NOTICE, "download-info-base: checked: url: %s, verdict: %d", query.to_string().c_str(), verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "download-info-base: checked: url: %s, flags: 0x%lx, verdict: %d", query.to_string().c_str(), meta.flags, verdict);
 
-		if (verdict != swarm::http_response::ok) {
+		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
 			this->send_reply(verdict);
 			return;
 		}
@@ -673,25 +673,35 @@ public:
 };
 
 template <typename Server, typename Stream>
-class on_buffered_get_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
+class on_buffered_get_base : public bucket_processing<Server, Stream>
 {
 public:
 	on_buffered_get_base() : m_buffer_size(5 * 1025 * 1024)
 	{
 	}
 
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &)
-	{
-		elliptics::session sess = this->server()->elliptics()->session();
-		(void) req;
-#if 0
-		auto status = this->server()->elliptics()->process(req, m_key, sess);
-		if (status != swarm::http_response::ok) {
-			this->send_reply(status);
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
+			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+		auto data = elliptics::data_pointer::from_raw(
+			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
+			boost::asio::buffer_size(buffer));
+
+		const auto &query = req.url().query();
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-base: checked: url: %s, flags: 0x%lx, verdict: %d", query.to_string().c_str(), meta.flags, verdict);
+
+		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
+			this->send_reply(verdict);
 			return;
 		}
-#endif
-		sess.lookup(m_key).connect(std::bind(
+
+		(void) buffer;
+
+		elliptics::key key;
+		elliptics::session session = this->server()->extract_key(req, meta, key);
+
+		this->server()->check_cache(key, session);
+
+		session.lookup(m_key).connect(std::bind(
 			&on_buffered_get_base::on_lookup_finished, this->shared_from_this(), std::placeholders::_1,  std::placeholders::_2));
 	}
 

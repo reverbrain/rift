@@ -22,12 +22,24 @@ struct bucket_meta_raw {
 		serialization_version = 1,
 	};
 
+	// bit fields
+	enum {
+		flags_noauth_read = 1<<0,
+		flags_noauth_all = 1<<1,
+	};
+
 	std::string key;
 	std::string token;
 	std::vector<int> groups;
 	uint64_t flags;
 
 	bucket_meta_raw() : flags(0ULL) {}
+	bool noauth_read() const {
+		return flags & (flags_noauth_read | flags_noauth_all);
+	}
+	bool noauth_all() const {
+		return flags & flags_noauth_all;
+	}
 };
 
 class bucket;

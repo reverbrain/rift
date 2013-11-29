@@ -25,7 +25,8 @@ def parse_options():
     parser.description = __doc__
     parser.add_option("-b", "--bucket", dest="bucket", default=None, help="Bucket name [default: %default]")
     parser.add_option("-t", "--token", dest="token", default=None, help="Authentication token [default: %default]")
-    parser.add_option("-n", "--noauth", dest="noauth", default=None, help="When provided bucket IO will not check authentication [default: %default]")
+    parser.add_option("-n", "--noauth", dest="noauth", default=None,
+	    help="When provided bucket IO will not check authentication [default: %default], possible values: 'read' - allow read operation with auth, 'all' - do not perform authentication for given bucket")
     parser.add_option("-g", "--bucket-groups", action="store", dest="bucket_groups", default=None,
                       help="Comma separated list of groups where data for given bucket has to be stored")
     parser.add_option("-m", "--metadata-groups", action="store", dest="metadata_groups", default=None,
@@ -102,7 +103,13 @@ if __name__ == '__main__':
     sess = elliptics.Session(node)
     sess.groups = options.metadata_groups
 
-    bucket = [ 1, options.bucket, options.token, options.bucket_groups, 0 ]
+    flags = 0
+    if options.noauth == "read":
+	    flags = 1
+    elif options.noauth == "all":
+	    flags = 2
+
+    bucket = [ 1, options.bucket, options.token, options.bucket_groups, flags ]
     data = msgpack.packb(bucket)
 
     write_result = sess.write_data(options.bucket, data)
