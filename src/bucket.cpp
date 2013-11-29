@@ -1,72 +1,15 @@
 #include "rift/bucket.hpp"
 
-#include <msgpack.hpp>
-
 using namespace ioremap;
 using namespace ioremap::rift;
-
-namespace msgpack
-{
-
-template <typename Stream>
-inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const bucket_meta_raw &m)
-{
-	o.pack_array(5);
-	o.pack(bucket_meta_raw::serialization_version);
-	o.pack(m.key);
-	o.pack(m.token);
-	o.pack(m.groups);
-	o.pack(m.flags);
-
-	return o;
-}
-
-inline bucket_meta_raw &operator >>(msgpack::object o, bucket_meta_raw &m)
-{
-	if (o.type != msgpack::type::ARRAY || o.via.array.size < 5) {
-		std::ostringstream ss;
-		ss << "bucket unpack: type: " << o.type <<
-			", must be: " << msgpack::type::ARRAY <<
-			", size: " << o.via.array.size;
-		throw std::runtime_error(ss.str());
-	}
-
-	object *p = o.via.array.ptr;
-	const uint32_t size = o.via.array.size;
-	uint16_t version = 0;
-	p[0].convert(&version);
-	switch (version) {
-	case 1: {
-		if (size != 5) {
-			std::ostringstream ss;
-			ss << "bucket unpack: array size mismatch: read: " << size << ", must be: 5";
-			throw std::runtime_error(ss.str());
-		}
-
-		p[1].convert(&m.key);
-		p[2].convert(&m.token);
-		p[3].convert(&m.groups);
-		p[4].convert(&m.flags);
-		break;
-	}
-	default: {
-		std::ostringstream ss;
-		ss << "bucket unpack: version mismatch: read: " << version <<
-			", must be: <= " << bucket_meta_raw::serialization_version;
-		throw std::runtime_error(ss.str());
-	}
-	}
-
-	return m;
-}
-
-} // namespace msgpack
 
 bucket_meta::bucket_meta(const std::string &key, bucket *b, const swarm::http_request &request, const boost::asio::const_buffer &buffer,
 				const continue_handler_t &continue_handler) : m_bucket(b)
 {
 	m_raw.key = key;
-	m_bucket->add_action(std::bind(&bucket_meta::update_and_check, this, request, buffer, continue_handler));
+	m_bucket->add_action(std::bind(&bucket_meta::update, this));
+
+	update_and_check(request, buffer, continue_handler);
 }
 
 void bucket_meta::check_and_run_raw(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
@@ -76,8 +19,11 @@ void bucket_meta::check_and_run_raw(const swarm::http_request &request, const bo
 	auto v = verdict(request);
 	guard.unlock();
 
-	m_bucket->logger().log(swarm::SWARM_LOG_INFO, "bucket: check-and-run-raw: bucket: %s, uptodate: %d, req: %s, verdict: %d",
-			m_raw.key.c_str(), uptodate, request.url().query().to_string().c_str(), v);
+	std::ostringstream ss;
+	std::copy(m_raw.groups.begin(), m_raw.groups.end(), std::ostream_iterator<int>(ss, ":"));
+
+	m_bucket->logger().log(swarm::SWARM_LOG_INFO, "bucket: check-and-run-raw: bucket: %s, groups: %s, uptodate: %d, req: %s, verdict: %d",
+			m_raw.key.c_str(), ss.str().c_str(), uptodate, request.url().query().to_string().c_str(), v);
 
 	if ((v != swarm::http_response::ok) && !uptodate) {
 		update_and_check(request, buffer, continue_handler);
@@ -112,6 +58,10 @@ void bucket_meta::update_and_check(const swarm::http_request &request, const boo
 
 swarm::http_response::status_type bucket_meta::verdict(const swarm::http_request &request)
 {
+	// if no groups exist, then given bucket is 'empty', or basically it was not written into the storage
+	if (m_raw.groups.empty())
+		return swarm::http_response::not_found;
+
 	// if no token was set, 'succeed' verification
 	if (m_raw.token.empty())
 		return swarm::http_response::ok;
@@ -147,6 +97,12 @@ void bucket_meta::update_finished(const ioremap::elliptics::sync_read_result &re
 
 			std::lock_guard<std::mutex> guard(m_lock);
 			msg.get().convert(&m_raw);
+
+			std::ostringstream ss;
+			std::copy(m_raw.groups.begin(), m_raw.groups.end(), std::ostream_iterator<int>(ss, ":"));
+
+			m_bucket->logger().log(swarm::SWARM_LOG_NOTICE, "bucket-update: bucket: %s, token: '%s', flags: 0x%lx, groups: %s",
+					m_raw.key.c_str(), m_raw.token.c_str(), m_raw.flags, ss.str().c_str());
 
 		} catch (const std::exception &e) {
 			m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "bucket-update-failed: read exception: "
