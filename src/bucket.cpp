@@ -112,6 +112,10 @@ void bucket_meta::update_and_check(const swarm::http_request &request, const boo
 
 swarm::http_response::status_type bucket_meta::verdict(const swarm::http_request &request)
 {
+	// if no token was set, 'succeed' verification
+	if (m_raw.token.empty())
+		return swarm::http_response::ok;
+
 	auto verdict = swarm::http_response::bad_request;
 
 	auto auth = request.headers().get("Authorization");
