@@ -383,7 +383,6 @@ public:
 			msgpack::sbuffer buf;
 			bucket_meta_index_data index_data;
 			index_data.key = key.to_string();
-			index_data.bucket_name = meta.key;
 			msgpack::pack(buf, index_data);
 
 			std::vector<elliptics::data_pointer> datas;
@@ -398,7 +397,8 @@ public:
 				std::bind(&on_upload_base::on_index_update_finished, this->shared_from_this(), result,
 				std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, exception: %s", key.to_string().c_str(), meta.key.c_str(), meta.flags, e.what());
+			this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, exception: %s",
+					key.to_string().c_str(), meta.key.c_str(), meta.flags, e.what());
 			this->send_reply(swarm::http_response::bad_request);
 		}
 	}

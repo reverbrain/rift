@@ -25,7 +25,6 @@ struct bucket_meta_index_data {
 	};
 
 	std::string key;
-	std::string bucket_name;
 };
 
 struct bucket_meta_raw {
@@ -43,8 +42,14 @@ struct bucket_meta_raw {
 	std::string token;
 	std::vector<int> groups;
 	uint64_t flags;
+	uint64_t max_size;
+	uint64_t max_key_num;
+	uint64_t reserved[3];
 
-	bucket_meta_raw() : flags(0ULL) {}
+	bucket_meta_raw() : flags(0ULL), max_size(0ULL), max_key_num(0ULL) {
+		memset(reserved, 0, sizeof(reserved) * sizeof(uint64_t));
+	}
+
 	bool noauth_read() const {
 		return flags & (flags_noauth_read | flags_noauth_all);
 	}
@@ -109,19 +114,23 @@ namespace msgpack
 template <typename Stream>
 inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const ioremap::rift::bucket_meta_raw &m)
 {
-	o.pack_array(5);
+	o.pack_array(10);
 	o.pack((int)ioremap::rift::bucket_meta_raw::serialization_version);
 	o.pack(m.key);
 	o.pack(m.token);
 	o.pack(m.groups);
 	o.pack(m.flags);
+	o.pack(m.max_size);
+	o.pack(m.max_key_num);
+	for (size_t i = 0; i < ARRAY_SIZE(m.reserved); ++i)
+		o.pack(m.reserved[i]);
 
 	return o;
 }
 
 inline ioremap::rift::bucket_meta_raw &operator >>(msgpack::object o, ioremap::rift::bucket_meta_raw &m)
 {
-	if (o.type != msgpack::type::ARRAY || o.via.array.size < 5) {
+	if (o.type != msgpack::type::ARRAY || o.via.array.size < 10) {
 		std::ostringstream ss;
 		ss << "bucket unpack: type: " << o.type <<
 			", must be: " << msgpack::type::ARRAY <<
@@ -135,9 +144,9 @@ inline ioremap::rift::bucket_meta_raw &operator >>(msgpack::object o, ioremap::r
 	p[0].convert(&version);
 	switch (version) {
 	case 1: {
-		if (size != 5) {
+		if (size != 10) {
 			std::ostringstream ss;
-			ss << "bucket unpack: array size mismatch: read: " << size << ", must be: 5";
+			ss << "bucket unpack: array size mismatch: read: " << size << ", must be: 10";
 			throw std::runtime_error(ss.str());
 		}
 
@@ -145,6 +154,10 @@ inline ioremap::rift::bucket_meta_raw &operator >>(msgpack::object o, ioremap::r
 		p[2].convert(&m.token);
 		p[3].convert(&m.groups);
 		p[4].convert(&m.flags);
+		p[5].convert(&m.max_size);
+		p[6].convert(&m.max_key_num);
+		for (size_t i = 0; i < ARRAY_SIZE(m.reserved); ++i)
+			p[7 + i].convert(&m.reserved[i]);
 		break;
 	}
 	default: {
@@ -161,10 +174,9 @@ inline ioremap::rift::bucket_meta_raw &operator >>(msgpack::object o, ioremap::r
 template <typename Stream>
 inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const ioremap::rift::bucket_meta_index_data &m)
 {
-	o.pack_array(3);
+	o.pack_array(2);
 	o.pack((int)ioremap::rift::bucket_meta_index_data::serialization_version);
 	o.pack(m.key);
-	o.pack(m.bucket_name);
 
 	return o;
 }
@@ -185,14 +197,13 @@ inline ioremap::rift::bucket_meta_index_data &operator >>(msgpack::object o, ior
 	p[0].convert(&version);
 	switch (version) {
 	case 1: {
-		if (size != 3) {
+		if (size != 2) {
 			std::ostringstream ss;
 			ss << "bucket unpack: array size mismatch: read: " << size << ", must be: 3";
 			throw std::runtime_error(ss.str());
 		}
 
 		p[1].convert(&m.key);
-		p[2].convert(&m.bucket_name);
 		break;
 	}
 	default: {
