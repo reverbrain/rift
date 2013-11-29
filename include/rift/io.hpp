@@ -560,8 +560,10 @@ public:
 	}
 
 	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time, const std::string &token, std::string *url_ptr) {
-		const auto name = this->request().url().query().item_value("name");
+		if (token.empty() && !url_ptr)
+			return std::string();
 
+		const auto name = this->request().url().query().item_value("name");
 		const dnet_file_info *info = entry.file_info();
 
 		swarm::url url = this->server()->generate_url_base(entry.address());
