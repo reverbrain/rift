@@ -15,7 +15,18 @@
 
 #include <mutex>
 
+#include <msgpack.hpp>
+
 namespace ioremap { namespace rift {
+
+struct bucket_meta_index_data {
+	enum {
+		serialization_version = 1,
+	};
+
+	std::string key;
+	std::string bucket_name;
+};
 
 struct bucket_meta_raw {
 	enum {
@@ -91,5 +102,110 @@ class bucket : public metadata_updater, public std::enable_shared_from_this<buck
 };
 
 }} // namespace ioremap::bucket
+
+namespace msgpack
+{
+
+template <typename Stream>
+inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const ioremap::rift::bucket_meta_raw &m)
+{
+	o.pack_array(5);
+	o.pack((int)ioremap::rift::bucket_meta_raw::serialization_version);
+	o.pack(m.key);
+	o.pack(m.token);
+	o.pack(m.groups);
+	o.pack(m.flags);
+
+	return o;
+}
+
+inline ioremap::rift::bucket_meta_raw &operator >>(msgpack::object o, ioremap::rift::bucket_meta_raw &m)
+{
+	if (o.type != msgpack::type::ARRAY || o.via.array.size < 5) {
+		std::ostringstream ss;
+		ss << "bucket unpack: type: " << o.type <<
+			", must be: " << msgpack::type::ARRAY <<
+			", size: " << o.via.array.size;
+		throw std::runtime_error(ss.str());
+	}
+
+	object *p = o.via.array.ptr;
+	const uint32_t size = o.via.array.size;
+	uint16_t version = 0;
+	p[0].convert(&version);
+	switch (version) {
+	case 1: {
+		if (size != 5) {
+			std::ostringstream ss;
+			ss << "bucket unpack: array size mismatch: read: " << size << ", must be: 5";
+			throw std::runtime_error(ss.str());
+		}
+
+		p[1].convert(&m.key);
+		p[2].convert(&m.token);
+		p[3].convert(&m.groups);
+		p[4].convert(&m.flags);
+		break;
+	}
+	default: {
+		std::ostringstream ss;
+		ss << "bucket unpack: version mismatch: read: " << version <<
+			", must be: <= " << ioremap::rift::bucket_meta_raw::serialization_version;
+		throw std::runtime_error(ss.str());
+	}
+	}
+
+	return m;
+}
+
+template <typename Stream>
+inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const ioremap::rift::bucket_meta_index_data &m)
+{
+	o.pack_array(3);
+	o.pack((int)ioremap::rift::bucket_meta_index_data::serialization_version);
+	o.pack(m.key);
+	o.pack(m.bucket_name);
+
+	return o;
+}
+
+inline ioremap::rift::bucket_meta_index_data &operator >>(msgpack::object o, ioremap::rift::bucket_meta_index_data &m)
+{
+	if (o.type != msgpack::type::ARRAY || o.via.array.size < 5) {
+		std::ostringstream ss;
+		ss << "bucket unpack: type: " << o.type <<
+			", must be: " << msgpack::type::ARRAY <<
+			", size: " << o.via.array.size;
+		throw std::runtime_error(ss.str());
+	}
+
+	object *p = o.via.array.ptr;
+	const uint32_t size = o.via.array.size;
+	uint16_t version = 0;
+	p[0].convert(&version);
+	switch (version) {
+	case 1: {
+		if (size != 3) {
+			std::ostringstream ss;
+			ss << "bucket unpack: array size mismatch: read: " << size << ", must be: 3";
+			throw std::runtime_error(ss.str());
+		}
+
+		p[1].convert(&m.key);
+		p[2].convert(&m.bucket_name);
+		break;
+	}
+	default: {
+		std::ostringstream ss;
+		ss << "bucket unpack: version mismatch: read: " << version <<
+			", must be: <= " << ioremap::rift::bucket_meta_index_data::serialization_version;
+		throw std::runtime_error(ss.str());
+	}
+	}
+
+	return m;
+}
+
+} // namespace msgpack
 
 #endif /* __IOREMAP_RIFT_BUCKET_HPP */
