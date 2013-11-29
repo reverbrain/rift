@@ -290,10 +290,10 @@ public:
 
 		try {
 			write_data(req, session, key, data).connect(
-				std::bind(&on_upload_base::on_write_finished, this->shared_from_this(),
+				std::bind(&on_upload_base::on_write_finished, this->shared_from_this(), key, meta,
 				std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_NOTICE, "post-base: checked: url: %s, flags: 0x%lx, exception: %s", query.to_string().c_str(), meta.flags, e.what());
+			this->log(swarm::SWARM_LOG_NOTICE, "post-base: checked-write: url: %s, flags: 0x%lx, exception: %s", query.to_string().c_str(), meta.flags, e.what());
 			this->send_reply(swarm::http_response::bad_request);
 		}
 	}
@@ -369,15 +369,52 @@ public:
 		result_object.AddMember("info", infos, allocator);
 	}
 
-	virtual void on_write_finished(const elliptics::sync_write_result &result,
+	virtual void on_write_finished(const elliptics::key &key, const bucket_meta_raw &meta, const elliptics::sync_write_result &result,
 			const elliptics::error_info &error) {
 		if (error) {
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
 		}
 
+		try {
+			std::vector<std::string> indexes;
+			indexes.push_back(meta.key + ".index");
+
+			msgpack::sbuffer buf;
+			bucket_meta_index_data index_data;
+			index_data.key = key.to_string();
+			index_data.bucket_name = meta.key;
+			msgpack::pack(buf, index_data);
+
+			std::vector<elliptics::data_pointer> datas;
+			datas.emplace_back(elliptics::data_pointer::copy(buf.data(), buf.size()));
+
+			elliptics::session session = this->server()->elliptics()->session();
+
+			session.set_namespace(meta.key.c_str(), meta.key.size());
+			session.set_groups(meta.groups);
+
+			session.update_indexes(key, indexes, datas).connect(
+				std::bind(&on_upload_base::on_index_update_finished, this->shared_from_this(), result,
+				std::placeholders::_1, std::placeholders::_2));
+		} catch (std::exception &e) {
+			this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, exception: %s", key.to_string().c_str(), meta.key.c_str(), meta.flags, e.what());
+			this->send_reply(swarm::http_response::bad_request);
+		}
+	}
+
+	virtual void on_index_update_finished(const elliptics::sync_write_result &write_result, const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error)
+	{
+		(void) result;
+
+		if (error) {
+			this->log(swarm::SWARM_LOG_DEBUG, "on_index_update_finished, error: %s", error.message().c_str());
+			this->send_reply(swarm::http_response::internal_server_error);
+			return;
+		}
+
 		rift::JsonValue result_object;
-		on_upload_base::fill_upload_reply(result, result_object, result_object.GetAllocator());
+		on_upload_base::fill_upload_reply(write_result, result_object, result_object.GetAllocator());
 
 		auto data = result_object.ToString();
 
@@ -388,6 +425,7 @@ public:
 
 		this->send_reply(std::move(reply), std::move(data));
 	}
+
 };
 
 template <typename Server>
