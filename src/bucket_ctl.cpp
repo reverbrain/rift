@@ -11,6 +11,7 @@ int main(int argc, char *argv[])
 {
 	struct rift::bucket_meta_raw meta;
 	std::vector<int> groups;
+	std::string remote;
 	std::string metadata_groups_str;
 	std::string data_groups_str;
 	std::string noauth;
@@ -23,12 +24,14 @@ int main(int argc, char *argv[])
 
 	generic.add_options()
 		("help", "This help message")
+		("remote", bpo::value<std::string>(&remote), "Remote elliptics server address")
 		("log-level", bpo::value<int>(&log_level)->default_value(DNET_LOG_ERROR),
 		 	"Elliptics message log level (messages will be written into stdout)")
 		("bucket", bpo::value<std::string>(&meta.key), "Bucket (namespace) name")
-		("token", bpo::value<std::string>(&meta.token), "Secure token (can be empty for no authorization)")
 		("metadata-groups", bpo::value<std::string>(&metadata_groups_str),
 		 	"Metadata groups string (colon separated). These groups are used to store bucket info")
+		("read", "Read and print bucket metadata, all options below will be ignored")
+		("token", bpo::value<std::string>(&meta.token), "Secure token (can be empty for no authorization)")
 		("data-groups", bpo::value<std::string>(&data_groups_str),
 		 	"Data groups string (colon separated). "
 			"These groups are used to store real data written into this namespace/bucket")
@@ -47,7 +50,7 @@ int main(int argc, char *argv[])
 		bpo::store(bpo::parse_command_line(argc, argv, generic), vm);
 		bpo::notify(vm);
 	} catch (const std::exception &e) {
-		std::cerr << "Command line parser: " << generic;
+		std::cerr << "Command line parsing error\n" << generic;
 		return -1;
 	}
 
@@ -56,15 +59,10 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	if (!vm.count("metadata-groups") || !vm.count("data-groups") || !vm.count("bucket")) {
-		std::cerr << "Bucket name, data and metadata groups are required" << generic;
+	if (!vm.count("metadata-groups") || !vm.count("bucket") || !vm.count("remote")) {
+		std::cerr << "Remote server address, bucket name and metadata groups are required\n" << generic;
 		return -1;
 	}
-
-	if (noauth == "read")
-		meta.flags |= rift::bucket_meta_raw::flags_noauth_read;
-	else if (noauth == "all")
-		meta.flags |= rift::bucket_meta_raw::flags_noauth_all;
 
 	struct digitizer {
 		int operator() (const std::string &str) {
@@ -77,27 +75,72 @@ int main(int argc, char *argv[])
 	boost::split(gr, metadata_groups_str, boost::is_any_of(":"));
 	std::transform(gr.begin(), gr.end(), std::back_inserter<std::vector<int>>(groups), digitizer());
 
-	gr.clear();
-	boost::split(gr, data_groups_str, boost::is_any_of(":"));
-	std::transform(gr.begin(), gr.end(), std::back_inserter<std::vector<int>>(meta.groups), digitizer());
-
-	msgpack::sbuffer buf;
-	msgpack::pack(buf, meta);
-
-	elliptics::file_logger log("/dev/stdout", log_level);
-	elliptics::node node(log);
-	elliptics::session session(node);
-
-	session.set_groups(groups);
 
 	try {
-		session.write_data(meta.key, elliptics::data_pointer(buf.data(), buf.size()), 0).wait();
+		elliptics::file_logger log("/dev/stdout", log_level);
+		elliptics::node node(log);
+		node.add_remote(remote.c_str());
+
+		elliptics::session session(node);
+		session.set_groups(groups);
+
+		if (vm.count("read")) {
+			try {
+				elliptics::data_pointer data = session.read_data(meta.key, 0, 0).get_one().file();
+
+				msgpack::unpacked msg;
+				msgpack::unpack(&msg, data.data<char>(), data.size());
+
+				msg.get().convert(&meta);
+
+				std::ostringstream ss;
+				for (auto gr = meta.groups.begin(); gr != meta.groups.end();) {
+					ss << *gr;
+					++gr;
+
+					if (gr != meta.groups.end())
+						ss << ":";
+				}
+				data_groups_str = ss.str();
+
+			} catch (const std::exception &e) {
+				std::cout << "Could not write bucket metadata: " << e.what() << std::endl;
+				return -1;
+			}
+		} else {
+
+			if (!vm.count("data-groups")) {
+				std::cerr << "Data groups are required\n" << generic;
+				return -1;
+			}
+
+			if (noauth == "read")
+				meta.flags |= rift::bucket_meta_raw::flags_noauth_read;
+			else if (noauth == "all")
+				meta.flags |= rift::bucket_meta_raw::flags_noauth_all;
+
+			gr.clear();
+			boost::split(gr, data_groups_str, boost::is_any_of(":"));
+			std::transform(gr.begin(), gr.end(), std::back_inserter<std::vector<int>>(meta.groups), digitizer());
+
+			msgpack::sbuffer buf;
+			msgpack::pack(buf, meta);
+
+			try {
+				session.write_data(meta.key, elliptics::data_pointer::copy(buf.data(), buf.size()), 0).wait();
+			} catch (const std::exception &e) {
+				std::cout << "Could not write bucket metadata: " << e.what() << std::endl;
+				return -1;
+			}
+
+			printf("Successfully written bucket metadata\n");
+		}
 	} catch (const std::exception &e) {
-		std::cout << "Could not write bucket metadata: " << e.what() << std::endl;
+		std::cout << "Failed to create elliptics client node and session: " << e.what() << std::endl;
 		return -1;
 	}
 
-	printf("Successfully written bucket metadata\n"
+	printf("Metadata info:\n"
 		"  bucket: %s\n"
 		"  token: %s\n"
 		"  data groups: %s\n"
