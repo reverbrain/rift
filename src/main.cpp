@@ -162,7 +162,8 @@ public:
 		if (auto name = query.item_value("name")) {
 			return true;
 		} else if (auto sid = query.item_value("id")) {
-			return true;
+			if (m_noauth_allowed)
+				return true;
 		}
 
 		return false;
