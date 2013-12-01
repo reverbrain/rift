@@ -1,3 +1,9 @@
+rift (0.6.0) unstable; urgency=low
+
+  * bucket: added auth/metadata layer
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Sun, 01 Dec 2013 04:46:26 +0400
+
 rift (0.5.0) unstable; urgency=low
 
   * rift: HTTP access point to elliptics distributed network
