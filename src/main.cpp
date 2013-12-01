@@ -46,6 +46,8 @@ public:
 			m_bucket = std::make_shared<rift::bucket>();
 			if (!m_bucket->initialize(config["bucket"], m_elliptics, &m_async))
 				return false;
+		} else {
+			m_noauth_allowed = true;
 		}
 
 		if (config.HasMember("redirect")) {
