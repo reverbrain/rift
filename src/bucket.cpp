@@ -3,8 +3,8 @@
 using namespace ioremap;
 using namespace ioremap::rift;
 
-bucket_meta::bucket_meta(const std::string &key, bucket *b, const swarm::http_request &request, const boost::asio::const_buffer &buffer,
-				const continue_handler_t &continue_handler) : m_bucket(b)
+bucket_meta::bucket_meta(const std::string &key, bucket *b, const swarm::http_request &request,
+		const boost::asio::const_buffer &buffer, const continue_handler_t &continue_handler) : m_bucket(b)
 {
 	m_raw.key = key;
 	m_bucket->add_action(std::bind(&bucket_meta::update, this));
@@ -22,7 +22,8 @@ void bucket_meta::check_and_run_raw(const swarm::http_request &request, const bo
 	std::ostringstream ss;
 	std::copy(m_raw.groups.begin(), m_raw.groups.end(), std::ostream_iterator<int>(ss, ":"));
 
-	m_bucket->logger().log(swarm::SWARM_LOG_INFO, "bucket: check-and-run-raw: bucket: %s, groups: %s, uptodate: %d, req: %s, verdict: %d",
+	m_bucket->logger().log(swarm::SWARM_LOG_INFO,
+			"bucket: check-and-run-raw: bucket: %s, groups: %s, uptodate: %d, req: %s, verdict: %d",
 			m_raw.key.c_str(), ss.str().c_str(), uptodate, request.url().query().to_string().c_str(), v);
 
 	if ((v != swarm::http_response::ok) && !uptodate) {
@@ -43,7 +44,8 @@ void bucket_meta::update(void)
 	// metadata_session() clones metadata session
 	elliptics::session sess = m_bucket->metadata_session();
 
-	sess.read_data(m_raw.key, 0, 0).connect(std::bind(&bucket_meta::update_finished, this, std::placeholders::_1, std::placeholders::_2));
+	sess.read_data(m_raw.key, 0, 0).connect(std::bind(&bucket_meta::update_finished, this,
+				std::placeholders::_1, std::placeholders::_2));
 }
 
 void bucket_meta::update_and_check(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
@@ -101,7 +103,8 @@ void bucket_meta::update_finished(const ioremap::elliptics::sync_read_result &re
 			std::ostringstream ss;
 			std::copy(m_raw.groups.begin(), m_raw.groups.end(), std::ostream_iterator<int>(ss, ":"));
 
-			m_bucket->logger().log(swarm::SWARM_LOG_NOTICE, "bucket-update: bucket: %s, token: '%s', flags: 0x%lx, groups: %s",
+			m_bucket->logger().log(swarm::SWARM_LOG_NOTICE,
+					"bucket-update: bucket: %s, token: '%s', flags: 0x%lx, groups: %s",
 					m_raw.key.c_str(), m_raw.token.c_str(), m_raw.flags, ss.str().c_str());
 
 		} catch (const std::exception &e) {

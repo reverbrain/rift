@@ -168,7 +168,8 @@ public:
 		return false;
 	}
 
-	elliptics::session extract_key(const swarm::http_request &request, const rift::bucket_meta_raw &meta, elliptics::key &key) const {
+	elliptics::session extract_key(const swarm::http_request &request, const rift::bucket_meta_raw &meta,
+			elliptics::key &key) const {
 		const auto &query = request.url().query();
 
 		if (auto name = query.item_value("name")) {

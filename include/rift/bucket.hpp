@@ -60,12 +60,14 @@ struct bucket_meta_raw {
 
 class bucket;
 
-typedef std::function<void (const swarm::http_request, const boost::asio::const_buffer &buffer, const bucket_meta_raw &meta, swarm::http_response::status_type verdict)> continue_handler_t;
+typedef std::function<void (const swarm::http_request, const boost::asio::const_buffer &buffer,
+		const bucket_meta_raw &meta, swarm::http_response::status_type verdict)> continue_handler_t;
 
 class bucket_meta
 {
 	public:
-		bucket_meta(const std::string &key, bucket *b, const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+		bucket_meta(const std::string &key, bucket *b, const swarm::http_request &request,
+				const boost::asio::const_buffer &buffer,
 				const continue_handler_t &continue_handler);
 
 		void check_and_run(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
