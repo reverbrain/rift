@@ -1,3 +1,9 @@
+rift (0.6.1) unstable; urgency=low
+
+  * rift: only allow query by elliptics ID if 'noauth: allowed' is set and authentication is globally turned off
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Sun, 01 Dec 2013 06:20:19 +0400
+
 rift (0.6.0) unstable; urgency=low
 
   * bucket: added auth/metadata layer
