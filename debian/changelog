@@ -1,3 +1,9 @@
+rift (0.6.1) unstable; urgency=low
+
+  * spec: added rhel/centos/fedora specification
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Mon, 02 Dec 2013 21:19:06 +0400
+
 rift (0.6.0) unstable; urgency=low
 
   * bucket: new authentication, metadata layer

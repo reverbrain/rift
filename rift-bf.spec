@@ -69,5 +69,8 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Mon Dec 02 2013 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.1
+- spec: added rhel/centos/fedora specification
+
 * Tue Nov 19 2013 Ruslan Nigmatullin <euroelessar@yandex.ru> - 0.6.1
 - initial build
