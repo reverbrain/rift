@@ -48,12 +48,6 @@ public:
 				return false;
 		}
 
-		if (config.HasMember("redirect")) {
-			m_redirect_read = config["redirect"].GetBool();
-		} else {
-			m_redirect_read = false;
-		}
-
 		if (config.HasMember("redirect-port")) {
 			m_redirect_port = config["redirect-port"].GetInt();
 		} else {
@@ -74,17 +68,14 @@ public:
 			options::exact_match("/find"),
 			options::methods("GET")
 		);
-		if (m_redirect_read) {
-			on<rift::io::on_redirectable_get<example_server>>(
-				options::exact_match("/get"),
-				options::methods("GET")
-			);
-		} else {
-			on<rift::io::on_get<example_server>>(
-				options::exact_match("/get"),
-				options::methods("GET")
-			);
-		}
+		on<rift::io::on_redirectable_get<example_server>>(
+			options::exact_match("/redirect"),
+			options::methods("GET")
+		);
+		on<rift::io::on_get<example_server>>(
+			options::exact_match("/get"),
+			options::methods("GET")
+		);
 		on<rift::io::on_buffered_get<example_server>>(
 			options::exact_match("/get-big"),
 			options::methods("GET")
@@ -192,7 +183,6 @@ public:
 
 private:
 	rift::async_performer m_async;
-	bool m_redirect_read;
 	int m_redirect_port;
 	bool m_secured_http;
 	std::shared_ptr<rift::cache> m_cache;
