@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	0.6.1
+Version:	0.6.2
 Release:	1%{?dist}
 
 License:	GPLv2+
@@ -70,5 +70,12 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Mon Dec 02 2013 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.2
+- rift: made redirect handler a separate option, not either redirect or get
+- bucket_meta: fixed memset() ovrwrite
+- spec: added rhel/fedora spec file
+- config: if bucket section was not specified, set noauth-allowed flag
+- rift: made redirect handler a separate option, not either redirect or get
+
 * Tue Nov 19 2013 Ruslan Nigmatullin <euroelessar@yandex.ru> - 0.6.1
 - initial build

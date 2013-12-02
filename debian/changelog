@@ -1,3 +1,13 @@
+rift (0.6.2) unstable; urgency=low
+
+  * rift: made redirect handler a separate option, not either redirect or get
+  * bucket_meta: fixed memset() ovrwrite
+  * spec: added rhel/fedora spec file
+  * config: if bucket section was not specified, set noauth-allowed flag
+  * rift: made redirect handler a separate option, not either redirect or get
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Mon, 02 Dec 2013 21:34:55 +0400
+
 rift (0.6.1) unstable; urgency=low
 
   * rift: only allow query by elliptics ID if 'noauth: allowed' is set and authentication is globally turned off
