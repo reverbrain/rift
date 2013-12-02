@@ -1,5 +1,7 @@
 #include "rift/bucket.hpp"
 
+#include <iostream>
+
 #include <elliptics/session.hpp>
 
 #include <boost/algorithm/string.hpp>
