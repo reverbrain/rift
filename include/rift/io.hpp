@@ -36,7 +36,7 @@ public:
 		}
 
 		this->server()->process(req, buffer, std::bind(&bucket_processing::checked, this->shared_from_this(),
-					std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
 	}
 
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
@@ -51,7 +51,8 @@ public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
 		const auto &query = req.url().query();
-		this->log(swarm::SWARM_LOG_NOTICE, "get-base: checked: url: %s, flags: 0x%lx, verdict: %d", query.to_string().c_str(), meta.flags, verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "get-base: checked: url: %s, flags: 0x%lx, verdict: %d",
+				query.to_string().c_str(), meta.flags, verdict);
 
 		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
 			this->send_reply(verdict);
@@ -72,13 +73,15 @@ public:
 			offset = query.item_value("offset", 0llu);
 			size = query.item_value("size", 0llu);
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: url: %s, flags: 0x%lx, invalid size/offset cast: %s", query.to_string().c_str(), meta.flags, e.what());
+			this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: url: %s, flags: 0x%lx, "
+					"invalid size/offset cast: %s", query.to_string().c_str(), meta.flags, e.what());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
 
 		session.read_data(key, offset, size).connect(std::bind(
-			&on_get_base::on_read_finished, this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+			&on_get_base::on_read_finished, this->shared_from_this(),
+				std::placeholders::_1, std::placeholders::_2));
 	}
 
 	virtual void on_read_finished(const elliptics::sync_read_result &result,
@@ -129,8 +132,7 @@ public:
 		this->send_reply(std::move(reply), std::move(file));
 	}
 
-	bool parse_range(const std::string &range, size_t data_size, size_t &begin, size_t &end)
-	{
+	bool parse_range(const std::string &range, size_t data_size, size_t &begin, size_t &end) {
 		begin = 0;
 		end = data_size - 1;
 
@@ -170,8 +172,7 @@ public:
 		return true;
 	}
 
-	std::string create_content_range(size_t begin, size_t end, size_t data_size)
-	{
+	std::string create_content_range(size_t begin, size_t end, size_t data_size) {
 		std::string result = "bytes ";
 		result += boost::lexical_cast<std::string>(begin);
 		result += "-";
@@ -181,8 +182,7 @@ public:
 		return result;
 	}
 
-	virtual void on_range(const std::string &range, const elliptics::data_pointer &data, const dnet_time &ts)
-	{
+	virtual void on_range(const std::string &range, const elliptics::data_pointer &data, const dnet_time &ts) {
 		size_t begin;
 		size_t end;
 		if (!parse_range(range, data.size(), begin, end)) {
@@ -203,14 +203,13 @@ public:
 		this->send_reply(std::move(reply), std::move(data_part));
 	}
 
-	struct range_info
-	{
+	struct range_info {
 		size_t begin;
 		size_t end;
 	};
 
-	virtual void on_ranges(const std::vector<std::string> &ranges_str, const elliptics::data_pointer &data, const dnet_time &ts)
-	{
+	virtual void on_ranges(const std::vector<std::string> &ranges_str, const elliptics::data_pointer &data,
+			const dnet_time &ts) {
 		std::vector<range_info> ranges;
 		for (auto it = ranges_str.begin(); it != ranges_str.end(); ++it) {
 			range_info info;
@@ -265,7 +264,8 @@ public:
 class upload_completion {
 public:
 	template <typename Allocator>
-	static void fill_upload_reply(const elliptics::write_result_entry &entry, rapidjson::Value &result_object, Allocator &allocator) {
+	static void fill_upload_reply(const elliptics::write_result_entry &entry,
+			rapidjson::Value &result_object, Allocator &allocator) {
 		char id_str[2 * DNET_ID_SIZE + 1];
 		dnet_dump_id_len_raw(entry.command()->id.id, DNET_ID_SIZE, id_str);
 		rapidjson::Value id_str_value(id_str, 2 * DNET_ID_SIZE, allocator);
@@ -297,7 +297,8 @@ public:
 	}
 
 	template <typename Allocator>
-	static void fill_upload_reply(const elliptics::sync_write_result &result, rapidjson::Value &result_object, Allocator &allocator) {
+	static void fill_upload_reply(const elliptics::sync_write_result &result,
+			rapidjson::Value &result_object, Allocator &allocator) {
 		rapidjson::Value infos;
 		infos.SetArray();
 
@@ -313,7 +314,8 @@ public:
 		result_object.AddMember("info", infos, allocator);
 	}
 
-	typedef std::function<void (const swarm::http_response::status_type, const std::string &)> upload_completion_callback_t;
+	typedef std::function<void (const swarm::http_response::status_type, const std::string &)>
+		upload_completion_callback_t;
 
 	static void upload_update_indexes(const elliptics::session &data_session, const bucket_meta_raw &meta,
 			const elliptics::key &key, const elliptics::sync_write_result &write_result,
@@ -371,7 +373,8 @@ public:
 			boost::asio::buffer_size(buffer));
 
 		const auto &query = req.url().query();
-		this->log(swarm::SWARM_LOG_NOTICE, "upload-base: checked: url: %s, flags: 0x%lx, verdict: %d", query.to_string().c_str(), meta.flags, verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "upload-base: checked: url: %s, flags: 0x%lx, verdict: %d",
+				query.to_string().c_str(), meta.flags, verdict);
 
 		if ((verdict != swarm::http_response::ok) && !meta.noauth_all()) {
 			this->send_reply(verdict);
@@ -447,7 +450,8 @@ public:
 					std::bind(&on_upload_base::completion, this->shared_from_this(),
 						std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, exception: %s",
+			this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, "
+				"exception: %s",
 					m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags, e.what());
 			m_session->remove(m_key);
 			this->send_reply(swarm::http_response::bad_request);
@@ -480,7 +484,7 @@ public:
 
 		boost::asio::const_buffer buffer;
 		this->server()->process(req, buffer, std::bind(&on_buffered_upload_base::checked, this->shared_from_this(),
-					std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
 	}
 
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
@@ -492,7 +496,8 @@ public:
 		this->set_chunk_size(10 * 1024 * 1024);
 
 		const auto &query = req.url().query();
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-upload-base: checked: url: %s, flags: 0x%lx, verdict: %d", query.to_string().c_str(), meta.flags, verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-upload-base: checked: url: %s, flags: 0x%lx, verdict: %d",
+				query.to_string().c_str(), meta.flags, verdict);
 
 		if ((verdict != swarm::http_response::ok) && !meta.noauth_all()) {
 			this->send_reply(verdict);
@@ -628,7 +633,8 @@ public:
 					std::bind(&on_buffered_upload_base::completion, this->shared_from_this(),
 						std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, exception: %s",
+			this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, "
+				"exception: %s",
 					m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags, e.what());
 			m_session->remove(m_key);
 			this->send_reply(swarm::http_response::bad_request);
@@ -660,7 +666,8 @@ public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
 		const auto &query = req.url().query();
-		this->log(swarm::SWARM_LOG_NOTICE, "download-info-base: checked: url: %s, flags: 0x%lx, verdict: %d", query.to_string().c_str(), meta.flags, verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "download-info-base: checked: url: %s, flags: 0x%lx, verdict: %d",
+				query.to_string().c_str(), meta.flags, verdict);
 
 		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
 			this->send_reply(verdict);
@@ -674,11 +681,12 @@ public:
 
 		this->server()->check_cache(key, session);
 
-		session.lookup(key).connect(std::bind(&on_download_info_base::on_lookup_finished, this->shared_from_this(), meta,
-			std::placeholders::_1, std::placeholders::_2));
+		session.lookup(key).connect(std::bind(&on_download_info_base::on_lookup_finished, this->shared_from_this(),
+				meta, std::placeholders::_1, std::placeholders::_2));
 	}
 
-	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time, const std::string &token, std::string *url_ptr) {
+	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time,
+			const std::string &token, std::string *url_ptr) {
 		if (token.empty() && !url_ptr)
 			return std::string();
 
@@ -740,7 +748,8 @@ public:
 			std::string signature = generate_signature(result[0], time_str, meta.token, NULL);
 
 			if (!signature.empty()) {
-				rapidjson::Value signature_value(signature.c_str(), signature.size(), result_object.GetAllocator());
+				rapidjson::Value signature_value(signature.c_str(),
+						signature.size(), result_object.GetAllocator());
 				result_object.AddMember("signature", signature_value, result_object.GetAllocator());
 			}
 		}
@@ -808,7 +817,8 @@ public:
 			boost::asio::buffer_size(buffer));
 
 		const auto &query = req.url().query();
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-base: checked: url: %s, flags: 0x%lx, verdict: %d", query.to_string().c_str(), meta.flags, verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-base: checked: url: %s, flags: 0x%lx, verdict: %d",
+				query.to_string().c_str(), meta.flags, verdict);
 
 		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
 			this->send_reply(verdict);
@@ -823,7 +833,8 @@ public:
 		this->server()->check_cache(key, session);
 
 		session.lookup(m_key).connect(std::bind(
-			&on_buffered_get_base::on_lookup_finished, this->shared_from_this(), std::placeholders::_1,  std::placeholders::_2));
+			&on_buffered_get_base::on_lookup_finished, this->shared_from_this(),
+				std::placeholders::_1, std::placeholders::_2));
 	}
 
 	void on_lookup_finished(const elliptics::sync_lookup_result &result, const elliptics::error_info &error)
@@ -853,9 +864,11 @@ public:
 		read_next(0);
 	}
 
-	virtual void on_read_finished(uint64_t offset, const elliptics::sync_read_result &result, const elliptics::error_info &error)
+	virtual void on_read_finished(uint64_t offset, const elliptics::sync_read_result &result,
+			const elliptics::error_info &error)
 	{
-		this->log(swarm::SWARM_LOG_DEBUG, "%s, error: %s, offset: %llu", __FUNCTION__, error.message().c_str(), (unsigned long long) offset);
+		this->log(swarm::SWARM_LOG_DEBUG, "%s, error: %s, offset: %llu",
+				__FUNCTION__, error.message().c_str(), (unsigned long long) offset);
 //		if (offset == 0 && error) {
 //			if (error.code() == -ENOENT) {
 //				this->send_reply(swarm::http_response::not_found);
@@ -866,7 +879,8 @@ public:
 //			}
 //		} else
 		if (error) {
-			auto ec = boost::system::errc::make_error_code(static_cast<boost::system::errc::errc_t>(-error.code()));
+			auto ec = boost::system::errc::make_error_code(
+					static_cast<boost::system::errc::errc_t>(-error.code()));
 			this->get_reply()->close(ec);
 			return;
 		}
@@ -875,20 +889,22 @@ public:
 		elliptics::data_pointer file = entry.file();
 
 		if (offset + file.size() >= m_size) {
-			this->send_data(std::move(file), std::bind(&thevoid::reply_stream::close, this->get_reply(), std::placeholders::_1));
+			this->send_data(std::move(file), std::bind(&thevoid::reply_stream::close,
+						this->get_reply(), std::placeholders::_1));
 		} else {
 			auto first_part = file.slice(0, file.size() / 2);
 			auto second_part = file.slice(first_part.size(), file.size() - first_part.size());
 
-			this->send_data(std::move(first_part), std::bind(&on_buffered_get_base::on_part_sent, this->shared_from_this(),
-				offset + file.size(), std::placeholders::_1));
+			this->send_data(std::move(first_part), std::bind(&on_buffered_get_base::on_part_sent,
+						this->shared_from_this(), offset + file.size(), std::placeholders::_1));
 			this->send_data(std::move(second_part), std::function<void (const boost::system::error_code &)>());
 		}
 	}
 
 	virtual void on_part_sent(size_t offset, const boost::system::error_code &error)
 	{
-		this->log(swarm::SWARM_LOG_DEBUG, "%s, error: %s, offset: %llu", __FUNCTION__, error.message().c_str(), (unsigned long long) offset);
+		this->log(swarm::SWARM_LOG_DEBUG, "%s, error: %s, offset: %llu",
+				__FUNCTION__, error.message().c_str(), (unsigned long long) offset);
 		read_next(offset);
 	}
 

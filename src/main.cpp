@@ -46,6 +46,8 @@ public:
 			m_bucket = std::make_shared<rift::bucket>();
 			if (!m_bucket->initialize(config["bucket"], m_elliptics, &m_async))
 				return false;
+		} else {
+			m_noauth_allowed = true;
 		}
 
 		if (config.HasMember("redirect-port")) {
@@ -153,13 +155,15 @@ public:
 		if (auto name = query.item_value("name")) {
 			return true;
 		} else if (auto sid = query.item_value("id")) {
-			return true;
+			if (m_noauth_allowed)
+				return true;
 		}
 
 		return false;
 	}
 
-	elliptics::session extract_key(const swarm::http_request &request, const rift::bucket_meta_raw &meta, elliptics::key &key) const {
+	elliptics::session extract_key(const swarm::http_request &request, const rift::bucket_meta_raw &meta,
+			elliptics::key &key) const {
 		const auto &query = request.url().query();
 
 		if (auto name = query.item_value("name")) {

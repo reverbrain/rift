@@ -1,14 +1,14 @@
 rift (0.6.1) unstable; urgency=low
 
-  * spec: added rhel/centos/fedora specification
+  * rift: only allow query by elliptics ID if 'noauth: allowed' is set and authentication is globally turned off
 
- -- Evgeniy Polyakov <zbr@ioremap.net>  Mon, 02 Dec 2013 21:19:06 +0400
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Sun, 01 Dec 2013 06:20:19 +0400
 
 rift (0.6.0) unstable; urgency=low
 
-  * bucket: new authentication, metadata layer
+  * bucket: added auth/metadata layer
 
- -- Evgeniy Polyakov <zbr@ioremap.net>  Mon, 02 Dec 2013 21:09:50 +0400
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Sun, 01 Dec 2013 04:46:26 +0400
 
 rift (0.5.0) unstable; urgency=low
 

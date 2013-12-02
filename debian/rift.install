@@ -1,2 +1,2 @@
 usr/lib/librift*.so.*
-usr/bin/rift_server
+usr/bin/*
