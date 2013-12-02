@@ -47,7 +47,7 @@ struct bucket_meta_raw {
 	uint64_t reserved[3];
 
 	bucket_meta_raw() : flags(0ULL), max_size(0ULL), max_key_num(0ULL) {
-		memset(reserved, 0, sizeof(reserved) * sizeof(uint64_t));
+		memset(reserved, 0, sizeof(reserved));
 	}
 
 	bool noauth_read() const {
