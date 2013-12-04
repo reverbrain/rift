@@ -1,0 +1,88 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:	  rift
+# Required-Start:    $local_fs $remote_fs $network $syslog $named
+# Required-Stop:     $local_fs $remote_fs $network $syslog $named
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: starts the rift server
+# Description:       starts rift
+### END INIT INFO
+
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+DAEMON=/usr/bin/rift_server
+NAME=rift
+DESC=rift
+
+# Include rift defaults if available
+if [ -f /etc/default/rift ]; then
+	. /etc/default/rift
+fi
+
+test -x $DAEMON || exit 0
+
+set -e
+
+. /lib/lsb/init-functions
+
+[ -z "$PID" ] && PID=/run/rift.pid
+[ -z "$CONFIG_PATH" ] && CONFIG_PATH="/etc/rift/config.json"
+
+# Check if the ULIMIT is set in /etc/default/rift
+if [ -n "$ULIMIT" ]; then
+  # Set the ulimits
+  ulimit $ULIMIT
+fi
+
+start() {
+	start-stop-daemon --start --pidfile="$PID" --quiet --exec /usr/bin/rift_server \
+		-- $DAEMON_OPTS --config "$CONFIG_PATH" --daemonize --pidfile="$PID"
+}
+
+stop() {
+	start-stop-daemon --stop --pidfile="$PID" --quiet --exec /usr/bin/rift_server
+}
+
+reload() {
+	start-stop-daemon --stop --pidfile="$PID" --quiet --signal HUP --exec /usr/bin/rift_server
+}
+
+case "$1" in
+	start)
+		log_daemon_msg "Starting $DESC" "$NAME"
+		start
+		log_end_msg $?
+		;;
+
+	stop)
+		log_daemon_msg "Stopping $DESC" "$NAME"
+		stop
+		log_end_msg $?
+		;;
+
+	restart|force-reload)
+		log_daemon_msg "Restarting $DESC" "$NAME"
+		stop
+		sleep 1
+		start
+		log_end_msg $?
+		;;
+
+	reload)
+		log_daemon_msg "Reloading $DESC configuration" "$NAME"
+		reload
+		log_end_msg $?
+		;;
+
+	status)
+		status_of_proc -p $PID "$DAEMON" rift
+		;;
+
+	*)
+		echo "Usage: $NAME {start|stop|restart|reload|force-reload|status|configtest}" >&2
+		exit 1
+		;;
+esac
+
+exit 0
