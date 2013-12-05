@@ -11,7 +11,13 @@ def generate_signature(key, method, url, headers=None):
     text = ''
     text += method + '\n'
     text += url + '\n'
-    text += 'x-ell-ololo:trash\n'
+    if headers:
+        headers = map(lambda x: (x[0].lower(), x[1]), headers.iteritems())
+        headers = filter(lambda x: x[0].startswith('x-ell-'), headers)
+        headers.sort()
+
+        for header in headers:
+            text += header[0] + ':' + header[1] + '\n'
 
     check_hash('key', key)
     check_hash('message', text)
