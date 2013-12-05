@@ -1,11 +1,11 @@
 Summary:	The rift
 Name:		rift
-Version:	0.6.2
+Version:	0.6.3
 Release:	1%{?dist}
 
-License:	GPLv2+
+License:	Apache 2.0
 Group:		System Environment/Libraries
-URL:		http://www.ioremap.net/projects/elliptics
+URL:		https://github.com/reverbrain/rift
 Source0:	%{name}-%{version}.tar.bz2
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
@@ -15,11 +15,10 @@ BuildRequires:	gcc44 gcc44-c++
 %else
 %define boost_ver %{nil}
 %endif
-BuildRequires:  libxml2-devel libev-devel
-BuildRequires:	boost%{boost_ver}-devel, boost%{boost_ver}-iostreams, boost%{boost_ver}-system, boost%{boost_ver}-thread
+BuildRequires:	boost%{boost_ver}-devel, boost%{boost_ver}-program_options, boost%{boost_ver}-system, boost%{boost_ver}-thread
 BuildRequires:	elliptics-client-devel >= 2.24.14.26
 BuildRequires:  curl-devel libthevoid-devel msgpack-devel
-BuildRequires:	cmake uriparser-devel
+BuildRequires:	cmake
 
 %description
 Blah, Blah, minor
@@ -31,7 +30,7 @@ Requires: %{name} = %{version}-%{release}
 
 
 %description devel
-Blah, Blah devel
+Rift devel package
 
 %prep
 %setup -q
@@ -70,6 +69,16 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Fri Dec 06 2013 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.3
+- build: dependencies update
+- Example: Added headers support to python auth example
+- Signature: Added comment about signature arguments
+- Tests: Added tests for get/upload/ping/echo/lookup handlers
+- Example: Added initialization script for start/stop daemon
+
+* Fri Dec 06 2013 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.3
+- build: dependencies update
+
 * Mon Dec 02 2013 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.2
 - rift: made redirect handler a separate option, not either redirect or get
 - bucket_meta: fixed memset() ovrwrite

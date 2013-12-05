@@ -1,3 +1,19 @@
+rift (0.6.3) unstable; urgency=low
+
+  * build: dependencies update
+  * Example: Added headers support to python auth example
+  * Signature: Added comment about signature arguments
+  * Tests: Added tests for get/upload/ping/echo/lookup handlers
+  * Example: Added initialization script for start/stop daemon
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Fri, 06 Dec 2013 01:07:50 +0400
+
+rift (0.6.3) unstable; urgency=low
+
+  * build: dependencies update
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Fri, 06 Dec 2013 01:05:54 +0400
+
 rift (0.6.2) unstable; urgency=low
 
   * rift: made redirect handler a separate option, not either redirect or get

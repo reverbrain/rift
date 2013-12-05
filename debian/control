@@ -1,13 +1,13 @@
 Source: rift
 Priority: extra
 Maintainer: Ruslan Nigmatullin <euroelessar@yandex.ru>
-Build-Depends: cdbs, debhelper (>= 7), cmake,
+Build-Depends: cdbs, debhelper (>= 7), cmake, libthevoid-dev, libswarm-dev,
   libboost-system-dev, libboost-thread-dev, libboost-program-options-dev, elliptics-dev (>= 2.24.14.26)
 Standards-Version: 3.9.3
 Section: libs
-Homepage: https://github.com/reverbrain/swarm
-Vcs-Git: git://github.com/reverbrain/swarm.git
-Vcs-Browser: https://github.com/reverbrain/swarm
+Homepage: https://github.com/reverbrain/rift
+Vcs-Git: git://github.com/reverbrain/rift.git
+Vcs-Browser: https://github.com/reverbrain/rift
 
 Package: rift
 Section: utils
@@ -18,7 +18,7 @@ Description: Rift is an HTTP access point to elliptics distributed network
 Package: rift-dev
 Section: libdevel
 Architecture: any
-Depends: rift (= ${binary:Version}), libthevoid-dev, libboost-system-dev
+Depends: rift (= ${binary:Version}), libthevoid-dev, libswarm-dev, libboost-system-dev
 Description: Rift is an HTTP access point to elliptics distributed network (devel)
  Development files
 
