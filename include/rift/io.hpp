@@ -690,9 +690,17 @@ public:
 		if (token.empty() && !url_ptr)
 			return std::string();
 
-		const auto name = this->request().url().query().item_value("name");
 		const dnet_file_info *info = entry.file_info();
 
+		/*
+		 * We don't mind what real id is this request for, what namespace and so on.
+		 * At this point we are sure that user has permission to know where his file
+		 * is really stored. That is why we should protect only file's real position
+		 * by the signature.
+		 *
+		 * Time is figured in the signature because of we don't want anybody else to
+		 * have access to non-their files in case of defragmentation/MiTM and so on.
+		 */
 		swarm::url url = this->server()->generate_url_base(entry.address());
 		swarm::url_query &query = url.query();
 		query.add_item("file-path", entry.file_path());
