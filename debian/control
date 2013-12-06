@@ -1,7 +1,7 @@
 Source: rift
 Priority: extra
 Maintainer: Ruslan Nigmatullin <euroelessar@yandex.ru>
-Build-Depends: cdbs, debhelper (>= 7), cmake, libthevoid-dev, libswarm-dev, msgpack-devel,
+Build-Depends: cdbs, debhelper (>= 7), cmake, libthevoid-dev, libswarm-dev, libmsgpack-dev,
   libboost-system-dev, libboost-thread-dev, libboost-program-options-dev, elliptics-dev (>= 2.24.14.26)
 Standards-Version: 3.9.3
 Section: libs
