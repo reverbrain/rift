@@ -9,6 +9,16 @@
 
 using namespace ioremap;
 
+namespace {
+
+struct digitizer {
+	int operator() (const std::string &str) {
+		return atoi(str.c_str());
+	}
+};
+
+}
+
 int main(int argc, char *argv[])
 {
 	struct rift::bucket_meta_raw meta;
@@ -66,16 +76,10 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	struct digitizer {
-		int operator() (const std::string &str) {
-			return atoi(str.c_str());
-		}
-	};
-
 	std::vector<std::string> gr;
 
 	boost::split(gr, metadata_groups_str, boost::is_any_of(":"));
-	std::transform(gr.begin(), gr.end(), std::back_inserter<std::vector<int>>(groups), digitizer());
+	std::transform(gr.begin(), gr.end(), std::back_inserter(groups), digitizer());
 
 
 	try {
@@ -123,7 +127,7 @@ int main(int argc, char *argv[])
 
 			gr.clear();
 			boost::split(gr, data_groups_str, boost::is_any_of(":"));
-			std::transform(gr.begin(), gr.end(), std::back_inserter<std::vector<int>>(meta.groups), digitizer());
+			std::transform(gr.begin(), gr.end(), std::back_inserter(meta.groups), digitizer());
 
 			msgpack::sbuffer buf;
 			msgpack::pack(buf, meta);
