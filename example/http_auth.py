@@ -1,16 +1,23 @@
 import requests
 import hmac
 import hashlib
-
+import urlparse
+import urllib
 
 def check_hash(name, message):
     print("{0}: {1}".format(name, hashlib.sha512(message).hexdigest()))
 
 
 def generate_signature(key, method, url, headers=None):
+    parsed_url = urlparse.urlparse(url)
+    queries = urlparse.parse_qsl(parsed_url.query)
+    queries.sort()
     text = ''
     text += method + '\n'
-    text += url + '\n'
+    text += parsed_url.path
+    if len(queries) > 0:
+        text += '?' + urllib.urlencode(queries)
+    text += '\n'
     if headers:
         headers = map(lambda x: (x[0].lower(), x[1]), headers.iteritems())
         headers = filter(lambda x: x[0].startswith('x-ell-'), headers)
