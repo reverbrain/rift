@@ -11,7 +11,6 @@
 #include <swarm/url.hpp>
 #include <swarm/url_query.hpp>
 
-#include <thevoid/server.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 
@@ -24,24 +23,6 @@ static inline elliptics::data_pointer create_data(const boost::asio::const_buffe
 		boost::asio::buffer_size(buffer)
 	);
 }
-
-template <typename Server, typename Stream>
-class bucket_processing : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
-{
-public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		if (!this->server()->query_ok(req)) {
-			this->send_reply(swarm::http_response::bad_request);
-			return;
-		}
-
-		this->server()->process(req, buffer, std::bind(&bucket_processing::checked, this->shared_from_this(),
-			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
-	}
-
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) = 0;
-};
 
 // read data object
 template <typename Server, typename Stream>

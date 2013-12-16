@@ -10,11 +10,19 @@ namespace ioremap { namespace rift { namespace index {
 
 // set indexes for given ID
 template <typename Server, typename Stream>
-class on_update_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
+class on_update_base : public bucket_processing<Server, Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		(void) req;
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
+			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+		const auto &query = req.url().query();
+		this->log(swarm::SWARM_LOG_NOTICE, "update-base: checked: url: %s, flags: 0x%lx, verdict: %d",
+				query.to_string().c_str(), meta.flags, verdict);
+
+		if ((verdict != swarm::http_response::ok) && !meta.noauth_all()) {
+			this->send_reply(verdict);
+			return;
+		}
 
 		rapidjson::Document doc;
 		doc.Parse<0>(boost::asio::buffer_cast<const char*>(buffer));
@@ -148,11 +156,19 @@ struct find_serializer {
 
 // find (using 'AND' or 'OR' operator) indexes, which contain given ID
 template <typename Server, typename Stream>
-class on_find_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
+class on_find_base : public bucket_processing<Server, Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		(void) req;
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
+			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+		const auto &query = req.url().query();
+		this->log(swarm::SWARM_LOG_NOTICE, "find-base: checked: url: %s, flags: 0x%lx, verdict: %d",
+				query.to_string().c_str(), meta.flags, verdict);
+
+		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
+			this->send_reply(verdict);
+			return;
+		}
 
 		rapidjson::Document data;
 		data.Parse<0>(boost::asio::buffer_cast<const char*>(buffer));
