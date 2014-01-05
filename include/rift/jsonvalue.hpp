@@ -5,6 +5,10 @@
 #include <thevoid/rapidjson/prettywriter.h>
 #include <thevoid/rapidjson/document.h>
 
+#include <time.h>
+
+#include <string>
+
 namespace {
 	static inline std::string lexical_cast(size_t value) {
 		if (value == 0) {

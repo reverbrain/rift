@@ -4,6 +4,7 @@
 #include <thevoid/server.hpp>
 
 #include "rift/asio.hpp"
+#include "rift/bucket.hpp"
 #include "rift/jsonvalue.hpp"
 
 namespace ioremap { namespace rift { namespace index { 
