@@ -4,7 +4,6 @@ set(RIFT_SOURCES
 	bucket.cpp
 	cache.cpp
         metadata_updater.cpp
-	server.cpp
 	signature.cpp
 )
 file(GLOB RIFT_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/../include/rift/*.hpp")
