@@ -1,3 +1,13 @@
+rift (0.6.4) unstable; urgency=low
+
+  * elliptics_base: move elliptics connector wrapper into header file, so it can be reused in external projects like wookie
+  * index: update/find indexes now support bucket processing and authentification
+  * Example: Added proper url support for http_auth example
+  * Debian: Depend on libmsgpack-dev not msgpack-devel
+  * rhel: compilation fixes
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Tue, 14 Jan 2014 00:09:50 +0400
+
 rift (0.6.3) unstable; urgency=low
 
   * build: dependencies update

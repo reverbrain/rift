@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	0.6.3
+Version:	0.6.4
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -69,6 +69,13 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Jan 14 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.4
+- elliptics_base: move elliptics connector wrapper into header file, so it can be reused in external projects like wookie
+- index: update/find indexes now support bucket processing and authentification
+- Example: Added proper url support for http_auth example
+- Debian: Depend on libmsgpack-dev not msgpack-devel
+- rhel: compilation fixes
+
 * Fri Dec 06 2013 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.3
 - build: dependencies update
 - Example: Added headers support to python auth example
