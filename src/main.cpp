@@ -178,8 +178,12 @@ public:
 		}
 
 		elliptics::session session = m_elliptics.session();
-		session.set_namespace(meta.key.c_str(), meta.key.size());
-		session.set_groups(meta.groups);
+
+		if (meta.groups.size() && meta.key.size()) {
+			session.set_namespace(meta.key.c_str(), meta.key.size());
+			session.set_groups(meta.groups);
+		}
+
 		session.transform(key);
 
 		return session;
