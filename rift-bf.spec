@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	0.6.4
+Version:	0.6.5
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -69,6 +69,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Jan 14 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.5
+- extract_key: only set metadata groups and namespace if bucket_meta is not 'empty'
+
 * Tue Jan 14 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.4
 - elliptics_base: move elliptics connector wrapper into header file, so it can be reused in external projects like wookie
 - index: update/find indexes now support bucket processing and authentification

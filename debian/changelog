@@ -1,3 +1,9 @@
+rift (0.6.5) unstable; urgency=low
+
+  * extract_key: only set metadata groups and namespace if bucket_meta is not 'empty'
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Tue, 14 Jan 2014 19:51:59 +0400
+
 rift (0.6.4) unstable; urgency=low
 
   * elliptics_base: move elliptics connector wrapper into header file, so it can be reused in external projects like wookie
