@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	0.6.5
+Version:	0.6.6
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -69,6 +69,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Thu Jan 16 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.6
+- io:upload_base: upload updates indexes in all but cached groups, check meta.groups.size() when updating gropus - metadata can be empty if buckets are not supported. Debug logs added.
+
 * Tue Jan 14 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.5
 - extract_key: only set metadata groups and namespace if bucket_meta is not 'empty'
 

@@ -1,3 +1,9 @@
+rift (0.6.6) unstable; urgency=low
+
+  * io:upload_base: upload updates indexes in all but cached groups, check meta.groups.size() when updating gropus - metadata can be empty if buckets are not supported. Debug logs added.
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Thu, 16 Jan 2014 21:26:01 +0400
+
 rift (0.6.5) unstable; urgency=low
 
   * extract_key: only set metadata groups and namespace if bucket_meta is not 'empty'
