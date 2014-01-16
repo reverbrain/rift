@@ -31,8 +31,8 @@
             "name": "cache"
         },
         "bucket": {
-		"noauth" : "forbidden"
         },
-        "redirect": false
+	"noauth" : "forbidden",
+        "XXX-redirect-port": 8080
     }
 }
