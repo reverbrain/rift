@@ -315,8 +315,9 @@ public:
 		elliptics::session session = data_session;
 
 		// only update indexes in non-cached groups
-		session.set_namespace(meta.key.c_str(), meta.key.size());
-		session.set_groups(meta.groups);
+		if (meta.groups.size()) {
+			session.set_groups(meta.groups);
+		}
 
 		session.update_indexes(key, indexes, datas).connect(
 			std::bind(&upload_completion::on_index_update_finished,
@@ -416,6 +417,9 @@ public:
 		reply.headers().set_content_type("text/json");
 		reply.headers().set_content_length(data.size());
 
+		this->log(swarm::SWARM_LOG_NOTICE, "post-base: completion: key: %s, ns: %s, flags: 0x%lx",
+				m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags);
+
 		this->send_reply(std::move(reply), std::move(data));
 	}
 
@@ -426,12 +430,15 @@ public:
 			return;
 		}
 
+		this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx",
+				m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags);
+
 		try {
 			upload_completion::upload_update_indexes(*m_session, m_meta, m_key, result,
 					std::bind(&on_upload_base::completion, this->shared_from_this(),
 						std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, "
+			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, "
 				"exception: %s",
 					m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags, e.what());
 			m_session->remove(m_key);
