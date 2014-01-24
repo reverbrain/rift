@@ -10,8 +10,8 @@
 # Description:       starts rift
 ### END INIT INFO
 
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-DAEMON=/usr/bin/rift_server
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/home/zbr/build/bin
+DAEMON=rift_server
 NAME=rift
 DESC=rift
 
@@ -20,7 +20,7 @@ if [ -f /etc/default/rift ]; then
 	. /etc/default/rift
 fi
 
-test -x $DAEMON || exit 0
+test -x `which $DAEMON` || exit 2
 
 set -e
 
@@ -36,16 +36,16 @@ if [ -n "$ULIMIT" ]; then
 fi
 
 start() {
-	start-stop-daemon --start --pidfile="$PID" --quiet --exec /usr/bin/rift_server \
+	start-stop-daemon --start --pidfile="$PID" --quiet --exec $SERVER \
 		-- $DAEMON_OPTS --config "$CONFIG_PATH" --daemonize --pidfile="$PID"
 }
 
 stop() {
-	start-stop-daemon --stop --pidfile="$PID" --quiet --exec /usr/bin/rift_server
+	start-stop-daemon --stop --pidfile="$PID" --quiet --exec $SERVER
 }
 
 reload() {
-	start-stop-daemon --stop --pidfile="$PID" --quiet --signal HUP --exec /usr/bin/rift_server
+	start-stop-daemon --stop --pidfile="$PID" --quiet --signal HUP --exec $SERVER
 }
 
 case "$1" in
@@ -76,7 +76,7 @@ case "$1" in
 		;;
 
 	status)
-		status_of_proc -p $PID "$DAEMON" rift
+		status_of_proc -p $PID "$SERVER" rift
 		;;
 
 	*)
