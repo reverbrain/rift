@@ -1,3 +1,11 @@
+rift (0.6.7) unstable; urgency=low
+
+  * logger: use swarm's logger as well as its log-level, otherwise default (INFO) was used
+  * server: elliptics node must be destructed after all threads and sessions are gone
+  * example-config: updated noauth and redirect-port options
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Fri, 24 Jan 2014 22:57:08 +0400
+
 rift (0.6.6) unstable; urgency=low
 
   * io:upload_base: upload updates indexes in all but cached groups, check meta.groups.size() when updating gropus - metadata can be empty if buckets are not supported. Debug logs added.
