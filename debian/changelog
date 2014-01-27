@@ -1,3 +1,9 @@
+rift (0.6.8) unstable; urgency=low
+
+  * package: provide correct package build versions
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Tue, 28 Jan 2014 01:31:09 +0400
+
 rift (0.6.7) unstable; urgency=low
 
   * logger: use swarm's logger as well as its log-level, otherwise default (INFO) was used

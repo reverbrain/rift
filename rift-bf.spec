@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	0.6.7
+Version:	0.6.8
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -69,6 +69,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Jan 28 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.8
+- package: provide correct package build versions
+
 * Fri Jan 24 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.7
 - logger: use swarm's logger as well as its log-level, otherwise default (INFO) was used
 - server: elliptics node must be destructed after all threads and sessions are gone
