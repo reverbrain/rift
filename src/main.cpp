@@ -190,12 +190,12 @@ public:
 	}
 
 private:
-	rift::async_performer m_async;
 	int m_redirect_port;
 	bool m_secured_http;
+	rift::elliptics_base m_elliptics;
 	std::shared_ptr<rift::cache> m_cache;
 	std::shared_ptr<rift::bucket> m_bucket;
-	rift::elliptics_base m_elliptics;
+	rift::async_performer m_async;
 	bool m_noauth_allowed;
 };
 

@@ -29,9 +29,7 @@ private:
 class swarm_logger : public elliptics::logger
 {
 public:
-	swarm_logger(const swarm::logger &logger) : elliptics::logger(new swarm_logger_interface(logger))
-	{
-	}
+	swarm_logger(const swarm::logger &logger) : elliptics::logger(new swarm_logger_interface(logger), logger.level()) {}
 };
 
 }} // namespace ioremap::rift

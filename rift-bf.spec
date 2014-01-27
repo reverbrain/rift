@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	0.6.6
+Version:	0.6.7
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -69,6 +69,11 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Fri Jan 24 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.7
+- logger: use swarm's logger as well as its log-level, otherwise default (INFO) was used
+- server: elliptics node must be destructed after all threads and sessions are gone
+- example-config: updated noauth and redirect-port options
+
 * Thu Jan 16 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.6
 - io:upload_base: upload updates indexes in all but cached groups, check meta.groups.size() when updating gropus - metadata can be empty if buckets are not supported. Debug logs added.
 
