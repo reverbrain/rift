@@ -830,6 +830,8 @@ public:
 			return;
 		}
 
+		m_offset = query.item_value("offset", 0llu);
+
 		(void) buffer;
 
 		elliptics::key key;
@@ -858,16 +860,23 @@ public:
 
 		const elliptics::lookup_result_entry &entry = result[0];
 		m_size = entry.file_info()->size;
+		if (m_size > m_offset) {
+			this->log(swarm::SWARM_LOG_ERROR, "%s: requested offset is too big: offset: %llu, file-size: %llu",
+					__FUNCTION__, (unsigned long long)m_offset, (unsigned long long)m_size);
+
+			this->send_reply(swarm::http_response::bad_request);
+			return;
+		}
 
 		swarm::http_response reply;
 		reply.set_code(swarm::http_response::ok);
-		reply.headers().set_content_length(m_size);
+		reply.headers().set_content_length(m_size - m_offset);
 		reply.headers().set_content_type("text/plain");
 		reply.headers().set_last_modified(entry.file_info()->mtime.tsec);
 
 		this->send_headers(std::move(reply), std::function<void (const boost::system::error_code &)>());
 
-		read_next(0);
+		read_next(m_offset);
 	}
 
 	virtual void on_read_finished(uint64_t offset, const elliptics::sync_read_result &result,
@@ -929,6 +938,7 @@ protected:
 	elliptics::key m_key;
 	uint64_t m_size;
 	uint64_t m_buffer_size;
+	uint64_t m_offset;
 };
 
 template <typename Server>
