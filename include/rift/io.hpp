@@ -108,7 +108,7 @@ public:
 		swarm::http_response reply;
 		reply.set_code(swarm::http_response::ok);
 		reply.headers().set_content_length(file.size());
-		reply.headers().set_content_type("text/plain");
+		reply.headers().set_content_type("application/octet-stream");
 		reply.headers().set_last_modified(ts.tsec);
 
 		this->send_reply(std::move(reply), std::move(file));
@@ -176,7 +176,7 @@ public:
 
 		swarm::http_response reply;
 		reply.set_code(swarm::http_response::partial_content);
-		reply.headers().set_content_type("text/plain");
+		reply.headers().set_content_type("application/octet-stream");
 		reply.headers().set_last_modified(ts.tsec);
 		reply.headers().add("Accept-Ranges", "bytes");
 		reply.headers().add("Content-Range", create_content_range(begin, end, data.size()));
@@ -871,7 +871,7 @@ public:
 		swarm::http_response reply;
 		reply.set_code(swarm::http_response::ok);
 		reply.headers().set_content_length(m_size - m_offset);
-		reply.headers().set_content_type("text/plain");
+		reply.headers().set_content_type("application/octet-stream");
 		reply.headers().set_last_modified(entry.file_info()->mtime.tsec);
 
 		this->send_headers(std::move(reply), std::function<void (const boost::system::error_code &)>());
