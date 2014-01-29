@@ -44,6 +44,7 @@ public:
 
 		elliptics::key key;
 		elliptics::session session = this->server()->extract_key(req, meta, key);
+		session.set_timeout(this->server()->elliptics()->read_timeout());
 
 		this->server()->check_cache(key, session);
 
@@ -369,6 +370,7 @@ public:
 		m_meta = meta;
 
 		m_session.reset(new elliptics::session(this->server()->extract_key(req, meta, m_key)));
+		m_session->set_timeout(this->server()->elliptics()->write_timeout());
 
 		this->server()->check_cache(m_key, *m_session);
 
@@ -389,6 +391,7 @@ public:
 			const elliptics::key &key,
 			const elliptics::data_pointer &data) {
 		const auto &query = req.url().query();
+		sess.set_timeout(this->server()->elliptics()->write_timeout());
 
 		size_t offset = query.item_value("offset", 0llu);
 
@@ -498,6 +501,7 @@ public:
 		m_meta = meta;
 
 		m_session.reset(new elliptics::session(this->server()->extract_key(req, meta, m_key)));
+		m_session->set_timeout(this->server()->elliptics()->write_timeout());
 
 		this->server()->check_cache(m_key, *m_session);
 
@@ -584,6 +588,7 @@ public:
 		}
 
 		elliptics::session tmp = *m_session;
+		tmp.set_timeout(this->server()->elliptics()->write_timeout());
 		tmp.set_groups(rem_groups);
 		tmp.remove(m_key);
 
@@ -666,6 +671,7 @@ public:
 
 		elliptics::key key;
 		elliptics::session session = this->server()->extract_key(req, meta, key);
+		session.set_timeout(this->server()->elliptics()->read_timeout());
 
 		this->server()->check_cache(key, session);
 
@@ -825,6 +831,7 @@ public:
 
 		elliptics::key key;
 		elliptics::session session = this->server()->extract_key(req, meta, key);
+		session.set_timeout(this->server()->elliptics()->read_timeout());
 
 		this->server()->check_cache(key, session);
 
@@ -907,9 +914,10 @@ public:
 	virtual void read_next(uint64_t offset)
 	{
 		this->log(swarm::SWARM_LOG_DEBUG, "%s, offset: %llu", __FUNCTION__, (unsigned long long) offset);
-		elliptics::session sess = this->server()->elliptics()->session();
+		elliptics::session session = this->server()->elliptics()->session();
+		session.set_timeout(this->server()->elliptics()->read_timeout());
 
-		sess.read_data(m_key, offset, std::min(m_size - offset, m_buffer_size)).connect(std::bind(
+		session.read_data(m_key, offset, std::min(m_size - offset, m_buffer_size)).connect(std::bind(
 			&on_buffered_get_base::on_read_finished, this->shared_from_this(),
 			offset, std::placeholders::_1, std::placeholders::_2));
 	}

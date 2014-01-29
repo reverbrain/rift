@@ -16,7 +16,7 @@ namespace rift {
 class elliptics_base
 {
 public:
-	elliptics_base() {}
+	elliptics_base() : m_read_timeout(0), m_write_timeout(0) {}
 
 	bool initialize(const rapidjson::Value &config, const swarm::logger &logger) {
 		m_logger = logger;
@@ -59,6 +59,14 @@ public:
 		return m_logger;
 	}
 
+	long read_timeout(void) const {
+		return m_read_timeout;
+	}
+
+	long write_timeout(void) const {
+		return m_write_timeout;
+	}
+
 protected:
 	virtual bool prepare_config(const rapidjson::Value &config, dnet_config &node_config) {
 		(void) config;
@@ -97,6 +105,14 @@ protected:
 			return false;
 		}
 
+		if (config.HasMember("read-timeout")) {
+			m_read_timeout = config["read-timeout"].GetInt();
+		}
+
+		if (config.HasMember("write-timeout")) {
+			m_write_timeout = config["write-timeout"].GetInt();
+		}
+
 		std::vector<int> groups;
 
 		auto &groups_array = config["groups"];
@@ -119,6 +135,9 @@ private:
 	std::unique_ptr<elliptics::node> m_node;
 	std::unique_ptr<elliptics::session> m_session;
 	std::vector<int> m_metadata_groups;
+
+	long m_read_timeout;
+	long m_write_timeout;
 };
 
 }} // namespace ioremap::rift

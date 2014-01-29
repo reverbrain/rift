@@ -32,6 +32,8 @@
         },
         "bucket": {
         },
+	"read-timeout": 10,
+	"write-timeout": 16,
 	"noauth" : "forbidden",
         "XXX-redirect-port": 8080
     }
