@@ -592,9 +592,12 @@ public:
 		tmp.set_groups(rem_groups);
 		tmp.remove(m_key);
 
-		using std::swap;
-		swap(m_meta.groups, groups);
 		m_session->set_groups(groups);
+
+		if (m_meta.groups.size()) {
+			using std::swap;
+			swap(m_meta.groups, groups);
+		}
 
 		this->try_next_chunk();
 	}
