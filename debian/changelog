@@ -1,3 +1,10 @@
+rift (0.6.9) unstable; urgency=low
+
+  * debian: depend on elliptics >= 2.24.15.1 and << 2.25.0.0
+  * elliptics_base: added read/write timeouts: config options, update IO sessions
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Sun, 02 Feb 2014 17:17:08 +0400
+
 rift (0.6.8) unstable; urgency=low
 
   * package: provide correct package build versions
