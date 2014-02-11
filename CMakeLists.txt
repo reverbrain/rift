@@ -17,7 +17,7 @@ LOCATE_LIBRARY(SWARM_URLFETCHER "swarm/http_response.hpp" "swarm_urlfetcher")
 LOCATE_LIBRARY(MSGPACK "msgpack.hpp" "msgpack")
 
 find_package(Boost COMPONENTS system thread program_options REQUIRED)
-find_package(Elliptics 2.24 REQUIRED)
+find_package(Elliptics 2.25 REQUIRED)
 
 include_directories(
 	"${CMAKE_CURRENT_SOURCE_DIR}/include"
