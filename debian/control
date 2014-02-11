@@ -2,7 +2,7 @@ Source: rift
 Priority: extra
 Maintainer: Ruslan Nigmatullin <euroelessar@yandex.ru>
 Build-Depends: cdbs, debhelper (>= 7), cmake, libthevoid-dev (>= 0.6.1.1), libswarm-dev (>= 0.6.1.1), libmsgpack-dev,
-  libboost-system-dev, libboost-thread-dev, libboost-program-options-dev, elliptics-dev (>= 2.24.15.1), elliptics-dev (<< 2.25.0.0)
+  libboost-system-dev, libboost-thread-dev, libboost-program-options-dev, elliptics-dev (>= 2.25.0.0)
 Standards-Version: 3.9.3
 Section: libs
 Homepage: https://github.com/reverbrain/rift
@@ -12,7 +12,7 @@ Vcs-Browser: https://github.com/reverbrain/rift
 Package: rift
 Section: utils
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, elliptics-client (>= 2.24.15.1), elliptics-client (<< 2.25.0.0), libthevoid2 (>= 0.6.1.1), libswarm2 (>= 0.6.1.1)
+Depends: ${shlibs:Depends}, ${misc:Depends}, elliptics-client (>= 2.25.0.0), libthevoid2 (>= 0.6.1.1), libswarm2 (>= 0.6.1.1)
 Description: Rift is an HTTP access point to elliptics distributed network
 
 Package: rift-dev
