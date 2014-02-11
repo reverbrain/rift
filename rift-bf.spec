@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	0.6.8
+Version:	0.6.9
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -69,6 +69,10 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Sun Feb 02 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.9
+- debian: depend on elliptics >= 2.24.15.1 and << 2.25.0.0
+- elliptics_base: added read/write timeouts: config options, update IO sessions
+
 * Tue Jan 28 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.6.8
 - package: provide correct package build versions
 
