@@ -1,3 +1,12 @@
+rift (2.25.0.6.11) unstable; urgency=low
+
+  * bucket: added timestamp into packed index
+  * list: added index listing
+  * cmake: fixed versioning
+  * io: nicer debug
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Tue, 18 Feb 2014 03:31:20 +0400
+
 rift (2.25-0.6.10) unstable; urgency=low
 
   * cmake: new versioning

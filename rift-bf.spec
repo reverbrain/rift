@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25-0.6.10
+Version:	2.25.0.6.11
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -69,6 +69,12 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Feb 18 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.6.11
+- bucket: added timestamp into packed index
+- list: added index listing
+- cmake: fixed versioning
+- io: nicer debug
+
 * Tue Feb 18 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25-0.6.10
 - cmake: new versioning
 
