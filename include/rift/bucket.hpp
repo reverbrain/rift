@@ -21,10 +21,16 @@ namespace ioremap { namespace rift {
 
 struct bucket_meta_index_data {
 	enum {
-		serialization_version = 1,
+		serialization_version = 2,
 	};
 
 	std::string key;
+	dnet_time ts;
+
+	bucket_meta_index_data() {
+		ts.tsec = 0;
+		ts.tnsec = 0;
+	}
 };
 
 struct bucket_meta_raw {
@@ -131,8 +137,30 @@ public:
 namespace msgpack
 {
 
+static inline dnet_time &operator >>(msgpack::object o, dnet_time &tm)
+{
+	if (o.type != msgpack::type::ARRAY || o.via.array.size != 2)
+		throw msgpack::type_error();
+
+	object *p = o.via.array.ptr;
+	p[0].convert(&tm.tsec);
+	p[1].convert(&tm.tnsec);
+
+	return tm;
+}
+
 template <typename Stream>
-inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const ioremap::rift::bucket_meta_raw &m)
+inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const dnet_time &tm)
+{
+	o.pack_array(2);
+	o.pack(tm.tsec);
+	o.pack(tm.tnsec);
+
+	return o;
+}
+
+template <typename Stream>
+static inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const ioremap::rift::bucket_meta_raw &m)
 {
 	o.pack_array(10);
 	o.pack((int)ioremap::rift::bucket_meta_raw::serialization_version);
@@ -148,7 +176,7 @@ inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const io
 	return o;
 }
 
-inline ioremap::rift::bucket_meta_raw &operator >>(msgpack::object o, ioremap::rift::bucket_meta_raw &m)
+static inline ioremap::rift::bucket_meta_raw &operator >>(msgpack::object o, ioremap::rift::bucket_meta_raw &m)
 {
 	if (o.type != msgpack::type::ARRAY || o.via.array.size < 10) {
 		std::ostringstream ss;
@@ -192,16 +220,17 @@ inline ioremap::rift::bucket_meta_raw &operator >>(msgpack::object o, ioremap::r
 }
 
 template <typename Stream>
-inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const ioremap::rift::bucket_meta_index_data &m)
+static inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const ioremap::rift::bucket_meta_index_data &m)
 {
-	o.pack_array(2);
+	o.pack_array(3);
 	o.pack((int)ioremap::rift::bucket_meta_index_data::serialization_version);
 	o.pack(m.key);
+	o.pack(m.ts);
 
 	return o;
 }
 
-inline ioremap::rift::bucket_meta_index_data &operator >>(msgpack::object o, ioremap::rift::bucket_meta_index_data &m)
+static inline ioremap::rift::bucket_meta_index_data &operator >>(msgpack::object o, ioremap::rift::bucket_meta_index_data &m)
 {
 	if (o.type != msgpack::type::ARRAY || o.via.array.size < 2) {
 		std::ostringstream ss;
@@ -219,11 +248,22 @@ inline ioremap::rift::bucket_meta_index_data &operator >>(msgpack::object o, ior
 	case 1: {
 		if (size != 2) {
 			std::ostringstream ss;
+			ss << "bucket unpack: array size mismatch: read: " << size << ", must be: 2";
+			throw std::runtime_error(ss.str());
+		}
+
+		p[1].convert(&m.key);
+		break;
+	}
+	case 2: {
+		if (size != 3) {
+			std::ostringstream ss;
 			ss << "bucket unpack: array size mismatch: read: " << size << ", must be: 3";
 			throw std::runtime_error(ss.str());
 		}
 
 		p[1].convert(&m.key);
+		p[2].convert(&m.ts);
 		break;
 	}
 	default: {

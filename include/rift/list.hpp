@@ -14,6 +14,8 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
 
+#include <elliptics/debug.hpp>
+
 namespace ioremap { namespace rift { namespace list {
 
 // return list of keys in bucket
@@ -99,6 +101,19 @@ public:
 
 			rapidjson::Value key_str_value(index_data.key.c_str(), index_data.key.size(), result_object.GetAllocator());
 			info.AddMember("key", key_str_value, result_object.GetAllocator());
+
+			std::ostringstream ss;
+			ss << index_data.ts;
+
+			std::string time_str = ss.str();
+
+			rapidjson::Value ts_str_value(time_str.c_str(), time_str.size(), result_object.GetAllocator());
+			info.AddMember("timestamp", ts_str_value, result_object.GetAllocator());
+
+			time_str = boost::lexical_cast<std::string>(index_data.ts.tsec);
+			rapidjson::Value ts_sec_str_value(time_str.c_str(), time_str.size(), result_object.GetAllocator());
+			info.AddMember("time_seconds", ts_sec_str_value, result_object.GetAllocator());
+
 
 			infos.PushBack(info, result_object.GetAllocator());
 		}

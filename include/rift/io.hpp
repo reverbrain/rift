@@ -311,6 +311,7 @@ public:
 		msgpack::sbuffer buf;
 		bucket_meta_index_data index_data;
 		index_data.key = key.to_string();
+		dnet_current_time(&index_data.ts);
 		msgpack::pack(buf, index_data);
 
 		std::vector<elliptics::data_pointer> datas;
