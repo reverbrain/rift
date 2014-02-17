@@ -5,8 +5,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -W -Wall -Wextra -fstack-prot
 
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/debian/changelog" DEBCHANGELOG)
 
-string(REGEX MATCH "([0-9]+\\.[0-9]+\\.[0-9]+)" DEBFULLVERSION "${DEBCHANGELOG}")
-string(REGEX MATCH "([0-9]+\\.[0-9]+)" RIFT_VERSION_ABI "${DEBFULLVERSION}")
+string(REGEX MATCH "([0-9]+\\.[0-9]+-[0-9]+\\.[0-9]+)" DEBFULLVERSION "${DEBCHANGELOG}")
+string(REGEX MATCH "([0-9]+\\.[0-9]+)" RIFT_VERSION_ELLIPTICS "${DEBFULLVERSION}")
+string(REGEX MATCH "([0-9]+\\.[0-9]+-[0-9]+)" RIFT_VERSION_ABI "${DEBFULLVERSION}")
 string(REGEX MATCH "([0-9]+$)" RIFT_VERSION_MINOR "${DEBFULLVERSION}")
 
 include(cmake/locate_library.cmake)
@@ -17,7 +18,7 @@ LOCATE_LIBRARY(SWARM_URLFETCHER "swarm/http_response.hpp" "swarm_urlfetcher")
 LOCATE_LIBRARY(MSGPACK "msgpack.hpp" "msgpack")
 
 find_package(Boost COMPONENTS system thread program_options REQUIRED)
-find_package(Elliptics 2.25 REQUIRED)
+find_package(Elliptics ${RIFT_VERSION_ELLIPTICS} REQUIRED)
 
 include_directories(
 	"${CMAKE_CURRENT_SOURCE_DIR}/include"
