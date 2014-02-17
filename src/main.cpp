@@ -3,6 +3,7 @@
 #include "rift/common.hpp"
 #include "rift/index.hpp"
 #include "rift/io.hpp"
+#include "rift/list.hpp"
 #include "rift/server.hpp"
 
 using namespace ioremap;
@@ -89,6 +90,10 @@ public:
 		on<rift::io::on_buffered_upload<example_server>>(
 			options::exact_match("/upload-big"),
 			options::methods("POST")
+		);
+		on<rift::list::on_list<example_server>>(
+			options::exact_match("/list"),
+			options::methods("GET")
 		);
 		on<rift::io::on_download_info<example_server>>(
 			options::exact_match("/download-info"),
