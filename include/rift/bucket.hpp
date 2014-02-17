@@ -203,7 +203,7 @@ inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const io
 
 inline ioremap::rift::bucket_meta_index_data &operator >>(msgpack::object o, ioremap::rift::bucket_meta_index_data &m)
 {
-	if (o.type != msgpack::type::ARRAY || o.via.array.size < 5) {
+	if (o.type != msgpack::type::ARRAY || o.via.array.size < 2) {
 		std::ostringstream ss;
 		ss << "bucket unpack: type: " << o.type <<
 			", must be: " << msgpack::type::ARRAY <<
