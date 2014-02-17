@@ -1,3 +1,9 @@
+rift (2.25-0.6.10) unstable; urgency=low
+
+  * cmake: new versioning
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Tue, 18 Feb 2014 00:07:50 +0400
+
 rift (0.6.9) unstable; urgency=low
 
   * debian: depend on elliptics >= 2.24.15.1 and << 2.25.0.0
