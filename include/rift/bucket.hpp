@@ -61,7 +61,9 @@ struct bucket_acl {
 
 	std::string user;
 	std::string token;
-	uint64_t flags = 0ULL;
+	uint64_t flags;
+
+	bucket_acl() : flags(0ULL) {}
 };
 
 struct bucket_meta_raw {
