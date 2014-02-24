@@ -29,6 +29,8 @@ int main(int argc, char *argv[])
 	std::string noauth;
 	int log_level;
 
+	std::vector<std::string> acl_str;
+
 	namespace bpo = boost::program_options;
 
 	bpo::variables_map vm;
@@ -42,16 +44,13 @@ int main(int argc, char *argv[])
 		("bucket", bpo::value<std::string>(&meta.key), "Bucket (namespace) name")
 		("metadata-groups", bpo::value<std::string>(&metadata_groups_str),
 		 	"Metadata groups string (colon separated). These groups are used to store bucket info")
-		("read", "Read and print bucket metadata, all options below will be ignored")
-		("token", bpo::value<std::string>(&meta.token), "Secure token (can be empty for no authorization)")
+		("read", "Read and print bucket metadata, all options below will be ignored\n")
+		("acl", bpo::value<std::vector<std::string>>(&acl_str)->multitoken(),
+		 	"Access control list with the following format: username:token:flags (can be empty for no authorization). "
+			"Flags: 1 - bypass auth check for read requests (get, lookup, download-info and so on), 2 - bypass auth check for write requests")
 		("data-groups", bpo::value<std::string>(&data_groups_str),
 		 	"Data groups string (colon separated). "
 			"These groups are used to store real data written into this namespace/bucket")
-		("noauth", bpo::value<std::string>(&noauth),
-		 	"Noauth option:\n"
-			"  'read' means read requests (read, download-info, lookup and other GET requests) "
-			"will bypass authentication check, POST upload requests will pass through proper auth check\n"
-			"  'all' - all requests for this bucket will bypass auth checks")
 		("max-size", bpo::value<uint64_t>(&meta.max_size)->default_value(0),
 		 	"Maximum object size (unsupported yet) in given bucket")
 		("max-key-num", bpo::value<uint64_t>(&meta.max_key_num)->default_value(0),
@@ -110,7 +109,7 @@ int main(int argc, char *argv[])
 				data_groups_str = ss.str();
 
 			} catch (const std::exception &e) {
-				std::cout << "Could not write bucket metadata: " << e.what() << std::endl;
+				std::cout << "Could not read bucket metadata: " << e.what() << std::endl;
 				return -1;
 			}
 		} else {
@@ -120,14 +119,26 @@ int main(int argc, char *argv[])
 				return -1;
 			}
 
-			if (noauth == "read")
-				meta.flags |= rift::bucket_meta_raw::flags_noauth_read;
-			else if (noauth == "all")
-				meta.flags |= rift::bucket_meta_raw::flags_noauth_all;
-
 			gr.clear();
 			boost::split(gr, data_groups_str, boost::is_any_of(":"));
 			std::transform(gr.begin(), gr.end(), std::back_inserter(meta.groups), digitizer());
+
+			for (auto it = acl_str.begin(); it != acl_str.end(); ++it) {
+				std::vector<std::string> tmp;
+				boost::split(tmp, *it, boost::is_any_of(":"));
+
+				if (tmp.size() != 3) {
+					std::cerr << "Invalid ACL string '" << *it << "'" << std::endl;
+					continue;
+				}
+
+				rift::bucket_acl acl;
+				acl.user = tmp[0];
+				acl.token = tmp[1];
+				acl.flags = strtoul(tmp[2].c_str(), NULL, 0);
+
+				meta.acl[acl.user] = acl;
+			}
 
 			msgpack::sbuffer buf;
 			msgpack::pack(buf, meta);
@@ -146,15 +157,22 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	std::ostringstream ss;
+	for (auto it = meta.acl.begin(); it != meta.acl.end(); ++it) {
+		const auto & acl = it->second;
+
+		ss << acl.user << ":" << acl.token << ":0x" << std::hex << acl.flags << " ";
+	}
+
 	printf("Metadata info:\n"
 		"  bucket: %s\n"
-		"  token: %s\n"
+		"  acl: %s\n"
 		"  data groups: %s\n"
 		"  flags: 0x%lx\n"
 		"  maximum record size: %ld\n"
 		"  maximum number of keys: %ld\n"
 		"  metadata stored in the following groups: %s\n",
-		meta.key.c_str(), meta.token.c_str(), data_groups_str.c_str(), meta.flags,
+		meta.key.c_str(), ss.str().c_str(), data_groups_str.c_str(), meta.flags,
 		meta.max_size, meta.max_key_num, metadata_groups_str.c_str());
 
 	return 0;

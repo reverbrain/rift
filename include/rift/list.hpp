@@ -24,28 +24,31 @@ class on_list_base : public bucket_processing<Server, Stream>
 {
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
 		const auto &query = req.url().query();
 
-		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
-			this->log(swarm::SWARM_LOG_ERROR, "list-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-					query.to_string().c_str(), meta.flags, verdict);
+		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
+			this->log(swarm::SWARM_LOG_ERROR, "list-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+					query.to_string().c_str(), verdict);
 
 			this->send_reply(verdict);
 			return;
 		}
 
+		this->log(swarm::SWARM_LOG_NOTICE, "list-base: checked: url: %s, original-verdict: %d, passed-no-auth-check",
+				query.to_string().c_str(), verdict);
+
 		auto ns = query.item_value("namespace");
 		if (!ns) {
-			this->log(swarm::SWARM_LOG_ERROR, "list-base: checked: url: %s, flags: 0x%lx: there must be a namespace parameter",
-					query.to_string().c_str(), meta.flags);
+			this->log(swarm::SWARM_LOG_ERROR, "list-base: checked: url: %s: there must be a namespace parameter",
+					query.to_string().c_str());
 
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "list-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-				query.to_string().c_str(), meta.flags, verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "list-base: checked: url: %s, verdict: %d",
+				query.to_string().c_str(), verdict);
 
 		(void) buffer;
 
@@ -60,10 +63,12 @@ public:
 					meta, std::placeholders::_1, std::placeholders::_2));
 	}
 
-	virtual void on_find_finished(const bucket_meta_raw &meta, const elliptics::sync_find_indexes_result &result, const elliptics::error_info &error) {
+	virtual void on_find_finished(const bucket_meta_raw &meta, const elliptics::sync_find_indexes_result &result,
+			const elliptics::error_info &error) {
+		(void) meta;
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "list-base: find-finished: flags: 0x%lx, error: %s",
-					meta.flags, error.message().c_str());
+			this->log(swarm::SWARM_LOG_ERROR, "list-base: find-finished: error: %s",
+					error.message().c_str());
 
 			if (error.code() == -ENOENT) {
 				this->send_reply(swarm::http_response::not_found);

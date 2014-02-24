@@ -15,21 +15,23 @@ bucket_meta::bucket_meta(const std::string &key, bucket *b, const swarm::http_re
 void bucket_meta::check_and_run_raw(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
 		const continue_handler_t &continue_handler, bool uptodate)
 {
+	bucket_acl acl;
+
 	std::unique_lock<std::mutex> guard(m_lock);
-	auto v = verdict(request);
+	auto v = verdict(request, acl);
 	guard.unlock();
 
 	std::ostringstream ss;
 	std::copy(m_raw.groups.begin(), m_raw.groups.end(), std::ostream_iterator<int>(ss, ":"));
 
-	m_bucket->logger().log(swarm::SWARM_LOG_INFO,
-			"bucket: check-and-run-raw: bucket: %s, groups: %s, uptodate: %d, req: %s, verdict: %d",
-			m_raw.key.c_str(), ss.str().c_str(), uptodate, request.url().query().to_string().c_str(), v);
+	m_bucket->logger().log(swarm::SWARM_LOG_NOTICE,
+			"bucket: check-and-run-raw: bucket: %s, groups: %s, uptodate: %d, req: %s, acl: '%s', verdict: %d",
+			m_raw.key.c_str(), ss.str().c_str(), uptodate, request.url().query().to_string().c_str(), acl.to_string().c_str(), v);
 
 	if ((v != swarm::http_response::ok) && !uptodate) {
 		update_and_check(request, buffer, continue_handler);
 	} else {
-		continue_handler(request, buffer, m_raw, v);
+		continue_handler(request, buffer, m_raw, acl, v);
 	}
 }
 
@@ -58,27 +60,80 @@ void bucket_meta::update_and_check(const swarm::http_request &request, const boo
 				request, buffer, continue_handler, std::placeholders::_1, std::placeholders::_2));
 }
 
-swarm::http_response::status_type bucket_meta::verdict(const swarm::http_request &request)
+swarm::http_response::status_type bucket_meta::verdict(const swarm::http_request &request, bucket_acl &acl)
 {
+	auto verdict = swarm::http_response::not_found;
+	const auto &query = request.url().query();
+
 	// if no groups exist, then given bucket is 'empty', or basically it was not written into the storage
-	if (m_raw.groups.empty())
-		return swarm::http_response::not_found;
+	if (m_raw.groups.empty()) {
+		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: no groups in bucket -> %d",
+				query.to_string().c_str(), m_raw.key.c_str(), verdict);
+		return verdict;
+	}
 
-	// if no token was set, 'succeed' verification
-	if (m_raw.token.empty())
-		return swarm::http_response::ok;
+	if (m_raw.acl.empty()) {
+		// acl list is empty, nothing to check
+		verdict = swarm::http_response::ok;
 
-	auto verdict = swarm::http_response::bad_request;
+		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: acls: %zd: acl list is empty -> %d",
+				query.to_string().c_str(), m_raw.key.c_str(), m_raw.acl.size(), verdict);
+		return verdict;
+	}
+
+	auto user = query.item_value("user");
+	if (!user) {
+		// no username found in request, return error
+		verdict = swarm::http_response::forbidden;
+
+		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: acls: %zd: no user in URI -> %d",
+				query.to_string().c_str(), m_raw.key.c_str(), m_raw.acl.size(), verdict);
+		return verdict;
+	}
+
+	auto it = m_raw.acl.find(*user);
+	if (it == m_raw.acl.end()) {
+		// no username found, return error
+		verdict = swarm::http_response::forbidden;
+
+		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: no user in acl list -> %d",
+				query.to_string().c_str(), m_raw.key.c_str(), (*user).c_str(), m_raw.acl.size(), verdict);
+		return verdict;
+	}
+
+	acl = it->second;
+
+	if (acl.noauth_all()) {
+		// noauth check passed
+		verdict = swarm::http_response::ok;
+
+		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: passed total noauth check -> %d",
+				query.to_string().c_str(), m_raw.key.c_str(), (*user).c_str(), m_raw.acl.size(), verdict);
+		return verdict;
+	}
 
 	auto auth = request.headers().get("Authorization");
-	if (!auth)
-		return verdict;
+	if (!auth) {
+		verdict = swarm::http_response::bad_request;
 
-	auto key = http_auth::generate_signature(request, m_raw.token);
-	if (key == *auth)
-		verdict = swarm::http_response::ok;
-	else
+		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: no 'Authorization' header -> %d",
+				query.to_string().c_str(), m_raw.key.c_str(), (*user).c_str(), m_raw.acl.size(), verdict);
+		return verdict;
+	}
+
+	auto key = http_auth::generate_signature(request, acl.token);
+	if (key != *auth) {
 		verdict = swarm::http_response::forbidden;
+
+		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: calculated-key: %s, auth-header: %s: incorrect auth header -> %d",
+				query.to_string().c_str(), m_raw.key.c_str(), (*user).c_str(), m_raw.acl.size(), key.c_str(), (*auth).c_str(), verdict);
+		return verdict;
+	}
+
+	verdict = swarm::http_response::ok;
+
+	m_bucket->logger().log(swarm::SWARM_LOG_INFO, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: auth-header: %s: OK -> %d",
+			query.to_string().c_str(), m_raw.key.c_str(), (*user).c_str(), m_raw.acl.size(), key.c_str(), verdict);
 
 	return verdict;
 }
@@ -104,8 +159,8 @@ void bucket_meta::update_finished(const ioremap::elliptics::sync_read_result &re
 			std::copy(m_raw.groups.begin(), m_raw.groups.end(), std::ostream_iterator<int>(ss, ":"));
 
 			m_bucket->logger().log(swarm::SWARM_LOG_NOTICE,
-					"bucket-update: bucket: %s, token: '%s', flags: 0x%lx, groups: %s",
-					m_raw.key.c_str(), m_raw.token.c_str(), m_raw.flags, ss.str().c_str());
+					"bucket-update: bucket: %s, acls: %zd, flags: 0x%lx, groups: %s",
+					m_raw.key.c_str(), m_raw.acl.size(), m_raw.flags, ss.str().c_str());
 
 		} catch (const std::exception &e) {
 			m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "bucket-update-failed: read exception: "
@@ -123,7 +178,8 @@ void bucket_meta::update_and_check_completed(const swarm::http_request &request,
 
 	if (error) {
 		bucket_meta_raw meta;
-		continue_handler(request, buffer, meta, swarm::http_response::forbidden);
+		bucket_acl acl;
+		continue_handler(request, buffer, meta, acl, swarm::http_response::forbidden);
 	} else {
 		check_and_run_raw(request, buffer, continue_handler, true);
 	}
@@ -142,15 +198,15 @@ bool bucket::initialize(const rapidjson::Value &config, const elliptics_base &ba
 	return true;
 }
 
-void bucket::check(const std::string &ns, const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+void bucket::check(const std::string &name, const swarm::http_request &request, const boost::asio::const_buffer &buffer,
 		const continue_handler_t &continue_handler)
 {
 	std::unique_lock<std::mutex> guard(m_lock);
 
-	auto lookup = m_meta.find(ns);
+	auto lookup = m_meta.find(name);
 	if (lookup == m_meta.end()) {
-		auto meta = std::make_shared<bucket_meta>(ns, this, request, buffer, continue_handler);
-		m_meta[ns] = meta;
+		auto meta = std::make_shared<bucket_meta>(name, this, request, buffer, continue_handler);
+		m_meta[name] = meta;
 	} else {
 		guard.unlock();
 

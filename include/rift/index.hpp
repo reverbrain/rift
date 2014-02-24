@@ -15,15 +15,20 @@ class on_update_base : public bucket_processing<Server, Stream>
 {
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
 		const auto &query = req.url().query();
-		this->log(swarm::SWARM_LOG_NOTICE, "update-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-				query.to_string().c_str(), meta.flags, verdict);
 
-		if ((verdict != swarm::http_response::ok) && !meta.noauth_all()) {
+		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
+			this->log(swarm::SWARM_LOG_ERROR, "update-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+				query.to_string().c_str(), verdict);
 			this->send_reply(verdict);
 			return;
 		}
+
+		this->log(swarm::SWARM_LOG_NOTICE, "update-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
+			query.to_string().c_str(), verdict);
+
+		(void) meta;
 
 		rapidjson::Document doc;
 		doc.Parse<0>(boost::asio::buffer_cast<const char*>(buffer));
@@ -161,15 +166,21 @@ class on_find_base : public bucket_processing<Server, Stream>
 {
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
 		const auto &query = req.url().query();
-		this->log(swarm::SWARM_LOG_NOTICE, "find-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-				query.to_string().c_str(), meta.flags, verdict);
 
-		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
+		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
+			this->log(swarm::SWARM_LOG_ERROR, "find-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+				query.to_string().c_str(), verdict);
 			this->send_reply(verdict);
 			return;
 		}
+
+		this->log(swarm::SWARM_LOG_NOTICE, "find-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
+				query.to_string().c_str(), verdict);
+
+
+		(void) meta;
 
 		rapidjson::Document data;
 		data.Parse<0>(boost::asio::buffer_cast<const char*>(buffer));

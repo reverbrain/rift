@@ -33,7 +33,7 @@ struct bucket_meta_index_data {
 	}
 };
 
-struct bucket_meta_raw {
+struct bucket_acl {
 	enum {
 		serialization_version = 1,
 	};
@@ -44,8 +44,33 @@ struct bucket_meta_raw {
 		flags_noauth_all = 1<<1,
 	};
 
-	std::string key;
+	bool noauth_read() const {
+		return flags & (flags_noauth_read | flags_noauth_all);
+	}
+	bool noauth_all() const {
+		return flags & flags_noauth_all;
+	}
+
+	std::string to_string(void) const {
+		std::ostringstream acl_ss;
+		if (!user.empty())
+			acl_ss << user << ":" << token << ":0x" << std::hex << flags;
+
+		return acl_ss.str();
+	}
+
+	std::string user;
 	std::string token;
+	uint64_t flags = 0ULL;
+};
+
+struct bucket_meta_raw {
+	enum {
+		serialization_version = 1,
+	};
+
+	std::string key;
+	std::map<std::string, bucket_acl> acl;
 	std::vector<int> groups;
 	uint64_t flags;
 	uint64_t max_size;
@@ -55,19 +80,12 @@ struct bucket_meta_raw {
 	bucket_meta_raw() : flags(0ULL), max_size(0ULL), max_key_num(0ULL) {
 		memset(reserved, 0, sizeof(reserved));
 	}
-
-	bool noauth_read() const {
-		return flags & (flags_noauth_read | flags_noauth_all);
-	}
-	bool noauth_all() const {
-		return flags & flags_noauth_all;
-	}
 };
 
 class bucket;
 
 typedef std::function<void (const swarm::http_request, const boost::asio::const_buffer &buffer,
-		const bucket_meta_raw &meta, swarm::http_response::status_type verdict)> continue_handler_t;
+		const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict)> continue_handler_t;
 
 class bucket_meta
 {
@@ -94,7 +112,7 @@ class bucket_meta
 				const continue_handler_t &continue_handler, const ioremap::elliptics::sync_read_result &result,
 				const ioremap::elliptics::error_info &error);
 
-		swarm::http_response::status_type verdict(const swarm::http_request &request);
+		swarm::http_response::status_type verdict(const swarm::http_request &request, bucket_acl &acl);
 
 		void check_and_run_raw(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
 				const continue_handler_t &continue_handler, bool uptodate);
@@ -106,7 +124,7 @@ class bucket : public metadata_updater, public std::enable_shared_from_this<buck
 		bucket();
 
 		bool initialize(const rapidjson::Value &config, const elliptics_base &base, async_performer *async);
-		void check(const std::string &ns, const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+		void check(const std::string &name, const swarm::http_request &request, const boost::asio::const_buffer &buffer,
 				const continue_handler_t &continue_handler);
 
 	private:
@@ -120,16 +138,16 @@ class bucket_processing : public thevoid::simple_request_stream<Server>, public 
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		if (!this->server()->query_ok(req)) {
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(swarm::http_response::forbidden);
 			return;
 		}
 
 		this->server()->process(req, buffer, std::bind(&bucket_processing::checked, this->shared_from_this(),
-			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
 	}
 
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) = 0;
+			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) = 0;
 };
 
 }} // namespace ioremap::rift
@@ -159,13 +177,63 @@ inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const dn
 	return o;
 }
 
+static inline ioremap::rift::bucket_acl &operator >>(msgpack::object o, ioremap::rift::bucket_acl &acl)
+{
+	if (o.type != msgpack::type::ARRAY) {
+		std::ostringstream ss;
+		ss << "bucket-acl unpack: type: " << o.type <<
+			", must be: " << msgpack::type::ARRAY <<
+			", size: " << o.via.array.size;
+		throw std::runtime_error(ss.str());
+	}
+
+	object *p = o.via.array.ptr;
+	const uint32_t size = o.via.array.size;
+	uint16_t version = 0;
+	p[0].convert(&version);
+	switch (version) {
+	case 1: {
+		if (size != 4) {
+			std::ostringstream ss;
+			ss << "bucket acl unpack: array size mismatch: read: " << size << ", must be: 4";
+			throw std::runtime_error(ss.str());
+		}
+
+		p[1].convert(&acl.user);
+		p[2].convert(&acl.token);
+		p[3].convert(&acl.flags);
+		break;
+	}
+	default: {
+		std::ostringstream ss;
+		ss << "bucket acl unpack: version mismatch: read: " << version <<
+			", must be: <= " << ioremap::rift::bucket_acl::serialization_version;
+		throw std::runtime_error(ss.str());
+	}
+	}
+
+	return acl;
+}
+
+template <typename Stream>
+inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const ioremap::rift::bucket_acl &acl)
+{
+	o.pack_array(4);
+	o.pack((int)ioremap::rift::bucket_acl::serialization_version);
+	o.pack(acl.user);
+	o.pack(acl.token);
+	o.pack(acl.flags);
+
+	return o;
+}
+
 template <typename Stream>
 static inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const ioremap::rift::bucket_meta_raw &m)
 {
 	o.pack_array(10);
 	o.pack((int)ioremap::rift::bucket_meta_raw::serialization_version);
 	o.pack(m.key);
-	o.pack(m.token);
+	o.pack(m.acl);
 	o.pack(m.groups);
 	o.pack(m.flags);
 	o.pack(m.max_size);
@@ -199,7 +267,7 @@ static inline ioremap::rift::bucket_meta_raw &operator >>(msgpack::object o, ior
 		}
 
 		p[1].convert(&m.key);
-		p[2].convert(&m.token);
+		p[2].convert(&m.acl);
 		p[3].convert(&m.groups);
 		p[4].convert(&m.flags);
 		p[5].convert(&m.max_size);

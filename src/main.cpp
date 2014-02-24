@@ -137,7 +137,8 @@ public:
 				verdict = swarm::http_response::ok;
 
 			rift::bucket_meta_raw meta;
-			continue_handler(request, buffer, meta, verdict);
+			rift::bucket_acl acl;
+			continue_handler(request, buffer, meta, acl, verdict);
 		} else {
 			m_bucket->check(*ns, request, buffer, continue_handler);
 		}

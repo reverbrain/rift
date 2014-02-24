@@ -30,18 +30,18 @@ class on_get_base : public bucket_processing<Server, Stream>
 {
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
 		const auto &query = req.url().query();
 
-		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
-			this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-					query.to_string().c_str(), meta.flags, verdict);
+		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
+			this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+					query.to_string().c_str(), verdict);
 			this->send_reply(verdict);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "get-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-				query.to_string().c_str(), meta.flags, verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "get-base: checked: url: %s, original-verdict: %d, passed-no-auth-check",
+				query.to_string().c_str(), verdict);
 
 		(void) buffer;
 
@@ -58,8 +58,8 @@ public:
 			offset = query.item_value("offset", 0llu);
 			size = query.item_value("size", 0llu);
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: url: %s, flags: 0x%lx, "
-					"invalid size/offset cast: %s", query.to_string().c_str(), meta.flags, e.what());
+			this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: url: %s "
+					"invalid size/offset cast: %s", query.to_string().c_str(), e.what());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
@@ -354,22 +354,22 @@ class on_upload_base : public bucket_processing<Server, Stream>
 {
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
 		auto data = elliptics::data_pointer::from_raw(
 			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
 			boost::asio::buffer_size(buffer));
 
 		const auto &query = req.url().query();
 
-		if ((verdict != swarm::http_response::ok) && !meta.noauth_all()) {
-			this->log(swarm::SWARM_LOG_ERROR, "upload-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-					query.to_string().c_str(), meta.flags, verdict);
+		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
+			this->log(swarm::SWARM_LOG_ERROR, "upload-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+					query.to_string().c_str(), verdict);
 			this->send_reply(verdict);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "upload-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-				query.to_string().c_str(), meta.flags, verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "upload-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
+				query.to_string().c_str(), verdict);
 
 		(void) buffer;
 
@@ -386,8 +386,8 @@ public:
 				std::bind(&on_upload_base::on_write_finished, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_NOTICE, "post-base: checked-write: url: %s, flags: 0x%lx, exception: %s",
-					query.to_string().c_str(), meta.flags, e.what());
+			this->log(swarm::SWARM_LOG_NOTICE, "post-base: checked-write: url: %s, exception: %s",
+					query.to_string().c_str(), e.what());
 			this->send_reply(swarm::http_response::bad_request);
 		}
 	}
@@ -427,8 +427,8 @@ public:
 		reply.headers().set_content_type("text/json");
 		reply.headers().set_content_length(data.size());
 
-		this->log(swarm::SWARM_LOG_NOTICE, "post-base: completion: key: %s, ns: %s, flags: 0x%lx",
-				m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags);
+		this->log(swarm::SWARM_LOG_NOTICE, "post-base: completion: key: %s, namespace: %s",
+				m_key.to_string().c_str(), m_meta.key.c_str());
 
 		this->send_reply(std::move(reply), std::move(data));
 	}
@@ -440,17 +440,16 @@ public:
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx",
-				m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags);
+		this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, namespace: %s",
+				m_key.to_string().c_str(), m_meta.key.c_str());
 
 		try {
 			upload_completion::upload_update_indexes(*m_session, m_meta, m_key, result,
 					std::bind(&on_upload_base::completion, this->shared_from_this(),
 						std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, "
-				"exception: %s",
-					m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags, e.what());
+			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, namespace: %s, exception: %s",
+					m_key.to_string().c_str(), m_meta.key.c_str(), e.what());
 			m_session->remove(m_key);
 			this->send_reply(swarm::http_response::bad_request);
 		}
@@ -482,11 +481,11 @@ public:
 
 		boost::asio::const_buffer buffer;
 		this->server()->process(req, buffer, std::bind(&on_buffered_upload_base::checked, this->shared_from_this(),
-			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
 	}
 
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
 		auto data = elliptics::data_pointer::from_raw(
 			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
 			boost::asio::buffer_size(buffer));
@@ -495,15 +494,15 @@ public:
 
 		const auto &query = req.url().query();
 
-		if ((verdict != swarm::http_response::ok) && !meta.noauth_all()) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-upload-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-					query.to_string().c_str(), meta.flags, verdict);
+		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-upload-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+					query.to_string().c_str(), verdict);
 			this->send_reply(verdict);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-upload-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-				query.to_string().c_str(), meta.flags, verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-upload-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
+				query.to_string().c_str(), verdict);
 
 		(void) buffer;
 
@@ -639,8 +638,8 @@ public:
 					std::bind(&on_buffered_upload_base::completion, this->shared_from_this(),
 						std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, ns: %s, flags: 0x%lx, "
-				"exception: %s", m_key.to_string().c_str(), m_meta.key.c_str(), m_meta.flags, e.what());
+			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, namespace: %s, exception: %s",
+					m_key.to_string().c_str(), m_meta.key.c_str(), e.what());
 			m_session->remove(m_key);
 			this->send_reply(swarm::http_response::bad_request);
 		}
@@ -669,19 +668,19 @@ class on_download_info_base : public bucket_processing<Server, Stream>
 {
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
 		const auto &query = req.url().query();
 
-		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
-			this->log(swarm::SWARM_LOG_ERROR, "download-info-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-					query.to_string().c_str(), meta.flags, verdict);
+		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
+			this->log(swarm::SWARM_LOG_ERROR, "download-info-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+					query.to_string().c_str(), verdict);
 
 			this->send_reply(verdict);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "download-info-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-				query.to_string().c_str(), meta.flags, verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "download-info-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
+				query.to_string().c_str(), verdict);
 
 		(void) buffer;
 
@@ -691,8 +690,8 @@ public:
 
 		this->server()->check_cache(key, session);
 
-		session.lookup(key).connect(std::bind(&on_download_info_base::on_lookup_finished, this->shared_from_this(),
-				meta, std::placeholders::_1, std::placeholders::_2));
+		session.lookup(key).connect(std::bind(&on_download_info_base::on_download_lookup_finished,
+					this->shared_from_this(), acl, std::placeholders::_1, std::placeholders::_2));
 	}
 
 	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time,
@@ -748,11 +747,11 @@ public:
 		return std::move(signature);
 	}
 
-	virtual void on_lookup_finished(const bucket_meta_raw &meta, const elliptics::sync_lookup_result &result,
+	virtual void on_download_lookup_finished(const bucket_acl &acl, const elliptics::sync_lookup_result &result,
 			const elliptics::error_info &error) {
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "lookup-finished: checked: flags: 0x%lx, error: %s",
-					meta.flags, error.message().c_str());
+			this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
+					error.message().c_str());
 
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
@@ -765,8 +764,8 @@ public:
 		dnet_current_time(&time);
 		const std::string time_str = boost::lexical_cast<std::string>(time.tsec);
 
-		if (!meta.token.empty()) {
-			std::string signature = generate_signature(result[0], time_str, meta.token, NULL);
+		if (!acl.token.empty()) {
+			std::string signature = generate_signature(result[0], time_str, acl.token, NULL);
 
 			if (!signature.empty()) {
 				rapidjson::Value signature_value(signature.c_str(),
@@ -799,11 +798,11 @@ template <typename Server>
 class on_redirectable_get : public on_download_info<Server>
 {
 public:
-	virtual void on_lookup_finished(const bucket_meta_raw &meta, const elliptics::sync_lookup_result &result,
+	virtual void on_download_lookup_finished(const bucket_acl &acl, const elliptics::sync_lookup_result &result,
 			const elliptics::error_info &error) {
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "redirect-base: lookup-finished: flags: 0x%lx, error: %s",
-					meta.flags, error.message().c_str());
+			this->log(swarm::SWARM_LOG_ERROR, "redirect-base: lookup-finished: error: %s",
+					error.message().c_str());
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
 		}
@@ -814,11 +813,9 @@ public:
 
 		std::string url;
 
-		this->generate_signature(result[0], time_str, meta.token, &url);
+		this->generate_signature(result[0], time_str, acl.token, &url);
 
-		this->log(swarm::SWARM_LOG_NOTICE, "redirect-base: lookup-finished: url: %s, flags: 0x%lx",
-				url.c_str(), meta.flags);
-
+		this->log(swarm::SWARM_LOG_NOTICE, "redirect-base: lookup-finished: url: %s", url.c_str());
 
 		swarm::http_response reply;
 		reply.set_code(swarm::http_response::moved_temporarily);
@@ -838,23 +835,23 @@ public:
 	}
 
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, swarm::http_response::status_type verdict) {
+			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
 		auto data = elliptics::data_pointer::from_raw(
 			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
 			boost::asio::buffer_size(buffer));
 
 		const auto &query = req.url().query();
 
-		if ((verdict != swarm::http_response::ok) && !meta.noauth_read()) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-					query.to_string().c_str(), meta.flags, verdict);
+		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+					query.to_string().c_str(), verdict);
 
 			this->send_reply(verdict);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-base: checked: url: %s, flags: 0x%lx, verdict: %d",
-				query.to_string().c_str(), meta.flags, verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
+				query.to_string().c_str(), verdict);
 
 		m_offset = query.item_value("offset", 0llu);
 
@@ -867,12 +864,11 @@ public:
 		this->server()->check_cache(key, session);
 
 		session.lookup(m_key).connect(std::bind(
-			&on_buffered_get_base::on_lookup_finished, this->shared_from_this(),
+			&on_buffered_get_base::on_buffered_get_lookup_finished, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));
 	}
 
-	void on_lookup_finished(const elliptics::sync_lookup_result &result, const elliptics::error_info &error)
-	{
+	void on_buffered_get_lookup_finished(const elliptics::sync_lookup_result &result, const elliptics::error_info &error) {
 		if (error) {
 			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: finished-lookup: error: %s", error.message().c_str());
 			if (error.code() == -ENOENT) {
