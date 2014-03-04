@@ -355,11 +355,18 @@ class on_upload_base : public bucket_processing<Server, Stream>
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
+		const auto &query = req.url().query();
+
+		if (!boost::asio::buffer_size(buffer)) {
+			this->log(swarm::SWARM_LOG_ERROR, "upload-base: checked: url: %s, empty data",
+					query.to_string().c_str());
+			this->send_reply(swarm::http_response::bad_request);
+			return;
+		}
+
 		auto data = elliptics::data_pointer::from_raw(
 			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
 			boost::asio::buffer_size(buffer));
-
-		const auto &query = req.url().query();
 
 		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
 			this->log(swarm::SWARM_LOG_ERROR, "upload-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
