@@ -171,9 +171,10 @@ int main(int argc, char *argv[])
 		"  flags: 0x%lx\n"
 		"  maximum record size: %ld\n"
 		"  maximum number of keys: %ld\n"
-		"  metadata stored in the following groups: %s\n",
+		"  metadata %s the following groups: %s\n",
 		meta.key.c_str(), ss.str().c_str(), data_groups_str.c_str(), meta.flags,
-		meta.max_size, meta.max_key_num, metadata_groups_str.c_str());
+		meta.max_size, meta.max_key_num,
+		vm.count("read") ? "read from" : "stored in", metadata_groups_str.c_str());
 
 	return 0;
 }
