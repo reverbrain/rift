@@ -107,6 +107,11 @@ public:
 			options::exact_match("/echo"),
 			options::methods("GET")
 		);
+
+		on<rift::bucket_ctl::meta_create<example_server>>(
+			options::exact_match("/bucket-meta-create"),
+			options::methods("POST")
+		);
 	
 		return true;
 	}

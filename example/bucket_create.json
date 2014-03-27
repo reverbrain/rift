@@ -1,0 +1,24 @@
+{
+	"key": "testns",
+	"groups": [1,2,3,4,5],
+	"acl": [
+		{
+			"user": "John",
+			"token": "secure john token",
+			"flags": 0
+		},
+		{
+			"user": "Mary",
+			"token": "secure mary token",
+			"flags": 1
+		},
+		{
+			"user": "write_access",
+			"token": "secure write-access token",
+			"flags": 2
+		}
+	],
+	"flags": 0,
+	"max-size": 0,
+	"max-key-num": 0
+}

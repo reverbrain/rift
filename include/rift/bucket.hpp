@@ -152,6 +152,137 @@ public:
 			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) = 0;
 };
 
+namespace bucket_ctl {
+template <typename Server, typename Stream>
+class meta_create_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
+{
+public:
+	virtual void on_request(const swarm::http_request &request, const boost::asio::const_buffer &buffer) {
+		const auto &query = request.url().query();
+
+		rapidjson::Document doc;
+		doc.Parse<0>(boost::asio::buffer_cast<const char*>(buffer));
+
+		if (doc.HasParseError()) {
+			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: request parsing error offset: %zd, message: %s",
+					query.to_string().c_str(), doc.GetErrorOffset(), doc.GetParseError());
+			this->send_reply(swarm::http_response::bad_request);
+			return;
+		}
+
+		const char *mandatory_members[] = {"key", "groups", NULL};
+		for (auto ptr = mandatory_members; *ptr != NULL; ++ptr) {
+			if (!doc.HasMember(*ptr)) {
+				this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: request doesn't have '%s' member",
+						query.to_string().c_str(), *ptr);
+				this->send_reply(swarm::http_response::bad_request);
+				return;
+			}
+		}
+
+		bucket_meta_raw meta;
+		meta.key = doc["key"].GetString();
+
+		auto & groups = doc["groups"];
+		if (!groups.IsArray()) {
+			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: 'groups' member is not array",
+					query.to_string().c_str());
+			this->send_reply(swarm::http_response::bad_request);
+		}
+		for (auto it = groups.Begin(); it != groups.End(); ++it) {
+			meta.groups.push_back(it->GetInt());
+		}
+
+		const char *optional_members[] = {"acl", "flags", "max-size", "max-key-num", NULL};
+		for (auto ptr = optional_members; *ptr != NULL; ++ptr) {
+			if (!doc.HasMember(*ptr)) {
+				this->log(swarm::SWARM_LOG_NOTICE, "bucket-meta-create: url: %s: (warning) request doesn't have '%s' member",
+						query.to_string().c_str(), *ptr);
+			}
+		}
+
+		if (doc.HasMember("acl")) {
+			auto & acl_array = doc["acl"];
+			if (!acl_array.IsArray()) {
+				this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: 'acl' member is not array",
+						query.to_string().c_str());
+				this->send_reply(swarm::http_response::bad_request);
+			}
+
+			const char *acl_members[] = {"user", "token", "flags", NULL};
+
+			for (auto it = acl_array.Begin(); it != acl_array.End(); ++it) {
+				if (!it->IsObject()) {
+					this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: %zd'th ACL member array isnt't valid object, but has type %d",
+							query.to_string().c_str(), it - acl_array.Begin(), it->GetType());
+					this->send_reply(swarm::http_response::bad_request);
+					return;
+				}
+
+				auto & acl_obj = *it;
+				for (auto ptr = acl_members; *ptr != NULL; ++ptr) {
+					if (!acl_obj.HasMember(*ptr)) {
+						this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: %zd'th ACL member doesn't contain '%s' member",
+								query.to_string().c_str(), it - acl_array.Begin(), *ptr);
+						this->send_reply(swarm::http_response::bad_request);
+						return;
+					}
+				}
+
+				bucket_acl acl;
+				acl.user = acl_obj["user"].GetString();
+				acl.token = acl_obj["token"].GetString();
+				acl.flags = acl_obj["flags"].GetInt64();
+
+				meta.acl[acl.user] = acl;
+
+				this->log(swarm::SWARM_LOG_DEBUG, "bucket-meta-create: url: %s: found acl '%s:%s:%llx'",
+						query.to_string().c_str(), acl.user.c_str(), acl.token.c_str(), (unsigned long long)acl.flags);
+			}
+		}
+
+		if (doc.HasMember("flags"))
+			meta.flags = doc["flags"].GetInt64();
+		if (doc.HasMember("max-size"))
+			meta.max_size = doc["max-size"].GetInt64();
+		if (doc.HasMember("max-key-num"))
+			meta.max_key_num = doc["max-key-num"].GetInt64();
+
+		elliptics::session session = this->server()->elliptics()->session();
+		session.set_groups(this->server()->elliptics()->metadata_groups());
+		session.set_timeout(this->server()->elliptics()->write_timeout());
+
+		msgpack::sbuffer buf;
+		msgpack::pack(buf, meta);
+
+		try {
+			session.write_data(meta.key, elliptics::data_pointer::copy(buf.data(), buf.size()), 0).connect(
+				std::bind(&meta_create_base::on_write_finished, this->shared_from_this(),
+					std::placeholders::_1, std::placeholders::_2));
+		} catch (const std::exception &e) {
+		}
+	}
+
+	virtual void on_write_finished(const elliptics::sync_write_result &result,
+			const elliptics::error_info &error) {
+		(void) result;
+
+		if (error) {
+			this->send_reply(swarm::http_response::service_unavailable);
+			return;
+		}
+
+		this->send_reply(swarm::http_response::ok);
+	}
+};
+
+template <typename Server>
+class meta_create: public meta_create_base<Server, meta_create<Server>>
+{
+public:
+};
+
+} // namesapce bucket_ctl
 }} // namespace ioremap::rift
 
 namespace msgpack
