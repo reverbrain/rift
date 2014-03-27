@@ -34,11 +34,15 @@ public:
 		doc.Parse<0>(boost::asio::buffer_cast<const char*>(buffer));
 
 		if (doc.HasParseError()) {
+			this->log(swarm::SWARM_LOG_ERROR, "update-base: url: %s: request parsing error offset: %zd, message: %s",
+					query.to_string().c_str(), doc.GetErrorOffset(), doc.GetParseError());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
 
 		if (!doc.HasMember("id") || !doc.HasMember("indexes")) {
+			this->log(swarm::SWARM_LOG_ERROR, "update-base: url: %s: document doesn't contain either 'id' or 'indexes' member",
+					query.to_string().c_str());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
