@@ -16,7 +16,7 @@
         "fork": false,
         "uid": 1000
     },
-    "monitor-port": 20000,
+    "monitor-port": 21000,
     "application": {
         "remotes": [
             "localhost:1025:2"
