@@ -381,9 +381,9 @@ public:
 		(void) buffer;
 
 		m_req = req;
-		m_meta = meta;
+		set_meta(meta);
 
-		m_session.reset(new elliptics::session(this->server()->extract_key(req, meta, m_key)));
+		set_session(this->server()->extract_key(req, meta, m_key));
 		m_session->set_timeout(this->server()->elliptics()->write_timeout());
 
 		this->server()->check_cache(m_key, *m_session);
@@ -397,6 +397,18 @@ public:
 					query.to_string().c_str(), e.what());
 			this->send_reply(swarm::http_response::bad_request);
 		}
+	}
+
+	void set_key(const elliptics::key &key) {
+		m_key = key;
+	}
+
+	void set_meta(const bucket_meta_raw &meta) {
+		m_meta = meta;
+	}
+
+	void set_session(const elliptics::session &session) {
+		m_session.reset(new elliptics::session(session));
 	}
 
 	elliptics::async_write_result write_data(
