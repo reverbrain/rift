@@ -4,6 +4,7 @@
 #include "rift/index.hpp"
 #include "rift/io.hpp"
 #include "rift/list.hpp"
+#include "rift/meta_ctl.hpp"
 #include "rift/server.hpp"
 
 using namespace ioremap;
