@@ -40,30 +40,30 @@ public:
 			return;
 		}
 
-		if (!doc.HasMember("id") || !doc.HasMember("indexes")) {
-			this->log(swarm::SWARM_LOG_ERROR, "update-base: url: %s: document doesn't contain either 'id' or 'indexes' member",
+		if (!doc.HasMember("indexes")) {
+			this->log(swarm::SWARM_LOG_ERROR, "update-base: url: %s: document doesn't contain 'indexes' member",
 					query.to_string().c_str());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
 
-		elliptics::session sess = this->server()->elliptics()->session();
+		elliptics::key key;
+		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta, key);
 
-		std::string id = doc["id"].GetString();
 		std::vector<elliptics::index_entry> indexes_entries;
 
 		elliptics::index_entry entry;
 
 		auto &indexes = doc["indexes"];
 		for (auto it = indexes.MemberBegin(); it != indexes.MemberEnd(); ++it) {
-			sess.transform(it->name.GetString(), entry.index);
+			session.transform(it->name.GetString(), entry.index);
 			entry.data = elliptics::data_pointer::copy(it->value.GetString(),
 					it->value.GetStringLength());
 
 			indexes_entries.push_back(entry);
 		}
 
-		sess.set_indexes(id, indexes_entries)
+		session.set_indexes(key, indexes_entries)
 				.connect(std::bind(&on_update_base::on_update_finished,
 							this->shared_from_this(), std::placeholders::_2));
 	}
@@ -203,7 +203,8 @@ public:
 		if (data.HasMember("view"))
 			m_view = data["view"].GetString();
 
-		elliptics::session sess = this->server()->elliptics()->session();
+		elliptics::key key;
+		m_session.reset(new elliptics::session(this->server()->elliptics()->read_data_session(req, meta, key)));
 
 		const std::string type = data["type"].GetString();
 
@@ -213,18 +214,20 @@ public:
 
 		for (auto it = indexesArray.Begin(); it != indexesArray.End(); ++it) {
 			elliptics::key index = std::string(it->GetString());
-			sess.transform(index);
+			m_session->transform(index);
 
 			indexes.push_back(index.raw_id());
 			m_map[index.raw_id()] = index.to_string();
 		}
 
 		if (type != "and" && type != "or") {
+			this->log(swarm::SWARM_LOG_ERROR, "find-base: checked: url: %s, 'type' field must be 'and' or 'or', not '%s'",
+				query.to_string().c_str(), type.c_str());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
 
-		(type == "and" ? sess.find_all_indexes(indexes) : sess.find_any_indexes(indexes))
+		(type == "and" ? m_session->find_all_indexes(indexes) : m_session->find_any_indexes(indexes))
 				.connect(std::bind(&on_find_base::on_find_finished,
 					this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 	}
@@ -243,8 +246,7 @@ public:
 
 			m_result = result;
 
-			elliptics::session sess = this->server()->elliptics()->session();
-			sess.bulk_read(ids).connect(std::bind(&on_find_base::on_ready_to_parse_indexes,
+			m_session->bulk_read(ids).connect(std::bind(&on_find_base::on_ready_to_parse_indexes,
 					this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 		} else {
 			elliptics::sync_read_result data;
@@ -278,9 +280,12 @@ public:
 		this->send_reply(std::move(reply), std::move(data));
 	}
 
+private:
+	std::unique_ptr<elliptics::session> m_session;
 	elliptics::id_to_name_map_t m_map;
 	std::string m_view;
 	elliptics::sync_find_indexes_result m_result;
+
 };
 
 template <typename Server>

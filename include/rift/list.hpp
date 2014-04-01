@@ -38,26 +38,16 @@ public:
 		this->log(swarm::SWARM_LOG_NOTICE, "list-base: checked: url: %s, original-verdict: %d, passed-no-auth-check",
 				query.to_string().c_str(), verdict);
 
-		auto ns = query.item_value("namespace");
-		if (!ns) {
-			this->log(swarm::SWARM_LOG_ERROR, "list-base: checked: url: %s: there must be a namespace parameter",
-					query.to_string().c_str());
-
-			this->send_reply(swarm::http_response::bad_request);
-			return;
-		}
-
 		this->log(swarm::SWARM_LOG_NOTICE, "list-base: checked: url: %s, verdict: %d",
 				query.to_string().c_str(), verdict);
 
 		(void) buffer;
 
 		elliptics::key key;
-		elliptics::session session = this->server()->extract_key(req, meta, key);
-		session.set_timeout(this->server()->elliptics()->read_timeout());
+		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta, key);
 
 		std::vector<std::string> keys;
-		keys.emplace_back(*ns + ".index");
+		keys.emplace_back(req.url().path_components()[1] + ".index");
 
 		session.find_all_indexes(keys).connect(std::bind(&on_list_base::on_find_finished, this->shared_from_this(),
 					meta, std::placeholders::_1, std::placeholders::_2));

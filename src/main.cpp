@@ -7,6 +7,8 @@
 #include "rift/meta_ctl.hpp"
 #include "rift/server.hpp"
 
+#include <boost/algorithm/string.hpp>
+
 using namespace ioremap;
 
 class example_server : public thevoid::server<example_server>
@@ -17,7 +19,7 @@ public:
 		std::string path;
 	};
 
-	example_server() : m_noauth_allowed(false) {
+	example_server() {
 	}
 
 	~example_server() {
@@ -33,10 +35,6 @@ public:
 
 		m_async.initialize(logger());
 
-		if (config.HasMember("noauth")) {
-			m_noauth_allowed = std::string(config["noauth"].GetString()) == "allowed";
-		}
-
 		if (config.HasMember("cache")) {
 			m_cache = std::make_shared<rift::cache>();
 			if (!m_cache->initialize(config["cache"], m_elliptics.node(), logger(),
@@ -48,8 +46,6 @@ public:
 			m_bucket = std::make_shared<rift::bucket>();
 			if (!m_bucket->initialize(config["bucket"], m_elliptics, &m_async))
 				return false;
-		} else {
-			m_noauth_allowed = true;
 		}
 
 		if (config.HasMember("redirect-port")) {
@@ -65,52 +61,52 @@ public:
 		}
 
 		on<rift::index::on_update<example_server>>(
-			options::exact_match("/update"),
+			options::prefix_match("/update/"),
 			options::methods("POST")
 		);
 		on<rift::index::on_find<example_server>>(
-			options::exact_match("/find"),
+			options::prefix_match("/find/"),
 			options::methods("GET")
 		);
 		on<rift::io::on_redirectable_get<example_server>>(
-			options::exact_match("/redirect"),
+			options::prefix_match("/redirect/"),
 			options::methods("GET")
 		);
 		on<rift::io::on_get<example_server>>(
-			options::exact_match("/get"),
+			options::prefix_match("/get/"),
 			options::methods("GET")
 		);
 		on<rift::io::on_buffered_get<example_server>>(
-			options::exact_match("/get-big"),
+			options::prefix_match("/get-big/"),
 			options::methods("GET")
 		);
 		on<rift::io::on_upload<example_server>>(
-			options::exact_match("/upload"),
+			options::prefix_match("/upload/"),
 			options::methods("POST")
 		);
 		on<rift::io::on_buffered_upload<example_server>>(
-			options::exact_match("/upload-big"),
+			options::prefix_match("/upload-big/"),
 			options::methods("POST")
 		);
 		on<rift::list::on_list<example_server>>(
-			options::exact_match("/list"),
+			options::prefix_match("/list/"),
 			options::methods("GET")
 		);
 		on<rift::io::on_download_info<example_server>>(
-			options::exact_match("/download-info"),
+			options::prefix_match("/download-info/"),
 			options::methods("GET")
 		);
 		on<rift::common::on_ping<example_server>>(
-			options::exact_match("/ping"),
+			options::prefix_match("/ping/"),
 			options::methods("GET")
 		);
 		on<rift::common::on_echo<example_server>>(
-			options::exact_match("/echo"),
-			options::methods("GET")
+			options::prefix_match("/echo/"),
+			options::methods("POST")
 		);
 
 		on<rift::bucket_ctl::meta_create<example_server>>(
-			options::exact_match("/bucket-meta-create"),
+			options::prefix_match("/bucket-meta-create"),
 			options::methods("POST")
 		);
 	
@@ -134,20 +130,22 @@ public:
 		return &m_elliptics;
 	}
 
-	void process(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+	bool process(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const rift::continue_handler_t &continue_handler) const {
-		auto ns = request.url().query().item_value("namespace");
-		if (!ns || !m_bucket) {
-			auto verdict = swarm::http_response::bad_request;
-			if (m_noauth_allowed || !m_bucket)
-				verdict = swarm::http_response::ok;
-
+		if (!m_bucket) {
 			rift::bucket_meta_raw meta;
 			rift::bucket_acl acl;
-			continue_handler(request, buffer, meta, acl, verdict);
+			continue_handler(req, buffer, meta, acl, swarm::http_response::ok);
 		} else {
-			m_bucket->check(*ns, request, buffer, continue_handler);
+			if (!query_ok(req)) {
+				return false;
+			}
+
+			const auto &path_components = req.url().path_components();
+			m_bucket->check(path_components[1], req, buffer, continue_handler);
 		}
+
+		return true;
 	}
 
 	void check_cache(const elliptics::key &key, elliptics::session &sess) const {
@@ -162,41 +160,26 @@ public:
 	}
 
 	bool query_ok(const swarm::http_request &request) const {
-		const auto &query = request.url().query();
+		const auto &path = request.url().path_components();
 
-		if (auto name = query.item_value("name")) {
-			return true;
-		} else if (auto sid = query.item_value("id")) {
-			if (m_noauth_allowed)
-				return true;
+		if (path.size() != 3) {
+			elliptics::throw_error(swarm::http_response::bad_request, "query parser error: path: '%s', "
+					"error: there must be at least 3 '/' symbols in the path",
+					request.url().path().c_str());
 		}
-
-		return false;
+		return true;
 	}
 
-	elliptics::session extract_key(const swarm::http_request &request, const rift::bucket_meta_raw &meta,
-			elliptics::key &key) const {
-		const auto &query = request.url().query();
+	elliptics::session read_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const {
+		auto session = m_elliptics.read_data_session(req, meta, key);
+		check_cache(key, session);
 
-		if (auto name = query.item_value("name")) {
-			key = *name;
-		} else if (auto sid = query.item_value("id")) {
-			struct dnet_id id;
-			memset(&id, 0, sizeof(struct dnet_id));
+		return session;
+	}
 
-			dnet_parse_numeric_id(sid->c_str(), id.id);
-
-			key = id;
-		}
-
-		elliptics::session session = m_elliptics.session();
-
-		if (meta.groups.size() && meta.key.size()) {
-			session.set_namespace(meta.key.c_str(), meta.key.size());
-			session.set_groups(meta.groups);
-		}
-
-		session.transform(key);
+	elliptics::session write_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const {
+		auto session = m_elliptics.write_data_session(req, meta, key);
+		check_cache(key, session);
 
 		return session;
 	}
@@ -208,7 +191,6 @@ private:
 	std::shared_ptr<rift::cache> m_cache;
 	std::shared_ptr<rift::bucket> m_bucket;
 	rift::async_performer m_async;
-	bool m_noauth_allowed;
 };
 
 int main(int argc, char **argv)

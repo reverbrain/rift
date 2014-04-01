@@ -1,4 +1,5 @@
 #include "rift/bucket.hpp"
+#include "rift/server.hpp"
 
 using namespace ioremap;
 using namespace ioremap::rift;

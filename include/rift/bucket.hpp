@@ -6,7 +6,6 @@
 #include "rift/asio.hpp"
 
 #include "rift/auth.hpp"
-#include "rift/server.hpp"
 #include "rift/metadata_updater.hpp"
 
 #include <elliptics/session.hpp>
@@ -120,6 +119,7 @@ class bucket_meta
 				const continue_handler_t &continue_handler, bool uptodate);
 };
 
+class elliptics_base;
 class bucket : public metadata_updater, public std::enable_shared_from_this<bucket>
 {
 	public:
@@ -139,13 +139,15 @@ class bucket_processing : public thevoid::simple_request_stream<Server>, public 
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		if (!this->server()->query_ok(req)) {
-			this->send_reply(swarm::http_response::forbidden);
-			return;
-		}
+		try {
+			this->server()->process(req, buffer, std::bind(&bucket_processing::checked, this->shared_from_this(),
+				std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+		} catch (const std::exception &e) {
+			this->log(swarm::SWARM_LOG_ERROR, "%s: uri: %s, processing error: %s",
+					req.url().path().c_str(), req.url().query().to_string().c_str(), e.what());
 
-		this->server()->process(req, buffer, std::bind(&bucket_processing::checked, this->shared_from_this(),
-			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+			this->send_reply(swarm::http_response::bad_request);
+		}
 	}
 
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,

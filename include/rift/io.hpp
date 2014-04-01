@@ -46,10 +46,7 @@ public:
 		(void) buffer;
 
 		elliptics::key key;
-		elliptics::session session = this->server()->extract_key(req, meta, key);
-		session.set_timeout(this->server()->elliptics()->read_timeout());
-
-		this->server()->check_cache(key, session);
+		elliptics::session session = this->server()->read_data_session_cache(req, meta, key);
 
 		size_t offset = 0;
 		size_t size = 0;
@@ -383,10 +380,7 @@ public:
 		m_req = req;
 		set_meta(meta);
 
-		set_session(this->server()->extract_key(req, meta, m_key));
-		m_session->set_timeout(this->server()->elliptics()->write_timeout());
-
-		this->server()->check_cache(m_key, *m_session);
+		set_session(this->server()->write_data_session_cache(req, meta, m_key));
 
 		try {
 			write_data(req, *m_session, m_key, data).connect(
@@ -417,7 +411,6 @@ public:
 			const elliptics::key &key,
 			const elliptics::data_pointer &data) {
 		const auto &query = req.url().query();
-		sess.set_timeout(this->server()->elliptics()->write_timeout());
 
 		size_t offset = query.item_value("offset", 0llu);
 
@@ -493,14 +486,16 @@ class on_buffered_upload_base : public thevoid::buffered_request_stream<Server>,
 {
 public:
 	virtual void on_request(const swarm::http_request &req) {
-		if (!this->server()->query_ok(req)) {
-			this->send_reply(swarm::http_response::bad_request);
-			return;
-		}
+		try {
+			boost::asio::const_buffer buffer;
+			this->server()->process(req, buffer, std::bind(&on_buffered_upload_base::checked, this->shared_from_this(),
+				std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+		} catch (const std::exception &e) {
+			this->log(swarm::SWARM_LOG_ERROR, "%s: uri: %s, processing error: %s",
+					req.url().path().c_str(), req.url().query().to_string().c_str(), e.what());
 
-		boost::asio::const_buffer buffer;
-		this->server()->process(req, buffer, std::bind(&on_buffered_upload_base::checked, this->shared_from_this(),
-			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+			this->send_reply(swarm::http_response::bad_request);
+		}
 	}
 
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
@@ -528,10 +523,7 @@ public:
 		m_req = req;
 		m_meta = meta;
 
-		m_session.reset(new elliptics::session(this->server()->extract_key(req, meta, m_key)));
-		m_session->set_timeout(this->server()->elliptics()->write_timeout());
-
-		this->server()->check_cache(m_key, *m_session);
+		m_session.reset(new elliptics::session(this->server()->write_data_session_cache(req, m_meta, m_key)));
 
 		m_offset = query.item_value("offset", 0llu);
 		if (auto size = req.headers().content_length())
@@ -616,7 +608,6 @@ public:
 		}
 
 		elliptics::session tmp = *m_session;
-		tmp.set_timeout(this->server()->elliptics()->write_timeout());
 		tmp.set_groups(rem_groups);
 		tmp.remove(m_key);
 
@@ -688,26 +679,23 @@ class on_download_info_base : public bucket_processing<Server, Stream>
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
-		const auto &query = req.url().query();
+		const auto &url = req.url();
 
 		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
-			this->log(swarm::SWARM_LOG_ERROR, "download-info-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-					query.to_string().c_str(), verdict);
+			this->log(swarm::SWARM_LOG_ERROR, "download-info-base: checked: path: %s, url: %s, verdict: %d, did-not-pass-noauth-check",
+					url.path().c_str(), url.query().to_string().c_str(), verdict);
 
 			this->send_reply(verdict);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "download-info-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
-				query.to_string().c_str(), verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "download-info-base: checked: path: %s, url: %s, verdict: %d, passed-noauth-check",
+				url.path().c_str(), url.query().to_string().c_str(), verdict);
 
 		(void) buffer;
 
 		elliptics::key key;
-		elliptics::session session = this->server()->extract_key(req, meta, key);
-		session.set_timeout(this->server()->elliptics()->read_timeout());
-
-		this->server()->check_cache(key, session);
+		elliptics::session session = this->server()->read_data_session_cache(req, meta, key);
 
 		session.lookup(key).connect(std::bind(&on_download_info_base::on_download_lookup_finished,
 					this->shared_from_this(), acl, std::placeholders::_1, std::placeholders::_2));
@@ -876,13 +864,9 @@ public:
 
 		(void) buffer;
 
-		elliptics::key key;
-		elliptics::session session = this->server()->extract_key(req, meta, key);
-		session.set_timeout(this->server()->elliptics()->read_timeout());
+		m_session.reset(new elliptics::session(this->server()->read_data_session_cache(req, meta, m_key)));
 
-		this->server()->check_cache(key, session);
-
-		session.lookup(m_key).connect(std::bind(
+		m_session->lookup(m_key).connect(std::bind(
 			&on_buffered_get_base::on_buffered_get_lookup_finished, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));
 	}
@@ -901,7 +885,7 @@ public:
 
 		const elliptics::lookup_result_entry &entry = result[0];
 		m_size = entry.file_info()->size;
-		if (m_size > m_offset) {
+		if (m_size <= m_offset) {
 			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: finished-lookup: requested offset is too big: offset: %llu, file-size: %llu",
 					(unsigned long long)m_offset, (unsigned long long)m_size);
 
@@ -978,15 +962,13 @@ public:
 		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: read-next: offset: %llu, size: %llu",
 				(unsigned long long)offset, (unsigned long long)m_size);
 
-		elliptics::session session = this->server()->elliptics()->session();
-		session.set_timeout(this->server()->elliptics()->read_timeout());
-
-		session.read_data(m_key, offset, std::min(m_size - offset, m_buffer_size)).connect(std::bind(
+		m_session->read_data(m_key, offset, std::min(m_size - offset, m_buffer_size)).connect(std::bind(
 			&on_buffered_get_base::on_read_finished, this->shared_from_this(),
 			offset, std::placeholders::_1, std::placeholders::_2));
 	}
 
 protected:
+	std::unique_ptr<elliptics::session> m_session;
 	elliptics::key m_key;
 	uint64_t m_size;
 	uint64_t m_buffer_size;

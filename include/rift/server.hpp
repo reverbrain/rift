@@ -4,6 +4,7 @@
 // must be the first, since thevoid internally uses X->boost::buffer conversion,
 // which must be present at compile time
 #include "rift/asio.hpp"
+#include "rift/bucket.hpp"
 #include "rift/logger.hpp"
 
 #include <thevoid/server.hpp>
@@ -47,24 +48,49 @@ public:
 		return *m_node;
 	}
 
-	elliptics::session session() const {
-		return m_session->clone();
+	elliptics::session read_data_session(const swarm::http_request &req, const bucket_meta_raw &meta, elliptics::key &key) const {
+		const auto &path = req.url().path_components();
+
+		auto session = m_session->clone();
+		session.set_timeout(m_read_timeout);
+		if (meta.key.size() && meta.groups.size()) {
+			session.set_namespace(meta.key.c_str(), meta.key.size());
+			session.set_groups(meta.groups);
+		}
+
+		key = elliptics::key(path[2]);
+		session.transform(key);
+
+		return session;
 	}
 
-	std::vector<int> metadata_groups() const {
-		return m_metadata_groups;
+	elliptics::session write_data_session(const swarm::http_request &req, const bucket_meta_raw &meta, elliptics::key &key) const {
+		auto session = read_data_session(req, meta, key);
+		session.set_timeout(m_write_timeout);
+
+		return session;
+	}
+
+	elliptics::session read_metadata_session(const swarm::http_request &req, const bucket_meta_raw &meta, elliptics::key &key) const {
+		auto session = read_data_session(req, meta, key);
+		session.set_groups(m_metadata_groups);
+
+		return session;
+	}
+
+	elliptics::session write_metadata_session(const swarm::http_request &req, const bucket_meta_raw &meta, elliptics::key &key) const {
+		auto session = write_data_session(req, meta, key);
+		session.set_groups(m_metadata_groups);
+
+		return session;
 	}
 
 	swarm::logger logger() const {
 		return m_logger;
 	}
 
-	long read_timeout(void) const {
-		return m_read_timeout;
-	}
-
-	long write_timeout(void) const {
-		return m_write_timeout;
+	const std::vector<int> metadata_groups(void) const {
+		return m_metadata_groups;
 	}
 
 protected:

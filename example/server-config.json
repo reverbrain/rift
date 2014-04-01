@@ -28,13 +28,14 @@
             1,2
         ],
         "cache": {
-            "name": "cache"
+            "name": "cache",
+	    "timeout": 60
         },
-        "bucket": {
+        "bucket1": {
+		"timeout": 60
         },
 	"read-timeout": 10,
 	"write-timeout": 16,
-	"noauth" : "forbidden",
         "XXX-redirect-port": 8080
     }
 }

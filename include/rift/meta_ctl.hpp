@@ -10,15 +10,14 @@ template <typename Server>
 class meta_create : public io::on_upload<Server>
 {
 public:
-	virtual void on_request(const swarm::http_request &request, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		bucket_meta_raw meta;
 
 		try {
-			parse_request(request, buffer, meta);
+			parse_request(req, buffer, meta);
 
-			elliptics::session session = this->server()->elliptics()->session();
-			session.set_groups(this->server()->elliptics()->metadata_groups());
-			session.set_timeout(this->server()->elliptics()->write_timeout());
+			elliptics::key key;
+			elliptics::session session = this->server()->elliptics()->write_metadata_session(req, meta, key);
 
 			msgpack::sbuffer buf;
 			msgpack::pack(buf, meta);

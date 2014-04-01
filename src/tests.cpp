@@ -118,20 +118,20 @@ struct data_container
 #define RIFT_TEST_CASE(M, C...) do { framework::master_test_suite().add(BOOST_TEST_CASE(std::bind( M, ##C ))); } while (false)
 #define RIFT_TEST_CASE_NOARGS(M) do { framework::master_test_suite().add(BOOST_TEST_CASE(std::bind( M ))); } while (false)
 
-static swarm::url create_url(const std::string &path, std::initializer_list<std::pair<std::string, std::string>> query)
+static swarm::url create_url(const std::string &base_path, const std::string &key, std::initializer_list<std::pair<std::string, std::string>> query)
 {
 	swarm::url url = helper->base_url;
+	std::string path = base_path + "/" + helper->bucket_name + "/" + key;
 	url.set_path(path);
 	for (auto it = query.begin(); it != query.end(); ++it)
 		url.query().add_item(it->first, it->second);
-	url.query().add_item("namespace", helper->bucket_name);
 	return url;
 }
 
 void test_ping()
 {
 	swarm::url_fetcher::request request;
-	request.set_url(create_url("/ping", {}));
+	request.set_url(create_url("/ping", "", {}));
 
 	response_data response = helper->get(std::move(request));
 	BOOST_REQUIRE_MESSAGE(!response.error, response.error.message());
@@ -141,7 +141,7 @@ void test_ping()
 void test_echo()
 {
 	swarm::url_fetcher::request request;
-	request.set_url(create_url("/echo", {}));
+	request.set_url(create_url("/echo", "", {}));
 	request.headers().add({ "X-UNIQUE-HEADER", "some-value"});
 
 	response_data response = helper->get(std::move(request));
@@ -154,9 +154,7 @@ void test_echo()
 void test_upload(const std::string &name, const std::string &data)
 {
 	swarm::url_fetcher::request request;
-	request.set_url(create_url("/upload", {
-		{ "name", name }
-	}));
+	request.set_url(create_url("/upload", name, {}));
 
 	response_data response = helper->post(std::move(request), std::string(data));
 	BOOST_REQUIRE_MESSAGE(!response.error, response.error.message());
@@ -166,9 +164,7 @@ void test_upload(const std::string &name, const std::string &data)
 void test_get(const std::string &name, const std::string &data)
 {
 	swarm::url_fetcher::request request;
-	request.set_url(create_url("/get", {
-		{ "name", name }
-	}));
+	request.set_url(create_url("/get", name, {}));
 
 	response_data response = helper->get(std::move(request));
 	BOOST_REQUIRE_MESSAGE(!response.error, response.error.message());
@@ -179,9 +175,7 @@ void test_get(const std::string &name, const std::string &data)
 void test_download_info(const std::string &name, const std::string &data)
 {
 	swarm::url_fetcher::request request;
-	request.set_url(create_url("/download-info", {
-		{ "name", name }
-	}));
+	request.set_url(create_url("/download-info", name, {}));
 
 	response_data response = helper->get(std::move(request));
 	BOOST_REQUIRE_MESSAGE(!response.error, response.error.message());
