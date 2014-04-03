@@ -54,16 +54,16 @@ public:
 		try {
 			offset = query.item_value("offset", 0llu);
 			size = query.item_value("size", 0llu);
+
+			session.read_data(key, offset, size).connect(std::bind(
+				&on_get_base::on_read_finished, this->shared_from_this(),
+					std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
 			this->log(swarm::SWARM_LOG_ERROR, "get-base: checked: url: %s "
-					"invalid size/offset cast: %s", query.to_string().c_str(), e.what());
+					"could not read data: %s", query.to_string().c_str(), e.what());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
-
-		session.read_data(key, offset, size).connect(std::bind(
-			&on_get_base::on_read_finished, this->shared_from_this(),
-				std::placeholders::_1, std::placeholders::_2));
 	}
 
 	virtual void on_read_finished(const elliptics::sync_read_result &result,
