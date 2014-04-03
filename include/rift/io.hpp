@@ -807,7 +807,10 @@ class on_redirectable_get : public on_download_info<Server>
 public:
 	virtual void on_download_lookup_finished(const bucket_acl &acl, const elliptics::sync_lookup_result &result,
 			const elliptics::error_info &error) {
-		if (error) {
+		if (error.code() == -ENOENT) {
+			this->send_reply(swarm::http_response::not_found);
+			return;
+		} else if (error) {
 			this->log(swarm::SWARM_LOG_ERROR, "redirect-base: lookup-finished: error: %s",
 					error.message().c_str());
 			this->send_reply(swarm::http_response::service_unavailable);
