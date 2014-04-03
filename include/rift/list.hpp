@@ -47,7 +47,7 @@ public:
 		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta, key);
 
 		std::vector<std::string> keys;
-		keys.emplace_back(req.url().path_components()[1] + ".index");
+		keys.emplace_back(meta.key + ".index");
 
 		session.find_all_indexes(keys).connect(std::bind(&on_list_base::on_find_finished, this->shared_from_this(),
 					meta, std::placeholders::_1, std::placeholders::_2));

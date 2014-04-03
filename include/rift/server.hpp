@@ -49,8 +49,6 @@ public:
 	}
 
 	elliptics::session read_data_session(const swarm::http_request &req, const bucket_meta_raw &meta, elliptics::key &key) const {
-		const auto &path = req.url().path_components();
-
 		auto session = m_session->clone();
 		session.set_timeout(m_read_timeout);
 
@@ -65,8 +63,8 @@ public:
 		session.set_ioflags(ioflags);
 		session.set_cflags(cflags);
 
-		size_t prefix_size = 1 + path[0].size() + 1 + path[1].size() + 1;
-
+		const auto &path = req.url().path_components();
+		size_t prefix_size = 1 + path[0].size() + 1;
 		key = elliptics::key(req.url().path().substr(prefix_size));
 		session.transform(key);
 

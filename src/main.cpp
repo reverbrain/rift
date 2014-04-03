@@ -141,8 +141,9 @@ public:
 				return false;
 			}
 
-			const auto &path_components = req.url().path_components();
-			m_bucket->check(path_components[1], req, buffer, continue_handler);
+			const auto &query = req.url().query();
+			auto bucket = query.item_value("bucket");
+			m_bucket->check(bucket.get(), req, buffer, continue_handler);
 		}
 
 		return true;
@@ -161,12 +162,23 @@ public:
 
 	bool query_ok(const swarm::http_request &request) const {
 		const auto &path = request.url().path_components();
-
-		if (path.size() != 3) {
-			elliptics::throw_error(swarm::http_response::bad_request, "query parser error: path: '%s', "
-					"error: there must be at least 3 '/' symbols in the path",
-					request.url().path().c_str());
+		if (path.size() < 2) {
+			elliptics::throw_error(swarm::http_response::bad_request, "query parser error: path: '%s/%s', "
+				"error: path must have at least 2 '/'-separated components",
+				request.url().path().c_str(), request.url().query().to_string().c_str());
 		}
+
+		const auto &query = request.url().query();
+
+		if (m_bucket) {
+			auto ns = query.item_value("bucket");
+			if (!ns) {
+				elliptics::throw_error(swarm::http_response::bad_request, "query parser error: path: '%s/%s', "
+					"error: there is no bucket parameter and buckets are turned on in config",
+					request.url().path().c_str(), request.url().query().to_string().c_str());
+			}
+		}
+
 		return true;
 	}
 
