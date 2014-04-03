@@ -22,7 +22,7 @@
             "localhost:1025:2"
         ],
         "groups": [
-            3,4
+            3,4,2
         ],
         "metadata-groups": [
             1,2
