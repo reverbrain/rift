@@ -53,12 +53,21 @@ public:
 
 		auto session = m_session->clone();
 		session.set_timeout(m_read_timeout);
+
 		if (meta.key.size() && meta.groups.size()) {
 			session.set_namespace(meta.key.c_str(), meta.key.size());
 			session.set_groups(meta.groups);
 		}
 
-		key = elliptics::key(path[2]);
+		const auto &query = req.url().query();
+		uint32_t ioflags = query.item_value("ioflags", 0u);
+		uint64_t cflags = query.item_value("cflags", 0llu);
+		session.set_ioflags(ioflags);
+		session.set_cflags(cflags);
+
+		size_t prefix_size = 1 + path[0].size() + 1 + path[1].size() + 1;
+
+		key = elliptics::key(req.url().path().substr(prefix_size));
 		session.transform(key);
 
 		return session;
