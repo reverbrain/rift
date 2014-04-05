@@ -101,6 +101,9 @@ class bucket_meta
 		void update(void);
 		void update_and_check(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
 				const continue_handler_t &continue_handler);
+
+		static swarm::http_response::status_type verdict(const swarm::logger &logger, const bucket_meta_raw &meta,
+				const swarm::http_request &request, bucket_acl &acl);
 	private:
 		std::mutex m_lock;
 		bucket_meta_raw m_raw;
@@ -112,8 +115,6 @@ class bucket_meta
 		void update_and_check_completed(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
 				const continue_handler_t &continue_handler, const ioremap::elliptics::sync_read_result &result,
 				const ioremap::elliptics::error_info &error);
-
-		swarm::http_response::status_type verdict(const swarm::http_request &request, bucket_acl &acl);
 
 		void check_and_run_raw(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
 				const continue_handler_t &continue_handler, bool uptodate);
