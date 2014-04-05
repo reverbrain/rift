@@ -106,7 +106,12 @@ public:
 		);
 
 		on<rift::bucket_ctl::meta_create<example_server>>(
-			options::prefix_match("/bucket-meta-create"),
+			options::prefix_match("/update-bucket-directory/"),
+			options::methods("POST")
+		);
+
+		on<rift::bucket_ctl::meta_create<example_server>>(
+			options::prefix_match("/update-bucket/"),
 			options::methods("POST")
 		);
 	
