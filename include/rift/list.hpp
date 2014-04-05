@@ -35,16 +35,13 @@ public:
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "list-base: checked: url: %s, original-verdict: %d, passed-no-auth-check",
-				query.to_string().c_str(), verdict);
-
-		this->log(swarm::SWARM_LOG_NOTICE, "list-base: checked: url: %s, verdict: %d",
-				query.to_string().c_str(), verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "list-base: checked: url: %s, verdict: %d, listing: %s, passed-no-auth-check",
+				query.to_string().c_str(), verdict, meta.key.c_str());
 
 		(void) buffer;
 
-		elliptics::key key;
-		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta, key);
+		elliptics::key unused;
+		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta, unused);
 
 		std::vector<std::string> keys;
 		keys.emplace_back(meta.key + ".index");
