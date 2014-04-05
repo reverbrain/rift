@@ -10,7 +10,7 @@
     "buffer_size": 65536,
     "logger": {
         "file": "/dev/stderr",
-        "level": 4
+        "level": 3
     },
     "daemon": {
         "fork": false,
@@ -27,11 +27,11 @@
         "metadata-groups": [
             1,2
         ],
-        "cache": {
+        "cache1": {
             "name": "cache",
 	    "timeout": 60
         },
-        "bucket1": {
+        "bucket": {
 		"timeout": 60
         },
 	"read-timeout": 10,
