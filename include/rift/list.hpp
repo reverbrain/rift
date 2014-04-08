@@ -43,6 +43,16 @@ public:
 		elliptics::key unused;
 		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta, unused);
 
+		const auto &pc = req.url().path_components();
+		if (pc.size() >= 1) {
+			if (pc[0] == "list-bucket-directory") {
+				bucket_meta_raw tmp;
+				session = this->server()->elliptics()->read_metadata_session(req, tmp, unused);
+				tmp.key = "bucket";
+				session.set_namespace(tmp.key.c_str(), tmp.key.size());
+			}
+		}
+
 		std::vector<std::string> keys;
 		keys.emplace_back(meta.key + ".index");
 

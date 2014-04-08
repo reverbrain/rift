@@ -1,0 +1,20 @@
+{
+	"key": "mydir",
+	"groups": [1,2,3,4,5],
+	"acl": [
+		{
+			"user": "directory_reader",
+			"token": "secure reader token",
+			"flags": 1
+		},
+		{
+			"user": "directory_writer",
+			"token": "secure reader+writer token",
+			"flags": 3
+		}
+	],
+	"flags": 0,
+	"max-size": 0,
+	"max-key-num": 0
+}
+

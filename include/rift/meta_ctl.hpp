@@ -38,29 +38,37 @@ public:
 		}
 	}
 private:
+	std::string m_meta_namespace;
 	bucket_meta_raw m_meta;
 	std::string m_parent;
 	swarm::http_request m_request;
 
-	std::string meta_key_from_session(const elliptics::key &key) {
-		const auto &pc = m_request.url().path_components();
+	std::string meta_from_key(const swarm::http_request &request, const elliptics::key &key) {
+		const auto &pc = request.url().path_components();
 		if (pc[0] == "update-bucket-directory") {
-			// URL format: /bucket-directory/unused
+			// URL format: /update-bucket-directory/unused
 			return "bucket-directories.1";
 		} else {
-			// URL format: /bucket/bucket-directory-name-with-slashes/like/this
+			// URL format: /update-bucket/bucket-directory-name-with-slashes/like/this
 			return key.remote();
 		}
 	}
 
 	void check_bucket_directory() {
+		// use empty meta - we use metadata groups and empty this hardcoded namespace
+		bucket_meta_raw meta;
+
+		m_meta_namespace = "bucket";
+
 		elliptics::key key;
-		elliptics::session session = this->server()->elliptics()->read_metadata_session(m_request, m_meta, key);
+		elliptics::session session = this->server()->elliptics()->read_metadata_session(m_request, meta, key);
+		session.set_namespace(m_meta_namespace.c_str(), m_meta_namespace.size());
 
-		m_parent = meta_key_from_session(key);
+		// this index will be updated when new bucket or bucket directory has been created
+		m_parent = meta_from_key(m_request, key);
 
-		this->log(swarm::SWARM_LOG_NOTICE, "%s: reading meta key '%s', parent: '%s'",
-				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_parent.c_str());
+		this->log(swarm::SWARM_LOG_NOTICE, "%s: reading meta key '%s', namespace: '%s', parent: '%s'",
+				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_meta_namespace.c_str(), m_parent.c_str());
 
 		session.read_data(m_meta.key, 0, 0).connect(
 				std::bind(&meta_create::check_completion, this->shared_from_this(),
@@ -68,8 +76,8 @@ private:
 	}
 
 	void check_completion(const elliptics::sync_read_result &result, const elliptics::error_info &error) {
-		this->log(swarm::SWARM_LOG_NOTICE, "%s: read meta key '%s', parent: '%s', error-code: %d",
-				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_parent.c_str(), error.code());
+		this->log(swarm::SWARM_LOG_NOTICE, "%s: read meta key '%s', namespace: '%s', parent: '%s', error-code: %d",
+				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_meta_namespace.c_str(), m_parent.c_str(), error.code());
 		if (error.code() == -ENOENT) {
 			// there is no metadata object with given name, just create a new one
 			write_metadata();
@@ -99,8 +107,8 @@ private:
 		bucket_acl acl;
 		auto v = bucket_meta::verdict(this->logger(), read_meta, m_request, acl);
 
-		this->log(swarm::SWARM_LOG_NOTICE, "%s: read meta key '%s', parent: '%s', security verdict: %d",
-				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_parent.c_str(), v);
+		this->log(swarm::SWARM_LOG_NOTICE, "%s: read meta key '%s', namespace: '%s', parent: '%s', security verdict: %d",
+				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_meta_namespace.c_str(), m_parent.c_str(), v);
 
 		if (v != swarm::http_response::ok) {
 			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s, parent: '%s', verdict: %d: read metadata doesn't allow update",
@@ -116,17 +124,21 @@ private:
 	}
 
 	void write_metadata(void) {
+		bucket_meta_raw meta;
+
 		elliptics::key unused;
-		elliptics::session session = this->server()->elliptics()->write_metadata_session(m_request, m_meta, unused);
+		elliptics::session session = this->server()->elliptics()->write_metadata_session(m_request, meta, unused);
+		session.set_namespace(m_meta_namespace.c_str(), m_meta_namespace.size());
 
 		msgpack::sbuffer buf;
 		msgpack::pack(buf, m_meta);
 
 		bucket_meta_raw tmp;
 		tmp.key = m_parent;
+		tmp.groups = session.get_groups();
 
-		this->log(swarm::SWARM_LOG_NOTICE, "%s: write meta key '%s', parent: '%s'",
-				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_parent.c_str());
+		this->log(swarm::SWARM_LOG_NOTICE, "%s: write meta key '%s', namespace: '%s', parent: '%s'",
+				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_meta_namespace.c_str(), m_parent.c_str());
 
 		meta_create::set_meta(tmp);
 		meta_create::set_key(m_meta.key);
@@ -140,8 +152,9 @@ private:
 	void parse_request(const swarm::http_request &request, const boost::asio::const_buffer &buffer, bucket_meta_raw &meta) {
 		const auto &query = request.url().query();
 
+		std::string buf(boost::asio::buffer_cast<const char*>(buffer), boost::asio::buffer_size(buffer));
 		rapidjson::Document doc;
-		doc.Parse<0>(boost::asio::buffer_cast<const char*>(buffer));
+		doc.Parse<0>(buf.c_str());
 
 		if (doc.HasParseError()) {
 			elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: request parsing error offset: %zd, message: %s",

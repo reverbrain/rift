@@ -46,6 +46,8 @@ void bucket_meta::update(void)
 {
 	// metadata_session() clones metadata session
 	elliptics::session sess = m_bucket->metadata_session();
+	std::string ns = "bucket";
+	sess.set_namespace(ns.c_str(), ns.size());
 
 	sess.read_data(m_raw.key, 0, 0).connect(std::bind(&bucket_meta::update_finished, this,
 				std::placeholders::_1, std::placeholders::_2));
@@ -56,6 +58,8 @@ void bucket_meta::update_and_check(const swarm::http_request &request, const boo
 {
 	// metadata_session() clones metadata session
 	elliptics::session sess = m_bucket->metadata_session();
+	std::string ns = "bucket";
+	sess.set_namespace(ns.c_str(), ns.size());
 
 	sess.read_data(m_raw.key, 0, 0).connect(std::bind(&bucket_meta::update_and_check_completed, this,
 				request, buffer, continue_handler, std::placeholders::_1, std::placeholders::_2));
@@ -108,7 +112,7 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 		// noauth check passed
 		verdict = swarm::http_response::ok;
 
-		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: passed total noauth check -> %d",
+		logger.log(swarm::SWARM_LOG_INFO, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: passed total noauth check -> %d",
 				query.to_string().c_str(), meta.key.c_str(), (*user).c_str(), meta.acl.size(), verdict);
 		return verdict;
 	}

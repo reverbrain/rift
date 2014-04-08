@@ -88,10 +88,6 @@ public:
 			options::prefix_match("/upload-big/"),
 			options::methods("POST")
 		);
-		on<rift::list::on_list<example_server>>(
-			options::prefix_match("/list/"),
-			options::methods("GET")
-		);
 		on<rift::io::on_download_info<example_server>>(
 			options::prefix_match("/download-info/"),
 			options::methods("GET")
@@ -109,10 +105,18 @@ public:
 			options::prefix_match("/update-bucket-directory/"),
 			options::methods("POST")
 		);
+		on<rift::list::on_list<example_server>>(
+			options::prefix_match("/list-bucket-directory/"),
+			options::methods("GET")
+		);
 
 		on<rift::bucket_ctl::meta_create<example_server>>(
 			options::prefix_match("/update-bucket/"),
 			options::methods("POST")
+		);
+		on<rift::list::on_list<example_server>>(
+			options::prefix_match("/list-bucket/"),
+			options::methods("GET")
 		);
 	
 		return true;
