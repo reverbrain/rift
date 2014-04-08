@@ -1,10 +1,6 @@
 #ifndef __IOREMAP_RIFT_BUCKET_HPP
 #define __IOREMAP_RIFT_BUCKET_HPP
 
-// must be the first, since thevoid internally uses X->boost::buffer conversion,
-// which must be present at compile time
-#include "rift/asio.hpp"
-
 #include "rift/auth.hpp"
 #include "rift/metadata_updater.hpp"
 

@@ -1,10 +1,6 @@
 #ifndef __IOREMAP_RIFT_ASYNC_HPP
 #define __IOREMAP_RIFT_ASYNC_HPP
 
-// must be the first, since thevoid internally uses X->boost::buffer conversion,
-// which must be present at compile time
-#include "asio.hpp"
-
 #include <boost/thread.hpp>
 #include <swarm/logger.hpp>
 #include <functional>

@@ -1,10 +1,6 @@
 #ifndef IOREMAP_RIFT_METADATA_UPDATER_HPP
 #define IOREMAP_RIFT_METADATA_UPDATER_HPP
 
-// must be the first, since thevoid internally uses X->boost::buffer conversion,
-// which must be present at compile time
-#include "rift/asio.hpp"
-
 #include "async_performer.hpp"
 
 #include <elliptics/session.hpp>

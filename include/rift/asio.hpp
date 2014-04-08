@@ -1,19 +1,18 @@
 #ifndef __IOREMAP_RIFT_ASIO_HPP
 #define __IOREMAP_RIFT_ASIO_HPP
 
-#include <boost/asio.hpp>
-#include <elliptics/session.hpp>
+#include <thevoid/stream.hpp>
+#include <elliptics/utils.hpp>
 
-// must be the first header, since thevoid internally uses X->boost::buffer conversion,
-// which must be present at compile time
-
-namespace boost { namespace asio {
-
-inline const_buffer buffer(const ioremap::elliptics::data_pointer &data)
+namespace ioremap { namespace thevoid {
+template <>
+struct buffer_traits<elliptics::data_pointer>
 {
-	return buffer(data.data(), data.size());
-}
-
-}}
+	static boost::asio::const_buffer convert(const elliptics::data_pointer &data)
+	{
+		return boost::asio::const_buffer(data.data(), data.size());
+	}
+};
+}} // namespace ioremap::thevoid
 
 #endif /* __IOREMAP_RIFT_ASIO_HPP */

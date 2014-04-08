@@ -1,10 +1,6 @@
 #ifndef __IOREMAP_RIFT_IO_HPP
 #define __IOREMAP_RIFT_IO_HPP
 
-// must be the first, since thevoid internally uses X->boost::buffer conversion,
-// which must be present at compile time
-#include "rift/asio.hpp"
-
 #include "rift/jsonvalue.hpp"
 #include "rift/bucket.hpp"
 
@@ -13,6 +9,8 @@
 
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
+
+#include "asio.hpp"
 
 namespace ioremap { namespace rift { namespace io {
 
