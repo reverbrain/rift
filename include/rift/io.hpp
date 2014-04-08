@@ -1,10 +1,6 @@
 #ifndef __IOREMAP_RIFT_IO_HPP
 #define __IOREMAP_RIFT_IO_HPP
 
-// must be the first, since thevoid internally uses X->boost::buffer conversion,
-// which must be present at compile time
-#include "rift/asio.hpp"
-
 #include "rift/jsonvalue.hpp"
 #include "rift/bucket.hpp"
 
@@ -13,6 +9,8 @@
 
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
+
+#include "asio.hpp"
 
 namespace ioremap { namespace rift { namespace io {
 
@@ -702,7 +700,7 @@ public:
 	}
 
 	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time,
-			const std::string &token, std::string *url_ptr) {
+			const std::string &token, std::string *url_ptr, swarm::http_response::status_type *type) {
 		if (token.empty() && !url_ptr)
 			return std::string();
 
@@ -716,40 +714,49 @@ public:
 		 *
 		 * Time is figured in the signature because of we don't want anybody else to
 		 * have access to non-their files in case of defragmentation/MiTM and so on.
+		 *
+		 * path: /var/blob/s1/data-0.1
+		 * scheme://hostname/blob/s1/data-0.1:offset:size?time=unix-timestamp&signature=resultOfHmac
+		 * Signature is HMAC(url, token)
 		 */
-		swarm::url url = this->server()->generate_url_base(entry.address());
+		swarm::url url = this->server()->generate_url_base(entry.address(), entry.file_path(), type);
+		if (swarm::http_response::http_response::ok != *type)
+			return std::string();
+
 		swarm::url_query &query = url.query();
-		query.add_item("file-path", entry.file_path());
-		query.add_item("offset", boost::lexical_cast<std::string>(info->offset));
-		query.add_item("size", boost::lexical_cast<std::string>(info->size));
 		query.add_item("time", time);
 
-		if (!token.empty())
-			query.add_item("token", token);
+		std::string path = entry.file_path();
+		path += ":";
+		path += boost::lexical_cast<std::string>(info->offset);
+		path += ":";
+		path += boost::lexical_cast<std::string>(info->size);
 
-		url.set_query(query);
+		url.set_path(path);
 
-		auto sign_input = url.to_string();
-
-		if (url_ptr) {
-			*url_ptr = std::move(sign_input);
-			return std::string();
-		}
+		if (url_ptr && token.empty())
+			*url_ptr = url.to_string();
 
 		if (token.empty())
 			return std::string();
 
+		url.set_scheme("scheme");
+		const std::string message = url.to_string();
+
 		dnet_raw_id signature_id;
-		dnet_transform_node(this->server()->elliptics()->node().get_native(),
-					sign_input.c_str(), sign_input.size(),
-					signature_id.id, sizeof(signature_id.id));
+		dnet_digest_auth_transform_raw(message.c_str(), message.size(),
+			token.c_str(), token.size(),
+			signature_id.id, sizeof(signature_id.id));
 
 		char signature_str[2 * DNET_ID_SIZE + 1];
 		dnet_dump_id_len_raw(signature_id.id, DNET_ID_SIZE, signature_str);
 
-		const std::string signature(signature_str, 2 * DNET_ID_SIZE);
+		std::string signature(signature_str, 2 * DNET_ID_SIZE);
 
-		url.query().add_item("signature", signature);
+		if (url_ptr) {
+			query.add_item("signature", signature);
+			*url_ptr = url.to_string();
+		}
 
 		return std::move(signature);
 	}
@@ -772,7 +779,15 @@ public:
 		const std::string time_str = boost::lexical_cast<std::string>(time.tsec);
 
 		if (!acl.token.empty()) {
-			std::string signature = generate_signature(result[0], time_str, acl.token, NULL);
+			swarm::http_response::status_type status = swarm::http_response::ok;
+			std::string signature = generate_signature(result[0], time_str, acl.token, NULL, &status);
+			if (status != swarm::http_response::ok) {
+				this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
+						error.message().c_str());
+
+				this->send_reply(status);
+				return;
+			}
 
 			if (!signature.empty()) {
 				rapidjson::Value signature_value(signature.c_str(),
@@ -823,7 +838,15 @@ public:
 
 		std::string url;
 
-		this->generate_signature(result[0], time_str, acl.token, &url);
+		swarm::http_response::status_type status = swarm::http_response::ok;
+		this->generate_signature(result[0], time_str, acl.token, &url, &status);
+		if (status != swarm::http_response::ok) {
+			this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
+					error.message().c_str());
+
+			this->send_reply(status);
+			return;
+		}
 
 		this->log(swarm::SWARM_LOG_NOTICE, "redirect-base: lookup-finished: url: %s", url.c_str());
 
@@ -943,12 +966,11 @@ public:
 			auto second_part = file.slice(first_part.size(), file.size() - first_part.size());
 
 			this->send_data(std::move(first_part), std::bind(&on_buffered_get_base::on_part_sent,
-						this->shared_from_this(), offset + file.size(), std::placeholders::_1));
-			this->send_data(std::move(second_part), std::function<void (const boost::system::error_code &)>());
+						this->shared_from_this(), offset + file.size(), std::placeholders::_1, second_part));
 		}
 	}
 
-	virtual void on_part_sent(size_t offset, const boost::system::error_code &error)
+	virtual void on_part_sent(size_t offset, const boost::system::error_code &error, const elliptics::data_pointer &second_part)
 	{
 		if (error) {
 			this->log(swarm::SWARM_LOG_ERROR, "buffered-get-redirect: finished-part: error: %s, offset: %llu, size: %llu",
@@ -957,6 +979,7 @@ public:
 			this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: finished-part: offset: %llu, size: %llu",
 					(unsigned long long)offset, (unsigned long long)m_size);
 		}
+		this->send_data(elliptics::data_pointer(second_part), std::function<void (const boost::system::error_code &)>());
 		read_next(offset);
 	}
 

@@ -1,9 +1,6 @@
 #ifndef __IOREMAP_RIFT_SERVER_HPP
 #define __IOREMAP_RIFT_SERVER_HPP
 
-// must be the first, since thevoid internally uses X->boost::buffer conversion,
-// which must be present at compile time
-#include "rift/asio.hpp"
 #include "rift/bucket.hpp"
 #include "rift/logger.hpp"
 

@@ -1,4 +1,5 @@
 #include "rift/auth.hpp"
+#include <elliptics/interface.h>
 
 namespace ioremap {
 namespace rift {

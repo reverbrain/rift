@@ -1,12 +1,9 @@
 #ifndef __IOREMAP_RIFT_SIGNATURE_HPP
 #define __IOREMAP_RIFT_SIGNATURE_HPP
 
-// must be the first, since thevoid internally uses X->boost::buffer conversion,
-// which must be present at compile time
-#include "rift/asio.hpp"
-
 #include <thevoid/server.hpp>
 #include <swarm/logger.hpp>
+#include <elliptics/session.hpp>
 
 namespace ioremap {
 namespace rift {
