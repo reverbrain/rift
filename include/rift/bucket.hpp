@@ -61,6 +61,8 @@ struct bucket_acl {
 	bucket_acl() : flags(0ULL) {}
 };
 
+#define RIFT_BUCKET_META_NO_INDEX_UPDATE	(1<<0)	// do not generate bucket index
+
 struct bucket_meta_raw {
 	enum {
 		serialization_version = 1,

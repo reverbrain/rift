@@ -300,6 +300,15 @@ public:
 	static void upload_update_indexes(const elliptics::session &data_session, const bucket_meta_raw &meta,
 			const elliptics::key &key, const elliptics::sync_write_result &write_result,
 			const upload_completion_callback_t &callback) {
+		rift::JsonValue result_object;
+		upload_completion::fill_upload_reply(write_result, result_object, result_object.GetAllocator());
+
+		if (meta.flags & RIFT_BUCKET_META_NO_INDEX_UPDATE) {
+			auto data = result_object.ToString();
+			callback(swarm::http_response::ok, data);
+			return;
+		}
+
 		std::vector<std::string> indexes;
 		indexes.push_back(meta.key + ".index");
 
@@ -321,10 +330,10 @@ public:
 
 		session.update_indexes(key, indexes, datas).connect(
 			std::bind(&upload_completion::on_index_update_finished,
-				write_result, callback, std::placeholders::_1, std::placeholders::_2));
+				result_object, callback, std::placeholders::_1, std::placeholders::_2));
 	}
 
-	static void on_index_update_finished(const elliptics::sync_write_result &write_result,
+	static void on_index_update_finished(const rift::JsonValue result_object,
 			const upload_completion_callback_t &callback,
 			const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error) {
 		(void) result;
@@ -334,11 +343,10 @@ public:
 			return;
 		}
 
-		rift::JsonValue result_object;
-		upload_completion::fill_upload_reply(write_result, result_object, result_object.GetAllocator());
+		// Here we could update result Json object and put index data there
+		// But we don't
 
 		auto data = result_object.ToString();
-
 		callback(swarm::http_response::ok, data);
 	}
 };

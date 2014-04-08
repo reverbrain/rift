@@ -169,6 +169,7 @@ public:
 			const rift::continue_handler_t &continue_handler) const {
 		if (!m_bucket) {
 			rift::bucket_meta_raw meta;
+			meta.flags = RIFT_BUCKET_META_NO_INDEX_UPDATE;
 			rift::bucket_acl acl;
 			continue_handler(req, buffer, meta, acl, swarm::http_response::ok);
 		} else {
