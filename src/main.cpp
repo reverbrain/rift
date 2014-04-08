@@ -54,6 +54,12 @@ public:
 			m_redirect_port = -1;
 		}
 
+		if (config.HasMember("use-hostname")) {
+			m_use_hostname = config["use-hostname"].GetBool();
+		} else {
+			m_use_hostname = false;
+		}
+
 		if (config.HasMember("https")) {
 			m_secured_http = config["https"].GetBool();
 		} else {
@@ -118,14 +124,34 @@ public:
 		return true;
 	}
 
-	swarm::url generate_url_base(dnet_addr *addr) {
+	swarm::url generate_url_base(dnet_addr *addr, const std::string &path, swarm::http_response::status_type *type) {
 		char buffer[128];
 
 		swarm::url url;
 		url.set_scheme(m_secured_http ? "https" : "http");
-		url.set_host(dnet_server_convert_dnet_addr_raw(addr, buffer, sizeof(buffer)));
+
+		if (m_use_hostname) {
+			char buffer[NI_MAXHOST];
+			int err = getnameinfo(reinterpret_cast<sockaddr *>(addr), addr->addr_len, buffer, sizeof(buffer), nullptr, 0, 0);
+			if (err == 0) {
+				url.set_host(buffer);
+			} else {
+				*type = swarm::http_response::internal_server_error;
+			}
+		} else {
+			url.set_host(dnet_server_convert_dnet_addr_raw(addr, buffer, sizeof(buffer)));
+		}
+
 		if (m_redirect_port > 0) {
 			url.set_port(m_redirect_port);
+		}
+
+		if (m_path_prefix.empty()) {
+			url.set_path(path);
+		} else if (path.compare(0, m_path_prefix.size(), m_path_prefix) == 0) {
+			url.set_path(path.substr(m_path_prefix.size()));
+		} else {
+			*type = swarm::http_response::forbidden;
 		}
 
 		return std::move(url);
@@ -204,6 +230,8 @@ public:
 private:
 	int m_redirect_port;
 	bool m_secured_http;
+	bool m_use_hostname;
+	std::string m_path_prefix;
 	rift::elliptics_base m_elliptics;
 	std::shared_ptr<rift::cache> m_cache;
 	std::shared_ptr<rift::bucket> m_bucket;

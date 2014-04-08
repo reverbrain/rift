@@ -7,6 +7,7 @@
 
 #include <thevoid/server.hpp>
 #include <swarm/logger.hpp>
+#include <elliptics/session.hpp>
 
 namespace ioremap {
 namespace rift {
