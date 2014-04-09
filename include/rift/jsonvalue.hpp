@@ -66,7 +66,7 @@ public:
 		obj.AddMember("time-raw", tobj_raw, alloc);
 	}
 
-	std::string ToString() {
+	std::string ToString() const {
 		rapidjson::StringBuffer buffer;
 		rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
 
