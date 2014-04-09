@@ -256,8 +256,11 @@ public:
 		rapidjson::Value csum_str_value(csum_str, 2 * DNET_ID_SIZE, allocator);
 		result_object.AddMember("csum", csum_str_value, allocator);
 
-		if (entry.file_path())
-			result_object.AddMember("filename", entry.file_path(), allocator);
+		if (entry.file_path()) {
+			// copy filename without trailing 0-byte
+			rapidjson::Value filename_value(entry.file_path(), entry.file_info()->flen - 1, allocator);
+			result_object.AddMember("filename", filename_value, allocator);
+		}
 
 		result_object.AddMember("size", entry.file_info()->size, allocator);
 		result_object.AddMember("offset-within-data-file", entry.file_info()->offset,
