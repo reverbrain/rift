@@ -121,6 +121,10 @@ public:
 			options::prefix_match("/list-bucket-directory/"),
 			options::methods("GET")
 		);
+		on<rift::bucket_ctl::on_delete<example_server>>(
+			options::prefix_match("/delete-bucket-directory/"),
+			options::methods("POST")
+		);
 
 		on<rift::bucket_ctl::meta_create<example_server>>(
 			options::prefix_match("/update-bucket/"),
@@ -129,6 +133,10 @@ public:
 		on<rift::list::on_list<example_server>>(
 			options::prefix_match("/list-bucket/"),
 			options::methods("GET")
+		);
+		on<rift::bucket_ctl::on_delete<example_server>>(
+			options::prefix_match("/delete-bucket/"),
+			options::methods("POST")
 		);
 	
 		return true;

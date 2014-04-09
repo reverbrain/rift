@@ -240,6 +240,64 @@ class meta_create1: public io::on_upload<Server>
 public:
 };
 
+// remove bucket and all objects within
+template <typename Server, typename Stream>
+class on_delete_base : public bucket_processing<Server, Stream>
+{
+public:
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
+			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
+		const auto &query = req.url().query();
+
+		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
+			this->log(swarm::SWARM_LOG_ERROR, "delete-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+					query.to_string().c_str(), verdict);
+
+			this->send_reply(verdict);
+			return;
+		}
+
+		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, verdict: %d, listing: %s, passed-no-auth-check",
+				query.to_string().c_str(), verdict, meta.key.c_str());
+
+		(void) buffer;
+
+		elliptics::key unused;
+		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta, unused);
+
+		const auto &pc = req.url().path_components();
+		if (pc.size() >= 1) {
+			if (pc[0] == "delete-bucket-directory") {
+				bucket_meta_raw tmp;
+				session = this->server()->elliptics()->read_metadata_session(req, tmp, unused);
+				tmp.key = "bucket";
+				session.set_namespace(tmp.key.c_str(), tmp.key.size());
+			}
+		}
+
+		session.remove_index(meta.key + ".index", true).connect(std::bind(&on_delete_base::on_delete_finished, this->shared_from_this(),
+					std::placeholders::_1, std::placeholders::_2));
+		session.remove(meta.key);
+	}
+
+	virtual void on_delete_finished(const elliptics::sync_generic_result &result, const elliptics::error_info &error) {
+		(void) result;
+
+		if (error.code() == -ENOENT) {
+			this->send_reply(swarm::http_response::not_found);
+		} else if (error) {
+			this->send_reply(swarm::http_response::bad_request);
+		}
+		this->send_reply(swarm::http_response::ok);
+	}
+};
+
+template <typename Server>
+class on_delete : public on_delete_base<Server, on_delete<Server>>
+{
+public:
+};
+
 }}} // namespace ioremap::rift::bucket_ctl
 
 #endif /* __IOREMAP_RIFT_BUCKET_CTL_HPP */
