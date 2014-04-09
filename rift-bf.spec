@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.6.12
+Version:	2.25.0.7.0
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -69,6 +69,13 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Thu Apr 10 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.7.0
+- bucket: added create/remove API
+- bucket: added bucket directory support - directory may contain multiple buckets
+- io: added object remove API
+- api: changed URL format
+- major set of cleanup commits
+
 * Tue Feb 25 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.6.12
 - acl: added per bucket ACL support
 - list: added python listing example

@@ -1,3 +1,13 @@
+rift (2.25.0.7.0) unstable; urgency=low
+
+  * bucket: added create/remove API
+  * bucket: added bucket directory support - directory may contain multiple buckets
+  * io: added object remove API
+  * api: changed URL format
+  * major set of cleanup commits
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Thu, 10 Apr 2014 02:07:42 +0400
+
 rift (2.25.0.6.12) unstable; urgency=low
 
   * acl: added per bucket ACL support
