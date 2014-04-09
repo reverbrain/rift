@@ -509,10 +509,6 @@ public:
 
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
-		auto data = elliptics::data_pointer::from_raw(
-			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
-			boost::asio::buffer_size(buffer));
-
 		this->set_chunk_size(10 * 1024 * 1024);
 
 		const auto &query = req.url().query();
@@ -737,12 +733,11 @@ public:
 		swarm::url_query &query = url.query();
 		query.add_item("time", time);
 
-		std::string path = entry.file_path();
+		std::string path = url.path();
 		path += ":";
 		path += boost::lexical_cast<std::string>(info->offset);
 		path += ":";
 		path += boost::lexical_cast<std::string>(info->size);
-
 		url.set_path(path);
 
 		if (url_ptr && token.empty())

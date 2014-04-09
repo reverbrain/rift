@@ -6,12 +6,18 @@
 
 #include <rift/auth.hpp>
 
-#define BOOST_TEST_DYN_LINK
+#define BOOST_TEST_NO_MAIN
 #include <boost/test/included/unit_test.hpp>
 #include <boost/thread.hpp>
+#include <boost/program_options.hpp>
 
+#include <thread>
 #include <mutex>
 #include <condition_variable>
+
+#include "server.hpp"
+
+using namespace rift_server;
 
 using namespace boost::unit_test;
 using namespace ioremap;
@@ -25,13 +31,46 @@ struct response_data
 	boost::system::error_code error;
 };
 
+struct server_runner
+{
+	server_runner(int argc, char **argv) :
+		argc(argc), argv(argv), result(0), arguments_parsed(false)
+	{
+	}
+
+	int argc;
+	char **argv;
+	std::shared_ptr<example_server> server;
+	int result;
+	bool arguments_parsed;
+	std::mutex mutex;
+	std::condition_variable condition;
+
+	void operator() ()
+	{
+		server = thevoid::create_server<example_server>();
+		result = server->parse_arguments(argc, argv);
+		{
+			std::unique_lock<std::mutex> lock(mutex);
+			arguments_parsed = true;
+			condition.notify_all();
+		}
+		if (result != 0)
+			return;
+
+		server->run();
+	}
+};
+
 struct data_container
 {
-	data_container() :
+	data_container(int argc, char **argv) :
 		work(new boost::asio::io_service::work(service)),
 		loop(service),
 		fetcher(loop, logger),
-		thread(boost::bind(&data_container::run, this))
+		thread(boost::bind(&data_container::run, this)),
+		runner(argc, argv),
+		server_thread(std::ref(runner))
 	{
 	}
 
@@ -39,7 +78,9 @@ struct data_container
 	{
 		delete work;
 		service.stop();
+		runner.server->stop();
 		thread.join();
+		server_thread.join();
 	}
 
 	void run()
@@ -113,10 +154,12 @@ struct data_container
 	boost::thread thread;
 	std::string bucket_name;
 	std::string bucket_token;
+	server_runner runner;
+	boost::thread server_thread;
 } static *helper = NULL;
 
-#define RIFT_TEST_CASE(M, C...) do { framework::master_test_suite().add(BOOST_TEST_CASE(std::bind( M, ##C ))); } while (false)
-#define RIFT_TEST_CASE_NOARGS(M) do { framework::master_test_suite().add(BOOST_TEST_CASE(std::bind( M ))); } while (false)
+#define RIFT_TEST_CASE(M, C...) do { suite->add(BOOST_TEST_CASE(std::bind( M, ##C ))); } while (false)
+#define RIFT_TEST_CASE_NOARGS(M) do { suite->add(BOOST_TEST_CASE(std::bind( M ))); } while (false)
 
 static swarm::url create_url(const std::string &base_path, const std::string &key, std::initializer_list<std::pair<std::string, std::string>> query)
 {
@@ -195,14 +238,26 @@ void test_download_info(const std::string &name, const std::string &data)
 	BOOST_REQUIRE(doc["csum"].IsString());
 }
 
-bool register_tests()
+boost::unit_test::test_suite *register_tests(int argc, char *argv[])
 {
-	helper = new data_container();
+	test_suite *suite = new test_suite("Local Test Suite");
+
+	helper = new data_container(argc, argv);
 	helper->base_url.set_scheme("http");
 	helper->base_url.set_host("localhost");
 	helper->base_url.set_port(8080);
 	helper->bucket_name = "rift_test";
 	helper->bucket_token = "rift_password";
+
+	{
+		std::unique_lock<std::mutex> lock(helper->runner.mutex);
+		while (!helper->runner.arguments_parsed)
+			helper->runner.condition.wait(lock);
+	}
+
+	if (helper->runner.result != 0) {
+		throw std::runtime_error("failed to start the server");
+	}
 
 	RIFT_TEST_CASE_NOARGS(test_ping);
 	RIFT_TEST_CASE_NOARGS(test_echo);
@@ -210,7 +265,7 @@ bool register_tests()
 	RIFT_TEST_CASE(test_get, "test", "test-data");
 	RIFT_TEST_CASE(test_download_info, "test", "test-data");
 
-	return true;
+	return suite;
 }
 
 }
