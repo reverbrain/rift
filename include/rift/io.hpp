@@ -1015,6 +1015,56 @@ class on_buffered_get : public on_buffered_get_base<Server, on_buffered_get<Serv
 public:
 };
 
+template <typename Server, typename Stream>
+class on_delete_base : public bucket_processing<Server, Stream>
+{
+public:
+	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
+			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
+		const auto &query = req.url().query();
+
+		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
+			this->log(swarm::SWARM_LOG_ERROR, "delete-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+					query.to_string().c_str(), verdict);
+			this->send_reply(verdict);
+			return;
+		}
+
+		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, original-verdict: %d, passed-no-auth-check",
+				query.to_string().c_str(), verdict);
+
+		(void) buffer;
+
+		elliptics::key key;
+		elliptics::session session = this->server()->read_data_session_cache(req, meta, key);
+
+		session.remove(key).connect(std::bind(
+			&on_delete_base::on_delete_finished, this->shared_from_this(),
+				std::placeholders::_1, std::placeholders::_2));
+	}
+
+	virtual void on_delete_finished(const elliptics::sync_remove_result &result,
+			const elliptics::error_info &error) {
+		if (error.code() == -ENOENT) {
+			this->send_reply(swarm::http_response::not_found);
+			return;
+		} else if (error) {
+			this->send_reply(swarm::http_response::service_unavailable);
+			return;
+		}
+
+		(void) result;
+
+		this->send_reply(swarm::http_response::ok);
+	}
+};
+
+template <typename Server>
+class on_delete : public on_delete_base<Server, on_delete<Server>>
+{
+public:
+};
+
 }}} // ioremap::rift::io
 
 #endif /*__IOREMAP_RIFT_IO_HPP */

@@ -94,6 +94,12 @@ public:
 			options::prefix_match("/upload-big/"),
 			options::methods("POST")
 		);
+
+		on<rift::io::on_delete<example_server>>(
+			options::prefix_match("/delete/"),
+			options::methods("POST")
+		);
+
 		on<rift::io::on_download_info<example_server>>(
 			options::prefix_match("/download-info/"),
 			options::methods("GET")
