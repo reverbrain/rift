@@ -6,6 +6,17 @@
 
 namespace ioremap { namespace rift { namespace bucket_ctl {
 
+static std::string meta_from_key(const swarm::http_request &request, const elliptics::key &key) {
+	const auto &pc = request.url().path_components();
+	if (pc[0] == "update-bucket-directory") {
+		// URL format: /update-bucket-directory/unused
+		return "bucket-directories.1";
+	} else {
+		// URL format: /update-bucket/bucket-directory-name-with-slashes/like/this
+		return key.remote();
+	}
+}
+
 template <typename Server>
 class meta_create : public io::on_upload<Server>
 {
@@ -37,22 +48,12 @@ public:
 			this->send_reply(e.error_code());
 		}
 	}
+
 private:
 	std::string m_meta_namespace;
 	bucket_meta_raw m_meta;
 	std::string m_parent;
 	swarm::http_request m_request;
-
-	std::string meta_from_key(const swarm::http_request &request, const elliptics::key &key) {
-		const auto &pc = request.url().path_components();
-		if (pc[0] == "update-bucket-directory") {
-			// URL format: /update-bucket-directory/unused
-			return "bucket-directories.1";
-		} else {
-			// URL format: /update-bucket/bucket-directory-name-with-slashes/like/this
-			return key.remote();
-		}
-	}
 
 	void check_bucket_directory() {
 		// use empty meta - we use metadata groups and empty this hardcoded namespace
@@ -257,27 +258,36 @@ public:
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, verdict: %d, listing: %s, passed-no-auth-check",
+		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, verdict: %d, removing: %s, passed-no-auth-check",
 				query.to_string().c_str(), verdict, meta.key.c_str());
 
 		(void) buffer;
 
-		elliptics::key unused;
-		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta, unused);
+		elliptics::key key;
+		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta, key);
+
+		std::string bucket_namespace = "bucket";
 
 		const auto &pc = req.url().path_components();
 		if (pc.size() >= 1) {
 			if (pc[0] == "delete-bucket-directory") {
 				bucket_meta_raw tmp;
-				session = this->server()->elliptics()->read_metadata_session(req, tmp, unused);
-				tmp.key = "bucket";
-				session.set_namespace(tmp.key.c_str(), tmp.key.size());
+				elliptics::key unused;
+				session = this->server()->elliptics()->write_metadata_session(req, tmp, unused);
+				session.set_namespace(bucket_namespace.c_str(), bucket_namespace.size());
 			}
 		}
 
 		session.remove_index(meta.key + ".index", true).connect(std::bind(&on_delete_base::on_delete_finished, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
+
+		session.set_namespace(bucket_namespace.c_str(), bucket_namespace.size());
 		session.remove(meta.key);
+
+		std::string parent = meta_from_key(req, key) + ".index";
+		std::vector<std::string> parent_indexes;
+		parent_indexes.push_back(parent);
+		session.remove_indexes(meta.key, parent_indexes);
 	}
 
 	virtual void on_delete_finished(const elliptics::sync_generic_result &result, const elliptics::error_info &error) {
