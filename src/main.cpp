@@ -150,7 +150,7 @@ public:
 
 		if (m_use_hostname) {
 			char buffer[NI_MAXHOST];
-			int err = getnameinfo(reinterpret_cast<sockaddr *>(addr), addr->addr_len, buffer, sizeof(buffer), nullptr, 0, 0);
+			int err = getnameinfo(reinterpret_cast<sockaddr *>(addr), addr->addr_len, buffer, sizeof(buffer), NULL, 0, 0);
 			if (err == 0) {
 				url.set_host(buffer);
 			} else {
