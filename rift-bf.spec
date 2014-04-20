@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.7.0
+Version:	0.7.1
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -70,6 +70,10 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Sun Apr 20 2014 Evgeniy Polyakov <zbr@ioremap.net> - 0.7.1
+- elliptics: do not stop adding remote nodes (and initialize client node) if node can not be added
+- rift: get rid of rift_bucket_ctl, all operations can be performed via http REST API
+
 * Thu Apr 10 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.7.0
 - bucket: added create/remove API
 - bucket: added bucket directory support - directory may contain multiple buckets
