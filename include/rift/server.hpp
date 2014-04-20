@@ -118,7 +118,16 @@ protected:
 			std::bind(&rapidjson::Value::GetString, std::placeholders::_1));
 
 		for (auto it = remotes.begin(); it != remotes.end(); ++it) {
-			node.add_remote(it->c_str());
+			try {
+				node.add_remote(it->c_str());
+			} catch (...) {
+				// do nothing - its ok not to add some nodes
+			}
+		}
+
+		if (node.get_routes().size() == 0) {
+			m_logger.log(swarm::SWARM_LOG_ERROR, "Didn't add any remote node, exiting.");
+			return false;
 		}
 
 		return true;
