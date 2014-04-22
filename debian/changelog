@@ -1,3 +1,10 @@
+rift (2.5.0.7.1) unstable; urgency=low
+
+  * elliptics: do not stop adding remote nodes (and initialize client node) if node can not be added
+  * rift: get rid of rift_bucket_ctl, all operations can be performed via http REST API
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Tue, 22 Apr 2014 14:55:18 +0400
+
 rift (0.7.1) unstable; urgency=low
 
   * elliptics: do not stop adding remote nodes (and initialize client node) if node can not be added
