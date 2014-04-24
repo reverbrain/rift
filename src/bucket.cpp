@@ -119,7 +119,7 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 
 	auto auth = request.headers().get("Authorization");
 	if (!auth) {
-		verdict = swarm::http_response::bad_request;
+		verdict = swarm::http_response::unauthorized;
 
 		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: no 'Authorization' header -> %d",
 				query.to_string().c_str(), meta.key.c_str(), (*user).c_str(), meta.acl.size(), verdict);
