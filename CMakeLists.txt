@@ -36,6 +36,7 @@ link_directories(
 )
 
 add_subdirectory(src)
+add_subdirectory(tests)
 
 file(GLOB headers "${CMAKE_CURRENT_SOURCE_DIR}/include/rift/*.hpp")
 install(FILES ${headers} DESTINATION include/rift)

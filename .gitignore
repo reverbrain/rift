@@ -11,6 +11,7 @@
 *.so.*
 *.tar.gz
 *.sw*
+.idea
 *~
 CMakeCache.txt
 CMakeFiles
