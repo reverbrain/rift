@@ -1,3 +1,14 @@
+rift (2.25.0.7.2) unstable; urgency=low
+
+  * tests: Removed unused c++ tests
+  * rpm: Depend on elliptics-devel
+  * packages: Added running tests after build
+  * bucket: Return 401 status if Authorized is missed
+  * index: Fixed reading out of allocated memory
+  * tests: Added python tests for every handler
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Thu, 24 Apr 2014 21:28:28 +0400
+
 rift (2.5.0.7.1) unstable; urgency=low
 
   * elliptics: do not stop adding remote nodes (and initialize client node) if node can not be added

@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.5.0.7.1
+Version:	2.25.0.7.2
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -71,6 +71,14 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Thu Apr 24 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.7.2
+- tests: Removed unused c++ tests
+- rpm: Depend on elliptics-devel
+- packages: Added running tests after build
+- bucket: Return 401 status if Authorized is missed
+- index: Fixed reading out of allocated memory
+- tests: Added python tests for every handler
+
 * Tue Apr 22 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.5.0.7.1
 - elliptics: do not stop adding remote nodes (and initialize client node) if node can not be added
 - rift: get rid of rift_bucket_ctl, all operations can be performed via http REST API
