@@ -55,7 +55,7 @@ bool example_server::initialize(const rapidjson::Value &config) {
 	);
 	on<rift::index::on_find<example_server>>(
 		options::prefix_match("/find/"),
-		options::methods("GET")
+		options::methods("POST")
 	);
 	on<rift::io::on_redirectable_get<example_server>>(
 		options::prefix_match("/redirect/"),
@@ -65,16 +65,8 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::prefix_match("/get/"),
 		options::methods("GET")
 	);
-	on<rift::io::on_buffered_get<example_server>>(
-		options::prefix_match("/get-big/"),
-		options::methods("GET")
-	);
-	on<rift::io::on_upload<example_server>>(
-		options::prefix_match("/upload/"),
-		options::methods("POST")
-	);
 	on<rift::io::on_buffered_upload<example_server>>(
-		options::prefix_match("/upload-big/"),
+		options::prefix_match("/upload/"),
 		options::methods("POST")
 	);
 	on<rift::list::on_list<example_server>>(
