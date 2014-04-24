@@ -86,6 +86,20 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::methods("POST")
 	);
 
+	on<rift::io::on_delete<example_server>>(
+		options::prefix_match("/delete/"),
+		options::methods("POST")
+	);
+
+	on<rift::bucket_ctl::on_delete<example_server>>(
+		options::prefix_match("/delete-bucket-directory/"),
+		options::methods("POST")
+	);
+	on<rift::bucket_ctl::on_delete<example_server>>(
+		options::prefix_match("/delete-bucket/"),
+		options::methods("POST")
+	);
+
 	on<rift::bucket_ctl::meta_create<example_server>>(
 		options::prefix_match("/update-bucket-directory/"),
 		options::methods("POST")
