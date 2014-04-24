@@ -46,6 +46,7 @@ CXXFLAGS="-pthread -I/usr/include/boost141" LDFLAGS="-L/usr/lib64/boost141" %{cm
 %endif
 
 make %{?_smp_mflags}
+make test
 
 %install
 rm -rf %{buildroot}
