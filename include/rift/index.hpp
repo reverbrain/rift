@@ -30,8 +30,9 @@ public:
 
 		(void) meta;
 
+		std::string buf(boost::asio::buffer_cast<const char*>(buffer), boost::asio::buffer_size(buffer));
 		rapidjson::Document doc;
-		doc.Parse<0>(boost::asio::buffer_cast<const char*>(buffer));
+		doc.Parse<0>(buf.c_str());
 
 		if (doc.HasParseError()) {
 			this->log(swarm::SWARM_LOG_ERROR, "update-base: url: %s: request parsing error offset: %zd, message: %s",
@@ -186,8 +187,9 @@ public:
 
 		(void) meta;
 
+		std::string buf(boost::asio::buffer_cast<const char*>(buffer), boost::asio::buffer_size(buffer));
 		rapidjson::Document data;
-		data.Parse<0>(boost::asio::buffer_cast<const char*>(buffer));
+		data.Parse<0>(buf.c_str());
 
 		if (data.HasParseError()) {
 			this->send_reply(swarm::http_response::bad_request);
