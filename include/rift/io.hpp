@@ -1104,6 +1104,10 @@ public:
 		elliptics::key key;
 		elliptics::session session = this->server()->read_data_session_cache(req, meta, key);
 
+		std::vector<std::string> indexes;
+		indexes.push_back(meta.key + ".index");
+
+		session.remove_indexes(key, indexes);
 		session.remove(key).connect(std::bind(
 			&on_delete_base::on_delete_finished, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));
