@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.7.2
+Version:	2.25.0.7.3
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -71,6 +71,17 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Sat Apr 26 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.7.3
+- delete: remove key from 'bucket.index' index when key is being deleted
+- tests: Fixed format for lucid's python
+- list: allow to list arbitrary indexes, it is useless for /update/-created indexes though since /update/ handler doesn't put bucket_meta_index_data there
+- tests: Set ld_library_path inside virtualenv
+- debian: Add build deps on cocaine-framework-native
+- debian: Added elliptics to build dependencies
+- tests: Run tests inside virtualenv
+- debian: Depend on python-requests
+- packages: Depends on pytest
+
 * Thu Apr 24 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.7.2
 - tests: Removed unused c++ tests
 - rpm: Depend on elliptics-devel
