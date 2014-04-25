@@ -36,13 +36,14 @@ public:
 
 		(void) buffer;
 
-		elliptics::key unused;
-		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta, unused);
+		elliptics::key key;
+		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta, key);
 
 		const auto &pc = req.url().path_components();
 		if (pc.size() >= 1) {
 			if (pc[0] == "list-bucket-directory") {
 				bucket_meta_raw tmp;
+				elliptics::key unused;
 				session = this->server()->elliptics()->read_metadata_session(req, tmp, unused);
 				tmp.key = "bucket";
 				session.set_namespace(tmp.key.c_str(), tmp.key.size());
@@ -50,7 +51,10 @@ public:
 		}
 
 		std::vector<std::string> keys;
-		keys.emplace_back(meta.key + ".index");
+		if (key.remote().size())
+			keys.push_back(key.remote());
+		else
+			keys.emplace_back(meta.key + ".index");
 
 		session.find_all_indexes(keys).connect(std::bind(&on_list_base::on_find_finished, this->shared_from_this(),
 					meta, std::placeholders::_1, std::placeholders::_2));
