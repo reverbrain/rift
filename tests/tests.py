@@ -151,7 +151,7 @@ class TestCases:
         ('60000000', '', 416)
     ])
     def test_single_range(self, client, begin, end, status_code):
-        range_header = "bytes={}-{}".format(begin, end)
+        range_header = "bytes={0}-{1}".format(begin, end)
 
         assert isinstance(client, rift_client.Client)
         r = client.get("/get/name", headers={ 'Range': range_header })
@@ -173,7 +173,7 @@ class TestCases:
             start = int(begin)
             finish = int(end)
 
-        range_header_result = 'bytes {}-{}/{}'.format(start, finish, len(self.data))
+        range_header_result = 'bytes {0}-{1}/{2}'.format(start, finish, len(self.data))
         assert r.headers['Content-Range'] == range_header_result
         assert r.headers['Content-Length'] == str(finish + 1 - start)
 
@@ -257,7 +257,7 @@ class TestCases:
         for index in indexes:
             update_data['indexes'][index] = index
 
-        print "'{}'".format(json.dumps(update_data))
+        print "'{0}'".format(json.dumps(update_data))
         print len(json.dumps(update_data))
 
         r = client.get("/download-info/index-test")

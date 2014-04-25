@@ -44,7 +44,7 @@ class Client:
             for header in headers:
                 text += header[0] + ':' + header[1] + '\n'
 
-        print "text: '{}'".format(text)
+        print "text: '{0}'".format(text)
 
         result = hmac.new(user['token'], text, hashlib.sha512).hexdigest()
         print result, text
