@@ -2,7 +2,8 @@ Source: rift
 Priority: extra
 Maintainer: Ruslan Nigmatullin <euroelessar@yandex.ru>
 Build-Depends: cdbs, debhelper (>= 7), cmake, libthevoid-dev (>= 0.6.3.0), libswarm-dev (>= 0.6.3.0), libmsgpack-dev,
-  libboost-system-dev, libboost-thread-dev, libboost-program-options-dev, elliptics-dev (>= 2.25.0.0), python-pip, python-virtualenv
+  libboost-system-dev, libboost-thread-dev, libboost-program-options-dev, elliptics-dev (>= 2.25.0.0), elliptics (>= 2.25.0.0),
+  python-pip, python-virtualenv
 Standards-Version: 3.9.3
 Section: libs
 Homepage: https://github.com/reverbrain/rift
