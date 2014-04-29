@@ -65,7 +65,7 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::prefix_match("/get/"),
 		options::methods("GET")
 	);
-	on<rift::io::on_upload<example_server>>(
+	on<rift::bucket_processor<example_server, on_upload>>(
 		options::prefix_match("/upload/"),
 		options::methods("POST")
 	);

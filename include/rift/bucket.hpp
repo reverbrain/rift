@@ -1,8 +1,9 @@
 #ifndef __IOREMAP_RIFT_BUCKET_HPP
 #define __IOREMAP_RIFT_BUCKET_HPP
 
-#include "rift/auth.hpp"
-#include "rift/metadata_updater.hpp"
+#include "auth.hpp"
+#include "metadata_updater.hpp"
+#include "io.hpp"
 
 #include <elliptics/session.hpp>
 #include <swarm/logger.hpp>
@@ -280,6 +281,100 @@ protected:
 	swarm::http_request m_request;
 	bucket_meta_raw m_meta;
 	bucket_acl m_acl;
+};
+
+template <typename BaseStream>
+class indexed_upload_mixin : public BaseStream {
+public:
+	typedef std::function<void (const swarm::http_response::status_type, const std::string &)>
+		upload_completion_callback_t;
+
+	void upload_update_indexes(const elliptics::session &data_session, const bucket_meta_raw &meta,
+			const elliptics::key &key, const elliptics::sync_write_result &write_result,
+			const upload_completion_callback_t &callback) {
+		auto result_object = std::make_shared<rift::JsonValue>();
+		io::upload_completion::fill_upload_reply(write_result, *result_object, result_object->GetAllocator());
+
+		if (meta.flags & RIFT_BUCKET_META_NO_INDEX_UPDATE) {
+			auto data = result_object->ToString();
+			callback(swarm::http_response::ok, data);
+			return;
+		}
+
+		std::vector<std::string> indexes;
+		indexes.push_back(meta.key + ".index");
+
+		msgpack::sbuffer buf;
+		bucket_meta_index_data index_data;
+		index_data.key = key.to_string();
+		dnet_current_time(&index_data.ts);
+		msgpack::pack(buf, index_data);
+
+		std::vector<elliptics::data_pointer> datas;
+		datas.emplace_back(elliptics::data_pointer::copy(buf.data(), buf.size()));
+
+		elliptics::session session = data_session;
+
+		// only update indexes in non-cached groups
+		if (meta.groups.size()) {
+			session.set_groups(meta.groups);
+		}
+
+		session.update_indexes(key, indexes, datas).connect(
+			std::bind(&indexed_upload_mixin::on_index_update_finished,
+				result_object, callback, std::placeholders::_1, std::placeholders::_2));
+	}
+
+	static void on_index_update_finished(const std::shared_ptr<rift::JsonValue> &result_object,
+			const upload_completion_callback_t &callback,
+			const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error) {
+		(void) result;
+
+		if (error) {
+			callback(swarm::http_response::internal_server_error, std::string());
+			return;
+		}
+
+		// Here we could update result Json object and put index data there
+		// But we don't
+
+		auto data = result_object->ToString();
+		callback(swarm::http_response::ok, data);
+	}
+
+	void completion(const swarm::http_response::status_type &status, const std::string &data) {
+		if (status != swarm::http_response::ok) {
+			this->send_reply(status);
+			return;
+		}
+
+		swarm::http_response reply;
+
+		reply.set_code(swarm::http_response::ok);
+		reply.headers().set_content_type("text/json");
+		reply.headers().set_content_length(data.size());
+
+		this->send_reply(std::move(reply), std::move(data));
+	}
+
+	virtual void on_write_finished(const elliptics::sync_write_result &result,
+			const elliptics::error_info &error) {
+		if (error) {
+			this->send_reply(swarm::http_response::service_unavailable);
+			return;
+		}
+
+		try {
+			upload_update_indexes(*this->m_session, this->bucket_mixin_meta, this->m_key, result,
+					std::bind(&indexed_upload_mixin::completion, this->shared_from_this(),
+						std::placeholders::_1, std::placeholders::_2));
+		} catch (std::exception &e) {
+			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, namespace: %s, exception: %s",
+					this->m_key.to_string().c_str(), this->bucket_mixin_meta.key.c_str(), e.what());
+			this->m_session->remove(this->m_key);
+			this->send_reply(swarm::http_response::bad_request);
+		}
+	}
 };
 
 }} // namespace ioremap::rift

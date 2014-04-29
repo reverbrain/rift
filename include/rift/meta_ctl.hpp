@@ -17,10 +17,19 @@ static std::string meta_from_key(const swarm::http_request &request, const ellip
 	}
 }
 
-template <typename Server>
-class meta_create : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<meta_create<Server>>
+template <typename Server, typename Stream>
+class meta_create_mixin_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
+{
+};
+
+template <typename Server, typename Stream>
+class meta_create_base : public rift::bucket_mixin<meta_create_mixin_base<Server, Stream>, rift::bucket_acl::flags_noauth_all>
 {
 public:
+	meta_create_base() : m_meta(this->bucket_mixin_meta)
+	{
+	}
+
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &pc = req.url().path_components();
 		if (pc.size() != 2) {
@@ -57,11 +66,14 @@ public:
 		m_session.reset(new elliptics::session(session));
 	}
 
-private:
+	virtual void on_write_finished(const elliptics::sync_write_result &result,
+			const elliptics::error_info &error) = 0;
+
+protected:
 	std::string m_ctl_meta_namespace;
 	bucket_meta_raw m_ctl_meta;
 	elliptics::key m_key;
-	bucket_meta_raw m_meta;
+	bucket_meta_raw &m_meta;
 	std::unique_ptr<elliptics::session> m_session;
 	std::string m_parent;
 	swarm::http_request m_request;
@@ -83,7 +95,7 @@ private:
 				m_request.url().to_string().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
 
 		session.read_data(m_ctl_meta.key, 0, 0).connect(
-				std::bind(&meta_create::check_completion, this->shared_from_this(),
+				std::bind(&meta_create_base::check_completion, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
 	}
 
@@ -152,12 +164,12 @@ private:
 		this->log(swarm::SWARM_LOG_NOTICE, "%s: write meta key '%s', namespace: '%s', parent: '%s'",
 				m_request.url().to_string().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
 
-		meta_create::set_meta(tmp);
-		meta_create::set_key(m_ctl_meta.key);
-		meta_create::set_session(session);
+		meta_create_base::set_meta(tmp);
+		meta_create_base::set_key(m_ctl_meta.key);
+		meta_create_base::set_session(session);
 
 		session.write_data(m_ctl_meta.key, elliptics::data_pointer::copy(buf.data(), buf.size()), 0).connect(
-			std::bind(&meta_create::on_write_finished, this->shared_from_this(),
+			std::bind(&meta_create_base::on_write_finished, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));
 	}
 
@@ -244,40 +256,12 @@ private:
 		if (doc.HasMember("max-key-num"))
 			meta.max_key_num = doc["max-key-num"].GetInt64();
 	}
+};
 
-	void completion(const swarm::http_response::status_type &status, const std::string &data) {
-		if (status != swarm::http_response::ok) {
-			this->send_reply(status);
-			return;
-		}
-
-		swarm::http_response reply;
-
-		reply.set_code(swarm::http_response::ok);
-		reply.headers().set_content_type("text/json");
-		reply.headers().set_content_length(data.size());
-
-		this->send_reply(std::move(reply), std::move(data));
-	}
-
-	virtual void on_write_finished(const elliptics::sync_write_result &result,
-			const elliptics::error_info &error) {
-		if (error) {
-			this->send_reply(swarm::http_response::service_unavailable);
-			return;
-		}
-
-		try {
-			io::upload_completion::upload_update_indexes(*m_session, m_meta, m_key, result,
-					std::bind(&meta_create::completion, this->shared_from_this(),
-						std::placeholders::_1, std::placeholders::_2));
-		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, namespace: %s, exception: %s",
-					m_key.to_string().c_str(), m_meta.key.c_str(), e.what());
-			m_session->remove(m_key);
-			this->send_reply(swarm::http_response::bad_request);
-		}
-	}
+template <typename Server>
+class meta_create : public rift::indexed_upload_mixin<meta_create_base<Server, meta_create<Server>>>
+{
+public:
 };
 
 // remove bucket and all objects within
