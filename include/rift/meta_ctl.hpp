@@ -305,21 +305,10 @@ public:
 		elliptics::key key;
 		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta, key);
 
-		std::string bucket_namespace = "bucket";
-
-		const auto &pc = req.url().path_components();
-		if (pc.size() >= 1) {
-			if (pc[0] == "delete-bucket-directory") {
-				bucket_meta_raw tmp;
-				elliptics::key unused;
-				session = this->server()->elliptics()->write_metadata_session(req, tmp, unused);
-				session.set_namespace(bucket_namespace.c_str(), bucket_namespace.size());
-			}
-		}
-
 		session.remove_index(meta.key + ".index", true).connect(std::bind(&on_delete_base::on_delete_finished, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
 
+		std::string bucket_namespace = "bucket";
 		elliptics::key unused;
 		elliptics::session metadata_session = this->server()->elliptics()->write_metadata_session(req, meta, unused);
 		metadata_session.set_namespace(bucket_namespace.c_str(), bucket_namespace.size());
