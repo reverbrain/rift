@@ -43,7 +43,15 @@ public:
 	template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
 	elliptics::session create_session(rift::bucket_mixin<BaseStream, Flags> &mixin, const swarm::http_request &req, elliptics::key &key) const;
 
-	struct on_get : public rift::bucket_mixin<rift::io::on_get_base<example_server, on_get>, rift::bucket_acl::flags_noauth_read>
+	class on_get : public rift::bucket_mixin<rift::io::on_get_base<example_server, on_get>, rift::bucket_acl::flags_noauth_read>
+	{
+	};
+
+	class on_update : public rift::bucket_mixin<rift::index::on_update_base<example_server, on_update>, rift::bucket_acl::flags_noauth_all>
+	{
+	};
+
+	class on_find : public rift::bucket_mixin<rift::index::on_find_base<example_server, on_find>, rift::bucket_acl::flags_noauth_read>
 	{
 	};
 

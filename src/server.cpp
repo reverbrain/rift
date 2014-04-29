@@ -49,11 +49,11 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		m_secured_http = false;
 	}
 
-	on<rift::index::on_update<example_server>>(
+	on<rift::bucket_processor<example_server, on_update>>(
 		options::prefix_match("/update/"),
 		options::methods("POST")
 	);
-	on<rift::index::on_find<example_server>>(
+	on<rift::bucket_processor<example_server, on_find>>(
 		options::prefix_match("/find/"),
 		options::methods("POST")
 	);
