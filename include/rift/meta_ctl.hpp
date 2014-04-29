@@ -8,7 +8,7 @@ namespace ioremap { namespace rift { namespace bucket_ctl {
 
 static std::string meta_from_key(const swarm::http_request &request, const elliptics::key &key) {
 	const auto &pc = request.url().path_components();
-	if (pc[0] == "update-bucket-directory") {
+	if ((pc[0] == "update-bucket-directory") || (pc[0] == "delete-bucket-directory")) {
 		// URL format: /update-bucket-directory/unused
 		return "bucket-directories.1";
 	} else {
@@ -305,6 +305,16 @@ public:
 		elliptics::key key;
 		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta, key);
 
+		std::string parent = meta_from_key(req, key);
+		if (parent.size() == 0) {
+			this->log(swarm::SWARM_LOG_ERROR, "delete-base: checked: url: %s, there is no bucket directory name, URL must be /delete-bucket/directory_name",
+					query.to_string().c_str());
+
+			this->send_reply(swarm::http_response::bad_request);
+			return;
+		}
+
+
 		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using data session",
 				query.to_string().c_str(), meta.key.c_str());
 		session.remove_index(meta.key + ".index", true).connect(std::bind(&on_delete_base::on_delete_finished, this->shared_from_this(),
@@ -320,7 +330,7 @@ public:
 				query.to_string().c_str(), meta.key.c_str(), bucket_namespace.c_str());
 		metadata_session.remove(meta.key);
 
-		std::string parent = meta_from_key(req, key) + ".index";
+		parent += ".index";
 		std::vector<std::string> parent_indexes;
 		parent_indexes.push_back(parent);
 
