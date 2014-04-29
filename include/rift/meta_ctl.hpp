@@ -305,20 +305,28 @@ public:
 		elliptics::key key;
 		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta, key);
 
+		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using data session",
+				query.to_string().c_str(), meta.key.c_str());
 		session.remove_index(meta.key + ".index", true).connect(std::bind(&on_delete_base::on_delete_finished, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
 
 		std::string bucket_namespace = "bucket";
+
 		elliptics::key unused;
 		elliptics::session metadata_session = this->server()->elliptics()->write_metadata_session(req, meta, unused);
 		metadata_session.set_namespace(bucket_namespace.c_str(), bucket_namespace.size());
+
+		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using metadata session in '%s' namespace",
+				query.to_string().c_str(), meta.key.c_str(), bucket_namespace.c_str());
 		metadata_session.remove(meta.key);
 
 		std::string parent = meta_from_key(req, key) + ".index";
 		std::vector<std::string> parent_indexes;
 		parent_indexes.push_back(parent);
-		metadata_session.remove_indexes(meta.key, parent_indexes);
 
+		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: from index: '%s' using metadata session in '%s' namespace",
+				query.to_string().c_str(), meta.key.c_str(), parent.c_str(), bucket_namespace.c_str());
+		metadata_session.remove_indexes(meta.key, parent_indexes);
 	}
 
 	virtual void on_delete_finished(const elliptics::sync_generic_result &result, const elliptics::error_info &error) {
