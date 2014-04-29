@@ -22,7 +22,7 @@ class Server:
             ]
         }
 
-        self.process = subprocess.Popen(args=["/usr/bin/dnet_run_servers"],
+        self.process = subprocess.Popen(args=["dnet_run_servers"],
                                         stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE)
 
