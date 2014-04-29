@@ -117,6 +117,19 @@ class TestCases:
         assert len(r.content) == len(self.data)
         assert r.content == self.data
 
+    def test_delete(self, client):
+        assert isinstance(client, rift_client.Client)
+        
+        name = "delete-test"
+        r = client.post("/upload/" + name, self.data)
+        assert r.status_code == 200
+        r = client.get("/get/" + name)
+        assert r.status_code == 200
+        r = client.post("/delete/" + name, self.data)
+        assert r.status_code == 200
+        r = client.get("/get/" + name)
+        assert r.status_code == 404
+
     def test_download_info(self, client):
         assert isinstance(client, rift_client.Client)
         r = client.get("/download-info/name")
@@ -229,6 +242,36 @@ class TestCases:
         assert len(buckets_list['indexes']) == 5
         assert client.user['key'] in [x['key'] for x in buckets_list['indexes']]
 
+    @pytest.mark.skipif(not pytest.config.option.bucket,
+                        reason="tests are running without buckets")
+    def test_delete_bucket(self, client):
+        assert isinstance(client, rift_client.Client)
+
+        bucket_proxy = rift_client.ClientProxy(client, client.directory_user)
+
+        user = client.generate_user()
+        self.create_bucket(bucket_proxy, user, 0)
+
+        subbucket_proxy = rift_client.ClientProxy(client, user)
+
+        r = bucket_proxy.get('/list-bucket-directory/' + client.bucket)
+
+        assert r.status_code == 200
+
+        buckets_list = r.json()
+        assert user['key'] in [x['key'] for x in buckets_list['indexes']]
+
+        r = subbucket_proxy.post('/delete-bucket/', '')
+
+        assert r.status_code == 200
+
+        r = bucket_proxy.get('/list-bucket-directory/' + client.bucket)
+
+        assert r.status_code == 200
+
+        buckets_list = r.json()
+        assert user['key'] not in [x['key'] for x in buckets_list['indexes']]
+
     @pytest.mark.parametrize('view', [
         ('id-only'),
         ('extended')
@@ -294,4 +337,3 @@ class TestCases:
             assert 'time-raw' in data_object['mtime']
             assert 'data' in data_object
             assert data == data_object['data']
-

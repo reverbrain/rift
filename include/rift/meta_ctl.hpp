@@ -18,13 +18,9 @@ static std::string meta_from_key(const swarm::http_request &request, const ellip
 }
 
 template <typename Server>
-class meta_create : public io::on_upload<Server>
+class meta_create : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<meta_create<Server>>
 {
 public:
-	std::shared_ptr<meta_create> shared_from_this() {
-		return std::static_pointer_cast<meta_create>(io::on_upload<Server>::shared_from_this());
-	}
-
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &pc = req.url().path_components();
 		if (pc.size() != 2) {
@@ -39,7 +35,7 @@ public:
 		}
 
 		try {
-			parse_request(req, buffer, m_meta);
+			parse_request(req, buffer, m_ctl_meta);
 			m_request = req;
 
 			check_bucket_directory();
@@ -49,9 +45,24 @@ public:
 		}
 	}
 
+	void set_key(const elliptics::key &key) {
+		m_key = key;
+	}
+
+	void set_meta(const bucket_meta_raw &meta) {
+		m_meta = meta;
+	}
+
+	void set_session(const elliptics::session &session) {
+		m_session.reset(new elliptics::session(session));
+	}
+
 private:
-	std::string m_meta_namespace;
+	std::string m_ctl_meta_namespace;
+	bucket_meta_raw m_ctl_meta;
+	elliptics::key m_key;
 	bucket_meta_raw m_meta;
+	std::unique_ptr<elliptics::session> m_session;
 	std::string m_parent;
 	swarm::http_request m_request;
 
@@ -59,26 +70,26 @@ private:
 		// use empty meta - we use metadata groups and empty this hardcoded namespace
 		bucket_meta_raw meta;
 
-		m_meta_namespace = "bucket";
+		m_ctl_meta_namespace = "bucket";
 
 		elliptics::key key;
 		elliptics::session session = this->server()->elliptics()->read_metadata_session(m_request, meta, key);
-		session.set_namespace(m_meta_namespace.c_str(), m_meta_namespace.size());
+		session.set_namespace(m_ctl_meta_namespace.c_str(), m_ctl_meta_namespace.size());
 
 		// this index will be updated when new bucket or bucket directory has been created
 		m_parent = meta_from_key(m_request, key);
 
 		this->log(swarm::SWARM_LOG_NOTICE, "%s: reading meta key '%s', namespace: '%s', parent: '%s'",
-				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_meta_namespace.c_str(), m_parent.c_str());
+				m_request.url().to_string().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
 
-		session.read_data(m_meta.key, 0, 0).connect(
+		session.read_data(m_ctl_meta.key, 0, 0).connect(
 				std::bind(&meta_create::check_completion, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
 	}
 
 	void check_completion(const elliptics::sync_read_result &result, const elliptics::error_info &error) {
 		this->log(swarm::SWARM_LOG_NOTICE, "%s: read meta key '%s', namespace: '%s', parent: '%s', error-code: %d",
-				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_meta_namespace.c_str(), m_parent.c_str(), error.code());
+				m_request.url().to_string().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str(), error.code());
 		if (error.code() == -ENOENT) {
 			// there is no metadata object with given name, just create a new one
 			write_metadata();
@@ -109,7 +120,7 @@ private:
 		auto v = bucket_meta::verdict(this->logger(), read_meta, m_request, acl);
 
 		this->log(swarm::SWARM_LOG_NOTICE, "%s: read meta key '%s', namespace: '%s', parent: '%s', security verdict: %d",
-				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_meta_namespace.c_str(), m_parent.c_str(), v);
+				m_request.url().to_string().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str(), v);
 
 		if (v != swarm::http_response::ok) {
 			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s, parent: '%s', verdict: %d: read metadata doesn't allow update",
@@ -129,23 +140,23 @@ private:
 
 		elliptics::key unused;
 		elliptics::session session = this->server()->elliptics()->write_metadata_session(m_request, meta, unused);
-		session.set_namespace(m_meta_namespace.c_str(), m_meta_namespace.size());
+		session.set_namespace(m_ctl_meta_namespace.c_str(), m_ctl_meta_namespace.size());
 
 		msgpack::sbuffer buf;
-		msgpack::pack(buf, m_meta);
+		msgpack::pack(buf, m_ctl_meta);
 
 		bucket_meta_raw tmp;
 		tmp.key = m_parent;
 		tmp.groups = session.get_groups();
 
 		this->log(swarm::SWARM_LOG_NOTICE, "%s: write meta key '%s', namespace: '%s', parent: '%s'",
-				m_request.url().to_string().c_str(), m_meta.key.c_str(), m_meta_namespace.c_str(), m_parent.c_str());
+				m_request.url().to_string().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
 
 		meta_create::set_meta(tmp);
-		meta_create::set_key(m_meta.key);
+		meta_create::set_key(m_ctl_meta.key);
 		meta_create::set_session(session);
 
-		session.write_data(m_meta.key, elliptics::data_pointer::copy(buf.data(), buf.size()), 0).connect(
+		session.write_data(m_ctl_meta.key, elliptics::data_pointer::copy(buf.data(), buf.size()), 0).connect(
 			std::bind(&meta_create::on_write_finished, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));
 	}
@@ -233,12 +244,40 @@ private:
 		if (doc.HasMember("max-key-num"))
 			meta.max_key_num = doc["max-key-num"].GetInt64();
 	}
-};
 
-template <typename Server>
-class meta_create1: public io::on_upload<Server>
-{
-public:
+	void completion(const swarm::http_response::status_type &status, const std::string &data) {
+		if (status != swarm::http_response::ok) {
+			this->send_reply(status);
+			return;
+		}
+
+		swarm::http_response reply;
+
+		reply.set_code(swarm::http_response::ok);
+		reply.headers().set_content_type("text/json");
+		reply.headers().set_content_length(data.size());
+
+		this->send_reply(std::move(reply), std::move(data));
+	}
+
+	virtual void on_write_finished(const elliptics::sync_write_result &result,
+			const elliptics::error_info &error) {
+		if (error) {
+			this->send_reply(swarm::http_response::service_unavailable);
+			return;
+		}
+
+		try {
+			io::upload_completion::upload_update_indexes(*m_session, m_meta, m_key, result,
+					std::bind(&meta_create::completion, this->shared_from_this(),
+						std::placeholders::_1, std::placeholders::_2));
+		} catch (std::exception &e) {
+			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, namespace: %s, exception: %s",
+					m_key.to_string().c_str(), m_meta.key.c_str(), e.what());
+			m_session->remove(m_key);
+			this->send_reply(swarm::http_response::bad_request);
+		}
+	}
 };
 
 // remove bucket and all objects within

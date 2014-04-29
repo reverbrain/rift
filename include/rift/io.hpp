@@ -219,148 +219,13 @@ public:
 
 // write data object, get file-info json in response
 template <typename Server, typename Stream>
-class on_upload_base : public bucket_processing<Server, Stream>
-{
-public:
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
-		const auto &query = req.url().query();
-
-		if (!boost::asio::buffer_size(buffer)) {
-			this->log(swarm::SWARM_LOG_ERROR, "upload-base: checked: url: %s, empty data",
-					query.to_string().c_str());
-			this->send_reply(swarm::http_response::bad_request);
-			return;
-		}
-
-		auto data = elliptics::data_pointer::from_raw(
-			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
-			boost::asio::buffer_size(buffer));
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
-			this->log(swarm::SWARM_LOG_ERROR, "upload-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-					query.to_string().c_str(), verdict);
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "upload-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
-				query.to_string().c_str(), verdict);
-
-		(void) buffer;
-
-		m_req = req;
-		set_meta(meta);
-
-		set_session(this->server()->write_data_session_cache(req, meta, m_key));
-
-		try {
-			write_data(req, *m_session, m_key, data).connect(
-				std::bind(&on_upload_base::on_write_finished, this->shared_from_this(),
-					std::placeholders::_1, std::placeholders::_2));
-		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_NOTICE, "post-base: checked-write: url: %s, exception: %s",
-					query.to_string().c_str(), e.what());
-			this->send_reply(swarm::http_response::bad_request);
-		}
-	}
-
-	void set_key(const elliptics::key &key) {
-		m_key = key;
-	}
-
-	void set_meta(const bucket_meta_raw &meta) {
-		m_meta = meta;
-	}
-
-	void set_session(const elliptics::session &session) {
-		m_session.reset(new elliptics::session(session));
-	}
-
-	elliptics::async_write_result write_data(
-			const swarm::http_request &req,
-			elliptics::session &sess,
-			const elliptics::key &key,
-			const elliptics::data_pointer &data) {
-		const auto &query = req.url().query();
-
-		size_t offset = query.item_value("offset", 0llu);
-
-		if (auto tmp = query.item_value("prepare")) {
-			size_t size = boost::lexical_cast<size_t>(*tmp);
-			return sess.write_prepare(key, data, offset, size);
-		} else if (auto tmp = query.item_value("commit")) {
-			size_t size = boost::lexical_cast<size_t>(*tmp);
-			return sess.write_commit(key, data, offset, size);
-		} else if (query.has_item("plain-write")) {
-			return sess.write_plain(key, data, offset);
-		} else {
-			return sess.write_data(key, data, offset);
-		}
-	}
-
-	void completion(const swarm::http_response::status_type &status, const std::string &data) {
-		if (status != swarm::http_response::ok) {
-			this->send_reply(status);
-			return;
-		}
-
-		swarm::http_response reply;
-
-		reply.set_code(swarm::http_response::ok);
-		reply.headers().set_content_type("text/json");
-		reply.headers().set_content_length(data.size());
-
-		this->log(swarm::SWARM_LOG_NOTICE, "post-base: completion: key: %s, namespace: %s",
-				m_key.to_string().c_str(), m_meta.key.c_str());
-
-		this->send_reply(std::move(reply), std::move(data));
-	}
-
-	virtual void on_write_finished(const elliptics::sync_write_result &result,
-			const elliptics::error_info &error) {
-		if (error) {
-			this->send_reply(swarm::http_response::service_unavailable);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "post-base: write_finished: key: %s, namespace: %s",
-				m_key.to_string().c_str(), m_meta.key.c_str());
-
-		try {
-			upload_completion::upload_update_indexes(*m_session, m_meta, m_key, result,
-					std::bind(&on_upload_base::completion, this->shared_from_this(),
-						std::placeholders::_1, std::placeholders::_2));
-		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, namespace: %s, exception: %s",
-					m_key.to_string().c_str(), m_meta.key.c_str(), e.what());
-			m_session->remove(m_key);
-			this->send_reply(swarm::http_response::bad_request);
-		}
-	}
-
-private:
-	elliptics::key m_key;
-	bucket_meta_raw m_meta;
-	swarm::http_request m_req;
-	std::unique_ptr<elliptics::session> m_session;
-};
-
-template <typename Server>
-class on_upload : public on_upload_base<Server, on_upload<Server>>
-{
-public:
-};
-
-// write data object, get file-info json in response
-template <typename Server, typename Stream>
-class on_buffered_upload_base : public thevoid::buffered_request_stream<Server>, public std::enable_shared_from_this<Stream>
+class on_upload_base : public thevoid::buffered_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
 	virtual void on_request(const swarm::http_request &req) {
 		try {
 			boost::asio::const_buffer buffer;
-			this->server()->process(req, buffer, std::bind(&on_buffered_upload_base::checked, this->shared_from_this(),
+			this->server()->process(req, buffer, std::bind(&on_upload_base::checked, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
 		} catch (const std::exception &e) {
 			this->log(swarm::SWARM_LOG_ERROR, "%s: uri: %s, processing error: %s",
@@ -431,10 +296,10 @@ public:
 		m_offset += data.size();
 
 		if (flags & thevoid::buffered_request_stream<Server>::last_chunk) {
-			result.connect(std::bind(&on_buffered_upload_base::on_write_finished, this->shared_from_this(),
+			result.connect(std::bind(&on_upload_base::on_write_finished, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));
 		} else {
-			result.connect(std::bind(&on_buffered_upload_base::on_write_partial, this->shared_from_this(),
+			result.connect(std::bind(&on_upload_base::on_write_partial, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));
 		}
 	}
@@ -530,7 +395,7 @@ public:
 
 		try {
 			upload_completion::upload_update_indexes(*m_session, m_meta, m_key, result,
-					std::bind(&on_buffered_upload_base::completion, this->shared_from_this(),
+					std::bind(&on_upload_base::completion, this->shared_from_this(),
 						std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
 			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, namespace: %s, exception: %s",
@@ -555,7 +420,7 @@ private:
 };
 
 template <typename Server>
-class on_buffered_upload : public on_buffered_upload_base<Server, on_buffered_upload<Server>>
+class on_upload : public on_upload_base<Server, on_upload<Server>>
 {
 public:
 };
@@ -1102,7 +967,7 @@ public:
 		(void) buffer;
 
 		elliptics::key key;
-		elliptics::session session = this->server()->read_data_session_cache(req, meta, key);
+		elliptics::session session = this->server()->write_data_session_cache(req, meta, key);
 
 		std::vector<std::string> indexes;
 		indexes.push_back(meta.key + ".index");
