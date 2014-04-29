@@ -242,6 +242,36 @@ class TestCases:
         assert len(buckets_list['indexes']) == 5
         assert client.user['key'] in [x['key'] for x in buckets_list['indexes']]
 
+    @pytest.mark.skipif(not pytest.config.option.bucket,
+                        reason="tests are running without buckets")
+    def test_delete_bucket(self, client):
+        assert isinstance(client, rift_client.Client)
+
+        bucket_proxy = rift_client.ClientProxy(client, client.directory_user)
+
+        user = client.generate_user()
+        self.create_bucket(bucket_proxy, user, 0)
+
+        subbucket_proxy = rift_client.ClientProxy(client, user)
+
+        r = bucket_proxy.get('/list-bucket-directory/' + client.bucket)
+
+        assert r.status_code == 200
+
+        buckets_list = r.json()
+        assert user['key'] in [x['key'] for x in buckets_list['indexes']]
+
+        r = subbucket_proxy.post('/delete-bucket/', '')
+
+        assert r.status_code == 200
+
+        r = bucket_proxy.get('/list-bucket-directory/' + client.bucket)
+
+        assert r.status_code == 200
+
+        buckets_list = r.json()
+        assert user['key'] not in [x['key'] for x in buckets_list['indexes']]
+
     @pytest.mark.parametrize('view', [
         ('id-only'),
         ('extended')
