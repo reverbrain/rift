@@ -57,7 +57,7 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::prefix_match("/find/"),
 		options::methods("POST")
 	);
-	on<rift::io::on_redirectable_get<example_server>>(
+	on<rift::bucket_processor<example_server, on_redirectable_get>>(
 		options::prefix_match("/redirect/"),
 		options::methods("GET")
 	);
@@ -73,7 +73,7 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::prefix_match("/list/"),
 		options::methods("GET")
 	);
-	on<rift::io::on_download_info<example_server>>(
+	on<rift::bucket_processor<example_server, on_download_info>>(
 		options::prefix_match("/download-info/"),
 		options::methods("GET")
 	);
@@ -86,7 +86,7 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::methods("POST")
 	);
 
-	on<rift::io::on_delete<example_server>>(
+	on<rift::bucket_processor<example_server, on_delete>>(
 		options::prefix_match("/delete/"),
 		options::methods("POST")
 	);
@@ -153,6 +153,12 @@ swarm::url example_server::generate_url_base(dnet_addr *addr, const std::string 
 	}
 
 	return std::move(url);
+}
+
+template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
+std::string example_server::signature_token(rift::bucket_mixin<BaseStream, Flags> &mixin) const
+{
+	return mixin.bucket_mixin_acl.token;
 }
 
 const rift::elliptics_base *example_server::elliptics() const {

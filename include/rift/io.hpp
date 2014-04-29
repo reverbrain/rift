@@ -427,31 +427,17 @@ public:
 
 // perform lookup, get file-info json in response
 template <typename Server, typename Stream>
-class on_download_info_base : public bucket_processing<Server, Stream>
+class on_download_info_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
-		const auto &url = req.url();
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
-			this->log(swarm::SWARM_LOG_ERROR, "download-info-base: checked: path: %s, url: %s, verdict: %d, did-not-pass-noauth-check",
-					url.path().c_str(), url.query().to_string().c_str(), verdict);
-
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "download-info-base: checked: path: %s, url: %s, verdict: %d, passed-noauth-check",
-				url.path().c_str(), url.query().to_string().c_str(), verdict);
-
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
 		elliptics::key key;
-		elliptics::session session = this->server()->read_data_session_cache(req, meta, key);
+		elliptics::session session = this->server()->create_session(static_cast<Stream&>(*this), req, key);
 
 		session.lookup(key).connect(std::bind(&on_download_info_base::on_download_lookup_finished,
-					this->shared_from_this(), acl, std::placeholders::_1, std::placeholders::_2));
+					this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 	}
 
 	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time,
@@ -516,7 +502,7 @@ public:
 		return std::move(signature);
 	}
 
-	virtual void on_download_lookup_finished(const bucket_acl &acl, const elliptics::sync_lookup_result &result,
+	virtual void on_download_lookup_finished(const elliptics::sync_lookup_result &result,
 			const elliptics::error_info &error) {
 		if (error) {
 			this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
@@ -532,11 +518,12 @@ public:
 		dnet_time time;
 		dnet_current_time(&time);
 		const std::string time_str = boost::lexical_cast<std::string>(time.tsec);
+		const std::string token = this->server()->signature_token(static_cast<Stream&>(*this));
 
-		if (!acl.token.empty()) {
+		if (!token.empty()) {
 			swarm::http_response::status_type status = swarm::http_response::ok;
 			std::string url;
-			std::string signature = generate_signature(result[0], time_str, acl.token, &url, &status);
+			std::string signature = generate_signature(result[0], time_str, token, &url, &status);
 			if (status != swarm::http_response::ok) {
 				this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
 						error.message().c_str());
@@ -576,11 +563,11 @@ public:
 };
 
 // perform lookup, redirect in response
-template <typename Server>
-class on_redirectable_get : public on_download_info<Server>
+template <typename Server, typename Stream>
+class on_redirectable_get_base : public on_download_info_base<Server, Stream>
 {
 public:
-	virtual void on_download_lookup_finished(const bucket_acl &acl, const elliptics::sync_lookup_result &result,
+	virtual void on_download_lookup_finished(const elliptics::sync_lookup_result &result,
 			const elliptics::error_info &error) {
 		if (error.code() == -ENOENT) {
 			this->send_reply(swarm::http_response::not_found);
@@ -595,11 +582,12 @@ public:
 		dnet_time time;
 		dnet_current_time(&time);
 		const std::string time_str = boost::lexical_cast<std::string>(time.tsec);
+		const std::string token = this->server()->signature_token(static_cast<Stream&>(*this));
 
 		std::string url;
 
 		swarm::http_response::status_type status = swarm::http_response::ok;
-		this->generate_signature(result[0], time_str, acl.token, &url, &status);
+		this->generate_signature(result[0], time_str, token, &url, &status);
 		if (status != swarm::http_response::ok) {
 			this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
 					error.message().c_str());
@@ -617,6 +605,12 @@ public:
 
 		this->send_reply(std::move(reply));
 	}
+};
+
+template <typename Server>
+class on_redirectable_get : public on_redirectable_get_base<Server, on_redirectable_get<Server>>
+{
+public:
 };
 
 class iodevice
@@ -931,32 +925,15 @@ public:
 };
 
 template <typename Server, typename Stream>
-class on_delete_base : public bucket_processing<Server, Stream>
+class on_delete_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
-		const auto &query = req.url().query();
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
-			this->log(swarm::SWARM_LOG_ERROR, "delete-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-					query.to_string().c_str(), verdict);
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, original-verdict: %d, passed-no-auth-check",
-				query.to_string().c_str(), verdict);
-
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
 		elliptics::key key;
-		elliptics::session session = this->server()->write_data_session_cache(req, meta, key);
+		elliptics::session session = this->server()->create_session(static_cast<Stream&>(*this), req, key);
 
-		std::vector<std::string> indexes;
-		indexes.push_back(meta.key + ".index");
-
-		session.remove_indexes(key, indexes);
 		session.remove(key).connect(std::bind(
 			&on_delete_base::on_delete_finished, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));
