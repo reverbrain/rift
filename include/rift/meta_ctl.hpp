@@ -320,15 +320,16 @@ public:
 		session.remove_index(meta.key + ".index", true).connect(std::bind(&on_delete_base::on_delete_finished, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
 
-		std::string parent = meta_from_key(req, key) + ".index";
-		std::vector<std::string> parent_indexes;
-		parent_indexes.push_back(parent);
-		session.remove_indexes(meta.key, parent_indexes);
-
 		elliptics::key unused;
 		elliptics::session metadata_session = this->server()->elliptics()->write_metadata_session(req, meta, unused);
 		metadata_session.set_namespace(bucket_namespace.c_str(), bucket_namespace.size());
 		metadata_session.remove(meta.key);
+
+		std::string parent = meta_from_key(req, key) + ".index";
+		std::vector<std::string> parent_indexes;
+		parent_indexes.push_back(parent);
+		metadata_session.remove_indexes(meta.key, parent_indexes);
+
 	}
 
 	virtual void on_delete_finished(const elliptics::sync_generic_result &result, const elliptics::error_info &error) {
