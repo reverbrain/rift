@@ -17,7 +17,8 @@ class Server:
             'srw': False,
             'servers': [
                 {
-                    'group': group
+                    'group': group,
+		    'indexes_shard_count': 1
                 } for group in groups
             ]
         }
