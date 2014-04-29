@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.7.3
+Version:	2.25.0.7.4
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -71,6 +71,20 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Wed Apr 30 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.7.4
+- delete-meta: check if delete-bucket has bucket directory name
+- tests: test server should use only 1 index shard
+- meta_delete: added more debug
+- tests: Write server node's logs to file
+- cmake: tests should properly export library path
+- meta: remove bucket from bucket-directory indexes using metadata session
+- tests: Run dnet_run_servers from PATH
+- meta: use metadata session when removing bucket metadata. Do not return 404 if there are no data keys in bucket
+- tests: Added test for delete-bucket handler
+- tests: Added test for /delete/ handler
+- rift: Finally removed non-bufferized update handler
+- Revert "list: allow to list arbitrary indexes, it is useless for /update/-created indexes though since /update/ handler doesn't put bucket_meta_index_data there"
+
 * Sat Apr 26 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.7.3
 - delete: remove key from 'bucket.index' index when key is being deleted
 - tests: Fixed format for lucid's python
