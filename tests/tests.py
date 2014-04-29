@@ -117,6 +117,19 @@ class TestCases:
         assert len(r.content) == len(self.data)
         assert r.content == self.data
 
+    def test_delete(self, client):
+        assert isinstance(client, rift_client.Client)
+        
+        name = "delete-test"
+        r = client.post("/upload/" + name, self.data)
+        assert r.status_code == 200
+        r = client.get("/get/" + name)
+        assert r.status_code == 200
+        r = client.post("/delete/" + name, self.data)
+        assert r.status_code == 200
+        r = client.get("/get/" + name)
+        assert r.status_code == 404
+
     def test_download_info(self, client):
         assert isinstance(client, rift_client.Client)
         r = client.get("/download-info/name")
@@ -294,4 +307,3 @@ class TestCases:
             assert 'time-raw' in data_object['mtime']
             assert 'data' in data_object
             assert data == data_object['data']
-
