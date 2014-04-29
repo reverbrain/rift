@@ -22,9 +22,12 @@ class Server:
             ]
         }
 
+        self.log = open(os.path.join(self.path, "server.log"), "w")
+
         self.process = subprocess.Popen(args=["dnet_run_servers"],
                                         stdin=subprocess.PIPE,
-                                        stdout=subprocess.PIPE)
+                                        stdout=subprocess.PIPE,
+                                        stderr=self.log)
 
         js = json.dumps(config)
         self.process.stdin.write(js + '\0')
@@ -44,3 +47,4 @@ class Server:
     def stop(self):
         self.process.terminate()
         self.process.wait()
+        self.log.close()
