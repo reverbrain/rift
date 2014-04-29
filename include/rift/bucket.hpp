@@ -34,7 +34,7 @@ struct bucket_acl {
 	};
 
 	// bit fields
-	enum {
+	enum flags_noauth {
 		flags_noauth_read = 1<<0,
 		flags_noauth_all = 1<<1,
 	};
@@ -151,6 +151,135 @@ public:
 
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) = 0;
+};
+
+template <typename BaseStream, bucket_acl::flags_noauth Flags>
+class bucket_mixin : public BaseStream
+{
+public:
+	enum {
+		bucket_mixin_flags = Flags
+	};
+
+	bucket_meta_raw bucket_mixin_meta;
+	bucket_acl bucket_mixin_acl;
+};
+
+template <typename Server, typename BaseStream>
+class bucket_processor : public thevoid::request_stream<Server>, public std::enable_shared_from_this<bucket_processor<Server, BaseStream>>
+{
+public:
+	enum {
+		bucket_flags = BaseStream::bucket_mixin_flags
+	};
+
+	bucket_processor() : m_closed(false), m_on_data_called(false), m_was_error(false)
+	{
+	}
+
+	virtual void on_headers(swarm::http_request &&req)
+	{
+		m_request = std::move(req);
+
+		try {
+			this->server()->process(m_request, boost::asio::const_buffer(),
+				std::bind(&bucket_processor::on_checked, this->shared_from_this(),
+					std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+		} catch (const std::exception &e) {
+			this->log(swarm::SWARM_LOG_ERROR, "%s: uri: %s, processing error: %s",
+					req.url().path().c_str(), req.url().query().to_string().c_str(), e.what());
+
+			this->send_reply(swarm::http_response::bad_request);
+		}
+	}
+
+	virtual size_t on_data(const boost::asio::const_buffer &buffer)
+	{
+		{
+			std::lock_guard<std::mutex> lock(m_stream_mutex);
+			if (!m_stream) {
+				m_on_data_called = true;
+				return 0;
+			}
+		}
+
+		return m_stream->on_data(buffer);
+	}
+
+	virtual void on_close(const boost::system::error_code &err)
+	{
+		{
+			std::lock_guard<std::mutex> lock(m_stream_mutex);
+			if (!m_stream) {
+				const swarm::url &url = m_request.url();
+				this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: on_close called: path: %s, url: %s, error: %s",
+						url.path().c_str(), url.query().to_string().c_str(), err.message().c_str());
+				m_closed = true;
+				m_was_error = !!err;
+				return;
+			}
+		}
+
+		m_stream->on_close(err);
+	}
+
+protected:
+	void on_checked(const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict)
+	{
+		const swarm::url &url = m_request.url();
+
+		if ((verdict != swarm::http_response::ok) && (bucket_flags == int(bucket_acl::flags_noauth_read) ? !acl.noauth_read() : !acl.noauth_all())) {
+			this->log(swarm::SWARM_LOG_ERROR, "bucket_processor_base: checked: path: %s, url: %s, verdict: %d, did-not-pass-noauth-check",
+					url.path().c_str(), url.query().to_string().c_str(), verdict);
+
+			this->send_reply(verdict);
+			return;
+		}
+
+		this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: checked: path: %s, url: %s, verdict: %d, passed-noauth-check",
+				url.path().c_str(), url.query().to_string().c_str(), verdict);
+
+		auto stream = std::make_shared<BaseStream>();
+		stream->bucket_mixin_meta = meta;
+		stream->bucket_mixin_acl = acl;
+		stream->initialize(this->get_reply());
+		stream->set_server(this->server());
+
+		{
+			std::lock_guard<std::mutex> lock(m_stream_mutex);
+			if (m_closed && m_was_error) {
+				this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: already closed: path: %s, url: %s",
+						url.path().c_str(), url.query().to_string().c_str());
+				// Connection is already closed, so we should die
+				return;
+			}
+
+			m_stream = stream;
+			m_stream->on_headers(std::move(m_request));
+
+			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: on_headers called: path: %s, url: %s",
+					url.path().c_str(), url.query().to_string().c_str());
+		}
+
+		if (m_closed) {
+			m_stream->on_data(boost::asio::const_buffer());
+			m_stream->on_close(boost::system::error_code());
+		} else if (m_on_data_called) {
+			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: want_more called: path: %s, url: %s",
+					url.path().c_str(), url.query().to_string().c_str());
+			// on_data method was already called, so we should to call it again
+			this->get_reply()->want_more();
+		}
+	}
+
+	bool m_closed;
+	bool m_on_data_called;
+	bool m_was_error;
+	std::mutex m_stream_mutex;
+	std::shared_ptr<thevoid::base_request_stream> m_stream;
+	swarm::http_request m_request;
+	bucket_meta_raw m_meta;
+	bucket_acl m_acl;
 };
 
 }} // namespace ioremap::rift

@@ -701,37 +701,21 @@ private:
 };
 
 template <typename Server, typename Stream>
-class on_get_base : public bucket_processing<Server, Stream>
+class on_get_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
 	on_get_base() : m_buffer_size(5 * 1025 * 1024)
 	{
 	}
 
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
-		auto data = elliptics::data_pointer::from_raw(
-			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
-			boost::asio::buffer_size(buffer));
-
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &query = req.url().query();
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-					query.to_string().c_str(), verdict);
-
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
-				query.to_string().c_str(), verdict);
 
 		m_offset = query.item_value("offset", 0llu);
 
 		(void) buffer;
 
-		m_session.reset(new elliptics::session(this->server()->read_data_session_cache(req, meta, m_key)));
+		m_session.reset(new elliptics::session(this->server()->create_session(static_cast<Stream&>(*this), req, m_key)));
 
 		m_session->lookup(m_key).connect(std::bind(
 			&on_get_base::on_buffered_get_lookup_finished, this->shared_from_this(),

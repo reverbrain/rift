@@ -40,6 +40,12 @@ public:
 
 	elliptics::session read_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const;
 	elliptics::session write_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const;
+	template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
+	elliptics::session create_session(rift::bucket_mixin<BaseStream, Flags> &mixin, const swarm::http_request &req, elliptics::key &key) const;
+
+	struct on_get : public rift::bucket_mixin<rift::io::on_get_base<example_server, on_get>, rift::bucket_acl::flags_noauth_read>
+	{
+	};
 
 private:
 	int m_redirect_port;

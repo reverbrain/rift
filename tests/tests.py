@@ -45,6 +45,19 @@ class TestCases:
         bucket_proxy = rift_client.ClientProxy(client, client.directory_user)
         self.create_bucket(bucket_proxy, client.user)
 
+    def test_upload(self, client):
+        assert isinstance(client, rift_client.Client)
+        r = client.post("/upload/name", self.data)
+        assert r.status_code == 200
+
+    def test_get(self, client):
+        assert isinstance(client, rift_client.Client)
+        r = client.get("/get/name")
+
+        assert r.status_code == 200
+        assert len(r.content) == len(self.data)
+        assert r.content == self.data
+
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")
     @pytest.mark.parametrize('flags, write_noauth_status, write_auth_status, read_noauth_status, read_auth_status', [
@@ -103,19 +116,6 @@ class TestCases:
         assert r.status_code == 200
         assert r.headers["X-UNIQUE-HEADER"] == "some-value"
         assert r.content == data
-
-    def test_upload(self, client):
-        assert isinstance(client, rift_client.Client)
-        r = client.post("/upload/name", self.data)
-        assert r.status_code == 200
-
-    def test_get(self, client):
-        assert isinstance(client, rift_client.Client)
-        r = client.get("/get/name")
-
-        assert r.status_code == 200
-        assert len(r.content) == len(self.data)
-        assert r.content == self.data
 
     def test_delete(self, client):
         assert isinstance(client, rift_client.Client)
