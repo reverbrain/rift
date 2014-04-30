@@ -6,6 +6,7 @@
 #include "rift/asio.hpp"
 #include "rift/bucket.hpp"
 #include "rift/jsonvalue.hpp"
+#include "rift/url.hpp"
 
 namespace ioremap { namespace rift { namespace index { 
 
@@ -48,8 +49,9 @@ public:
 			return;
 		}
 
-		elliptics::key key;
-		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta, key);
+		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta);
+		elliptics::key key(this->server()->key(req));
+		session.transform(key);
 
 		std::vector<elliptics::index_entry> indexes_entries;
 
@@ -205,8 +207,9 @@ public:
 		if (data.HasMember("view"))
 			m_view = data["view"].GetString();
 
-		elliptics::key key;
-		m_session.reset(new elliptics::session(this->server()->elliptics()->read_data_session(req, meta, key)));
+		m_session.reset(new elliptics::session(this->server()->elliptics()->read_data_session(req, meta)));
+		elliptics::key key(this->server()->key(req));
+		m_session->transform(key);
 
 		const std::string type = data["type"].GetString();
 

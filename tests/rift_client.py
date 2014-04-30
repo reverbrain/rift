@@ -8,8 +8,8 @@ class Client:
         self.bucket = option.bucket
         if self.bucket:
             self.user = self.generate_user()
-            self.directory_user = self.generate_user()
-            self.directory_user['key'] = self.bucket
+	    self.directory_user = self.generate_user()
+	    self.directory_user['key'] = self.bucket
         else:
             self.user = None
             self.directory_user = None
@@ -55,15 +55,20 @@ class Client:
         import urllib
 
         parsed_url = urlparse.urlsplit(url)
+
+	path = parsed_url.path
         query = parsed_url.query
 
         if user:
             qs = urlparse.parse_qs(parsed_url.query)
-            qs['bucket'] = user['key']
             qs['user'] = user['user']
             query = urllib.urlencode(qs)
 
-        result_url = urlparse.urlunsplit(('http', 'localhost:8080', parsed_url.path, query, parsed_url.fragment))
+	    pc = path.split('/')
+	    pc.insert(2, user['key'])
+	    path = '/'.join(pc)
+
+        result_url = urlparse.urlunsplit(('http', 'localhost:8080', path, query, parsed_url.fragment))
 
         if user and 'token' in user:
             headers = kwargs['headers'] if 'headers' in kwargs else {}
@@ -100,7 +105,6 @@ class ClientProxy:
         assert isinstance(client, Client)
         self.client = client
         self.user = user
-        self.bucket = client.bucket
 
     def get(self, url, **kwargs):
         return self.client.authorized_get(url, self.user, **kwargs)

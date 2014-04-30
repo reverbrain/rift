@@ -3,6 +3,7 @@
 
 #include "rift/jsonvalue.hpp"
 #include "rift/bucket.hpp"
+#include "rift/url.hpp"
 
 #include <swarm/url.hpp>
 #include <swarm/url_query.hpp>
@@ -262,7 +263,12 @@ public:
 		else
 			m_size = 0;
 
-		auto session = this->server()->write_data_session_cache(req, m_meta, m_key);
+		auto session = this->server()->elliptics()->write_data_session(req, m_meta);
+
+		m_key = elliptics::key(this->server()->key(req));
+		session.transform(m_key);
+
+		this->server()->check_cache(m_key, session);
 
 		bool m_has_chunk = false;
 		{
@@ -447,8 +453,10 @@ public:
 
 		(void) buffer;
 
-		elliptics::key key;
-		elliptics::session session = this->server()->read_data_session_cache(req, meta, key);
+		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta);
+		elliptics::key key = elliptics::key(this->server()->key(req));
+		session.transform(key);
+		this->server()->check_cache(key, session);
 
 		session.lookup(key).connect(std::bind(&on_download_info_base::on_download_lookup_finished,
 					this->shared_from_this(), acl, std::placeholders::_1, std::placeholders::_2));
@@ -731,7 +739,10 @@ public:
 
 		(void) buffer;
 
-		m_session.reset(new elliptics::session(this->server()->read_data_session_cache(req, meta, m_key)));
+		m_session.reset(new elliptics::session(this->server()->elliptics()->read_data_session(req, meta)));
+		m_key = elliptics::key(this->server()->key(req));
+		m_session->transform(m_key);
+		this->server()->check_cache(m_key, *m_session);
 
 		m_session->lookup(m_key).connect(std::bind(
 			&on_get_base::on_buffered_get_lookup_finished, this->shared_from_this(),
@@ -966,8 +977,10 @@ public:
 
 		(void) buffer;
 
-		elliptics::key key;
-		elliptics::session session = this->server()->write_data_session_cache(req, meta, key);
+		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta);
+		elliptics::key key = elliptics::key(this->server()->key(req));
+		session.transform(key);
+		this->server()->check_cache(key, session);
 
 		std::vector<std::string> indexes;
 		indexes.push_back(meta.key + ".index");

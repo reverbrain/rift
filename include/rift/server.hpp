@@ -45,7 +45,7 @@ public:
 		return *m_node;
 	}
 
-	elliptics::session read_data_session(const swarm::http_request &req, const bucket_meta_raw &meta, elliptics::key &key) const {
+	elliptics::session read_data_session(const swarm::http_request &req, const bucket_meta_raw &meta) const {
 		auto session = m_session->clone();
 		session.set_timeout(m_read_timeout);
 
@@ -60,30 +60,25 @@ public:
 		session.set_ioflags(ioflags);
 		session.set_cflags(cflags);
 
-		const auto &path = req.url().path_components();
-		size_t prefix_size = 1 + path[0].size() + 1;
-		key = elliptics::key(req.url().path().substr(prefix_size));
-		session.transform(key);
-
 		return session;
 	}
 
-	elliptics::session write_data_session(const swarm::http_request &req, const bucket_meta_raw &meta, elliptics::key &key) const {
-		auto session = read_data_session(req, meta, key);
+	elliptics::session write_data_session(const swarm::http_request &req, const bucket_meta_raw &meta) const {
+		auto session = read_data_session(req, meta);
 		session.set_timeout(m_write_timeout);
 
 		return session;
 	}
 
-	elliptics::session read_metadata_session(const swarm::http_request &req, const bucket_meta_raw &meta, elliptics::key &key) const {
-		auto session = read_data_session(req, meta, key);
+	elliptics::session read_metadata_session(const swarm::http_request &req, const bucket_meta_raw &meta) const {
+		auto session = read_data_session(req, meta);
 		session.set_groups(m_metadata_groups);
 
 		return session;
 	}
 
-	elliptics::session write_metadata_session(const swarm::http_request &req, const bucket_meta_raw &meta, elliptics::key &key) const {
-		auto session = write_data_session(req, meta, key);
+	elliptics::session write_metadata_session(const swarm::http_request &req, const bucket_meta_raw &meta) const {
+		auto session = write_data_session(req, meta);
 		session.set_groups(m_metadata_groups);
 
 		return session;

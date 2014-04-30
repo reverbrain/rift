@@ -89,7 +89,7 @@ typedef std::function<void (const swarm::http_request, const boost::asio::const_
 class bucket_meta
 {
 	public:
-		bucket_meta(const std::string &key, bucket *b, const swarm::http_request &request,
+		bucket_meta(bucket *b, const swarm::http_request &request,
 				const boost::asio::const_buffer &buffer,
 				const continue_handler_t &continue_handler);
 
@@ -125,7 +125,7 @@ class bucket : public metadata_updater, public std::enable_shared_from_this<buck
 		bucket();
 
 		bool initialize(const rapidjson::Value &config, const elliptics_base &base, async_performer *async);
-		void check(const std::string &name, const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+		void check(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
 				const continue_handler_t &continue_handler);
 
 	private:

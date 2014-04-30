@@ -13,37 +13,36 @@ class TestCases:
     def setup(self):
         self.data = os.urandom(1000000 * 30)
 
-    def create_bucket(self, client, user, flags = 0, command = 'update-bucket'):
+    def create_bucket(self, client, flags = 0, command = ''):
         data = {
-            'key': user['key'],
             'groups': [
                 5, 6
             ],
             'acl': [
                 {
-                    'user': user['user'],
-                    'token': user['token'],
+                    'user': client.user['user'],
+                    'token': client.user['token'],
                     'flags': flags
                 }
             ]
         }
 
-        r = client.post("/" + command + "/" + client.bucket, json.dumps(data))
+        r = client.post(command, json.dumps(data))
 
         assert r.status_code == 200
 
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")
     def test_update_directory(self, client):
-        self.create_bucket(client, client.directory_user, command='update-bucket-directory')
+        dir_proxy = rift_client.ClientProxy(client, client.directory_user)
+        self.create_bucket(dir_proxy, command='/update-bucket-directory')
 
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")
     def test_create_bucket(self, client):
         assert isinstance(client, rift_client.Client)
 
-        bucket_proxy = rift_client.ClientProxy(client, client.directory_user)
-        self.create_bucket(bucket_proxy, client.user)
+        self.create_bucket(client, client.user, command='/update-bucket/' + client.bucket)
 
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")
@@ -60,9 +59,9 @@ class TestCases:
         noauth_user = deepcopy(user)
         del noauth_user['token']
 
-        bucket_proxy = rift_client.ClientProxy(client, client.directory_user)
+        bucket_proxy = rift_client.ClientProxy(client, user)
 
-        self.create_bucket(bucket_proxy, user, flags)
+        self.create_bucket(bucket_proxy, flags, command='/update-bucket/' + client.bucket)
 
         noauth_data = uuid.uuid4().hex
         auth_data = uuid.uuid4().hex
@@ -197,13 +196,12 @@ class TestCases:
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")
     @pytest.mark.parametrize('name', [
-        ('list-bucket'),
         ('list')
     ])
     def test_list_bucket(self, client, name):
         assert isinstance(client, rift_client.Client)
 
-        r = client.get('/' + name + '/' + client.bucket)
+        r = client.get('/' + name)
 
         assert r.status_code == 200
 
@@ -234,7 +232,7 @@ class TestCases:
 
         bucket_proxy = rift_client.ClientProxy(client, client.directory_user)
 
-        r = bucket_proxy.get('/list-bucket-directory/' + client.bucket)
+        r = bucket_proxy.get('/list-bucket-directory')
 
         assert r.status_code == 200
 
@@ -250,22 +248,22 @@ class TestCases:
         bucket_proxy = rift_client.ClientProxy(client, client.directory_user)
 
         user = client.generate_user()
-        self.create_bucket(bucket_proxy, user, 0)
-
         subbucket_proxy = rift_client.ClientProxy(client, user)
 
-        r = bucket_proxy.get('/list-bucket-directory/' + client.bucket)
+        self.create_bucket(subbucket_proxy, 0, command='/update-bucket/' + client.bucket)
+
+        r = bucket_proxy.get('/list-bucket-directory')
 
         assert r.status_code == 200
 
         buckets_list = r.json()
         assert user['key'] in [x['key'] for x in buckets_list['indexes']]
 
-        r = subbucket_proxy.post('/delete-bucket/' + client.bucket, '')
+        r = subbucket_proxy.post('/delete-bucket', '')
 
         assert r.status_code == 200
 
-        r = bucket_proxy.get('/list-bucket-directory/' + client.bucket)
+        r = bucket_proxy.get('/list-bucket-directory')
 
         assert r.status_code == 200
 

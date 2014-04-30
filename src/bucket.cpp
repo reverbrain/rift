@@ -1,13 +1,14 @@
 #include "rift/bucket.hpp"
 #include "rift/server.hpp"
+#include "rift/url.hpp"
 
 using namespace ioremap;
 using namespace ioremap::rift;
 
-bucket_meta::bucket_meta(const std::string &key, bucket *b, const swarm::http_request &request,
+bucket_meta::bucket_meta(bucket *b, const swarm::http_request &request,
 		const boost::asio::const_buffer &buffer, const continue_handler_t &continue_handler) : m_bucket(b)
 {
-	m_raw.key = key;
+	m_raw.key = url::bucket(request);
 	m_bucket->add_action(std::bind(&bucket_meta::update, this));
 
 	update_and_check(request, buffer, continue_handler);
@@ -203,15 +204,17 @@ bool bucket::initialize(const rapidjson::Value &config, const elliptics_base &ba
 	return true;
 }
 
-void bucket::check(const std::string &name, const swarm::http_request &request, const boost::asio::const_buffer &buffer,
+void bucket::check(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
 		const continue_handler_t &continue_handler)
 {
-	std::unique_lock<std::mutex> guard(m_lock);
+	std::string bucket_name = url::bucket(request);
 
-	auto lookup = m_meta.find(name);
+	std::unique_lock<std::mutex> guard(m_lock);
+	auto lookup = m_meta.find(bucket_name);
+
 	if (lookup == m_meta.end()) {
-		auto meta = std::make_shared<bucket_meta>(name, this, request, buffer, continue_handler);
-		m_meta[name] = meta;
+		auto meta = std::make_shared<bucket_meta>(this, request, buffer, continue_handler);
+		m_meta[bucket_name] = meta;
 	} else {
 		guard.unlock();
 

@@ -9,6 +9,7 @@
 #include "rift/list.hpp"
 #include "rift/meta_ctl.hpp"
 #include "rift/server.hpp"
+#include "rift/url.hpp"
 
 #include <boost/algorithm/string.hpp>
 
@@ -38,8 +39,9 @@ public:
 	void check_cache(const elliptics::key &key, elliptics::session &sess) const;
 	bool query_ok(const swarm::http_request &request) const;
 
-	elliptics::session read_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const;
-	elliptics::session write_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const;
+	std::string key(const swarm::http_request &req) const {
+		return ioremap::rift::url::key(req, !!m_bucket);
+	}
 
 private:
 	int m_redirect_port;

@@ -3,19 +3,9 @@
 
 #include "rift/bucket.hpp"
 #include "rift/io.hpp"
+#include "rift/url.hpp"
 
 namespace ioremap { namespace rift { namespace bucket_ctl {
-
-static std::string meta_from_key(const swarm::http_request &request, const elliptics::key &key) {
-	const auto &pc = request.url().path_components();
-	if ((pc[0] == "update-bucket-directory") || (pc[0] == "delete-bucket-directory")) {
-		// URL format: /update-bucket-directory/unused
-		return "bucket-directories.1";
-	} else {
-		// URL format: /update-bucket/bucket-directory-name-with-slashes/like/this
-		return key.remote();
-	}
-}
 
 template <typename Server>
 class meta_create : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<meta_create<Server>>
@@ -23,18 +13,36 @@ class meta_create : public thevoid::simple_request_stream<Server>, public std::e
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &pc = req.url().path_components();
-		if (pc.size() != 2) {
-			const auto &query = req.url().query();
-			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /meta-create/name, you have no name",
-					query.to_string().c_str());
+		if (pc.size() < 2) {
+			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket/bucket-name/bucket-directory-name or "
+					"/update-bucket-directory/bucket-directory-name",
+					req.url().path().c_str());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
+		}
 
-			elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: path format: /meta-create/name, you have no name",
-					query.to_string().c_str());
+		if (pc[0] == "update-bucket-directory") {
+			if (pc.size() != 2) {
+				this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket-directory/bucket-directory-name",
+						req.url().path().c_str());
+				this->send_reply(swarm::http_response::bad_request);
+				return;
+			}
+			m_parent = "bucket-directories.1";
+		} else if (pc[0] == "update-bucket") {
+			if (pc.size() != 3) {
+				this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket/bucket-name/bucket-directory-name",
+						req.url().path().c_str());
+				this->send_reply(swarm::http_response::bad_request);
+				return;
+			}
+			m_parent = url::key(req, true);
 		}
 
 		try {
+			m_ctl_meta.key = url::bucket(req);
+			m_ctl_meta_namespace = "bucket";
+
 			parse_request(req, buffer, m_ctl_meta);
 			m_request = req;
 
@@ -63,6 +71,7 @@ private:
 	elliptics::key m_key;
 	bucket_meta_raw m_meta;
 	std::unique_ptr<elliptics::session> m_session;
+	// this index will be updated when new bucket or bucket directory has been created
 	std::string m_parent;
 	swarm::http_request m_request;
 
@@ -70,14 +79,8 @@ private:
 		// use empty meta - we use metadata groups and empty this hardcoded namespace
 		bucket_meta_raw meta;
 
-		m_ctl_meta_namespace = "bucket";
-
-		elliptics::key key;
-		elliptics::session session = this->server()->elliptics()->read_metadata_session(m_request, meta, key);
+		elliptics::session session = this->server()->elliptics()->read_metadata_session(m_request, meta);
 		session.set_namespace(m_ctl_meta_namespace.c_str(), m_ctl_meta_namespace.size());
-
-		// this index will be updated when new bucket or bucket directory has been created
-		m_parent = meta_from_key(m_request, key);
 
 		this->log(swarm::SWARM_LOG_NOTICE, "%s: reading meta key '%s', namespace: '%s', parent: '%s'",
 				m_request.url().to_string().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
@@ -101,9 +104,6 @@ private:
 					m_request.url().to_string().c_str(), error.message().c_str());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
-
-			elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: metadata read error: %s",
-					m_request.url().to_string().c_str(), error.message().c_str());
 		}
 
 		// we read some metadata from the storage, let's check if provided security credentials allow us to update it
@@ -138,8 +138,7 @@ private:
 	void write_metadata(void) {
 		bucket_meta_raw meta;
 
-		elliptics::key unused;
-		elliptics::session session = this->server()->elliptics()->write_metadata_session(m_request, meta, unused);
+		elliptics::session session = this->server()->elliptics()->write_metadata_session(m_request, meta);
 		session.set_namespace(m_ctl_meta_namespace.c_str(), m_ctl_meta_namespace.size());
 
 		msgpack::sbuffer buf;
@@ -173,15 +172,13 @@ private:
 					query.to_string().c_str(), doc.GetErrorOffset(), doc.GetParseError());
 		}
 
-		const char *mandatory_members[] = {"key", "groups", NULL};
+		const char *mandatory_members[] = {"groups", NULL};
 		for (auto ptr = mandatory_members; *ptr != NULL; ++ptr) {
 			if (!doc.HasMember(*ptr)) {
 				elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: request doesn't have '%s' member",
 						query.to_string().c_str(), *ptr);
 			}
 		}
-
-		meta.key = doc["key"].GetString();
 
 		auto & groups = doc["groups"];
 		if (!groups.IsArray()) {
@@ -287,56 +284,42 @@ class on_delete_base : public bucket_processing<Server, Stream>
 public:
 	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
 			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
-		const auto &query = req.url().query();
-
 		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
 			this->log(swarm::SWARM_LOG_ERROR, "delete-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-					query.to_string().c_str(), verdict);
+					req.url().path().c_str(), verdict);
 
 			this->send_reply(verdict);
 			return;
 		}
 
 		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, verdict: %d, removing: %s, passed-no-auth-check",
-				query.to_string().c_str(), verdict, meta.key.c_str());
+				req.url().path().c_str(), verdict, meta.key.c_str());
 
 		(void) buffer;
 
-		elliptics::key key;
-		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta, key);
-
-		std::string parent = meta_from_key(req, key);
-		if (parent.size() == 0) {
-			this->log(swarm::SWARM_LOG_ERROR, "delete-base: checked: url: %s, there is no bucket directory name, URL must be /delete-bucket/directory_name",
-					query.to_string().c_str());
-
-			this->send_reply(swarm::http_response::bad_request);
-			return;
-		}
-
+		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta);
 
 		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using data session",
-				query.to_string().c_str(), meta.key.c_str());
+				req.url().path().c_str(), meta.key.c_str());
+
 		session.remove_index(meta.key + ".index", true).connect(std::bind(&on_delete_base::on_delete_finished, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
 
 		std::string bucket_namespace = "bucket";
 
-		elliptics::key unused;
-		elliptics::session metadata_session = this->server()->elliptics()->write_metadata_session(req, meta, unused);
+		elliptics::session metadata_session = this->server()->elliptics()->write_metadata_session(req, meta);
 		metadata_session.set_namespace(bucket_namespace.c_str(), bucket_namespace.size());
 
 		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using metadata session in '%s' namespace",
-				query.to_string().c_str(), meta.key.c_str(), bucket_namespace.c_str());
+				req.url().path().c_str(), meta.key.c_str(), bucket_namespace.c_str());
 		metadata_session.remove(meta.key);
 
-		parent += ".index";
-		std::vector<std::string> parent_indexes;
-		parent_indexes.push_back(parent);
+		std::vector<elliptics::index_entry> parent_indexes;
 
-		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: from index: '%s' using metadata session in '%s' namespace",
-				query.to_string().c_str(), meta.key.c_str(), parent.c_str(), bucket_namespace.c_str());
-		metadata_session.remove_indexes(meta.key, parent_indexes);
+		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: clearing its indexes in '%s' namespace",
+				req.url().path().c_str(), meta.key.c_str(), bucket_namespace.c_str());
+
+		metadata_session.set_indexes(meta.key, parent_indexes);
 	}
 
 	virtual void on_delete_finished(const elliptics::sync_generic_result &result, const elliptics::error_info &error) {

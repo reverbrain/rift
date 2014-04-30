@@ -36,14 +36,13 @@ public:
 
 		(void) buffer;
 
-		elliptics::key unused;
-		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta, unused);
+		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta);
 
 		const auto &pc = req.url().path_components();
 		if (pc.size() >= 1) {
 			if (pc[0] == "list-bucket-directory") {
 				bucket_meta_raw tmp;
-				session = this->server()->elliptics()->read_metadata_session(req, tmp, unused);
+				session = this->server()->elliptics()->read_metadata_session(req, tmp);
 				tmp.key = "bucket";
 				session.set_namespace(tmp.key.c_str(), tmp.key.size());
 			}

@@ -114,10 +114,6 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::prefix_match("/list-bucket-directory/"),
 		options::methods("GET")
 	);
-	on<rift::list::on_list<example_server>>(
-		options::prefix_match("/list-bucket/"),
-		options::methods("GET")
-	);
 
 	return true;
 }
@@ -171,9 +167,7 @@ bool example_server::process(const swarm::http_request &req, const boost::asio::
 			return false;
 		}
 
-		const auto &query = req.url().query();
-		auto bucket = query.item_value("bucket");
-		m_bucket->check(bucket.get(), req, buffer, continue_handler);
+		m_bucket->check(req, buffer, continue_handler);
 	}
 
 	return true;
@@ -191,39 +185,23 @@ void example_server::check_cache(const elliptics::key &key, elliptics::session &
 }
 
 bool example_server::query_ok(const swarm::http_request &request) const {
-	const auto &path = request.url().path_components();
-	if (path.size() < 2) {
-		elliptics::throw_error(swarm::http_response::bad_request, "query parser error: path: '%s/%s', "
-			"error: path must have at least 2 '/'-separated components",
-			request.url().path().c_str(), request.url().query().to_string().c_str());
-	}
-
-	const auto &query = request.url().query();
-
+	const auto &pc = request.url().path_components();
+	size_t min_component_num = 2;
 	if (m_bucket) {
-		auto ns = query.item_value("bucket");
-		if (!ns) {
-			elliptics::throw_error(swarm::http_response::bad_request, "query parser error: path: '%s/%s', "
-				"error: there is no bucket parameter and buckets are turned on in config",
-				request.url().path().c_str(), request.url().query().to_string().c_str());
+		min_component_num = 3;
+		if (pc.size() > 1) {
+			if (pc[0] == "list" || pc[0] == "list-bucket-directory" || pc[0] == "update-bucket-directory" || pc[0] == "delete-bucket")
+				min_component_num = 2;
 		}
 	}
 
+	if (pc.size() < min_component_num) {
+		elliptics::throw_error(swarm::http_response::bad_request, "query parser error: path: '%s?%s', "
+			"error: path must have at least %zd '/'-separated components",
+			request.url().path().c_str(), request.url().query().to_string().c_str(), min_component_num);
+	}
+
 	return true;
-}
-
-elliptics::session example_server::read_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const {
-	auto session = m_elliptics.read_data_session(req, meta, key);
-	check_cache(key, session);
-
-	return session;
-}
-
-elliptics::session example_server::write_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const {
-	auto session = m_elliptics.write_data_session(req, meta, key);
-	check_cache(key, session);
-
-	return session;
 }
 
 } // namespace rift_server
