@@ -69,7 +69,7 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::prefix_match("/upload/"),
 		options::methods("POST")
 	);
-	on<rift::list::on_list<example_server>>(
+	on<rift::bucket_processor<example_server, rift::list::on_list<example_server>>>(
 		options::prefix_match("/list/"),
 		options::methods("GET")
 	);
@@ -110,11 +110,11 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::methods("POST")
 	);
 
-	on<rift::list::on_list<example_server>>(
+	on<rift::bucket_processor<example_server, rift::list::on_list<example_server>>>(
 		options::prefix_match("/list-bucket-directory/"),
 		options::methods("GET")
 	);
-	on<rift::list::on_list<example_server>>(
+	on<rift::bucket_processor<example_server, rift::list::on_list<example_server>>>(
 		options::prefix_match("/list-bucket/"),
 		options::methods("GET")
 	);

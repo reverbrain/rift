@@ -154,8 +154,8 @@ public:
 			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) = 0;
 };
 
-template <typename BaseStream, bucket_acl::flags_noauth Flags>
-class bucket_mixin : public BaseStream
+template <bucket_acl::flags_noauth Flags>
+class bucket_mixin_base
 {
 public:
 	enum {
@@ -164,6 +164,12 @@ public:
 
 	bucket_meta_raw bucket_mixin_meta;
 	bucket_acl bucket_mixin_acl;
+};
+
+template <typename BaseStream, bucket_acl::flags_noauth Flags>
+class bucket_mixin : public BaseStream, public bucket_mixin_base<Flags>
+{
+public:
 };
 
 template <typename Server, typename BaseStream>

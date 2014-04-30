@@ -16,28 +16,14 @@ namespace ioremap { namespace rift { namespace list {
 
 // return list of keys in bucket
 template <typename Server, typename Stream>
-class on_list_base : public bucket_processing<Server, Stream>
+class on_list_base : public bucket_mixin<thevoid::simple_request_stream<Server>, bucket_acl::flags_noauth_read>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
-		const auto &query = req.url().query();
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
-			this->log(swarm::SWARM_LOG_ERROR, "list-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-					query.to_string().c_str(), verdict);
-
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "list-base: checked: url: %s, verdict: %d, listing: %s, passed-no-auth-check",
-				query.to_string().c_str(), verdict, meta.key.c_str());
-
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
 		elliptics::key unused;
-		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta, unused);
+		elliptics::session session = this->server()->elliptics()->read_data_session(req, this->bucket_mixin_meta, unused);
 
 		const auto &pc = req.url().path_components();
 		if (pc.size() >= 1) {
@@ -50,15 +36,14 @@ public:
 		}
 
 		std::vector<std::string> keys;
-		keys.emplace_back(meta.key + ".index");
+		keys.emplace_back(this->bucket_mixin_meta.key + ".index");
 
 		session.find_all_indexes(keys).connect(std::bind(&on_list_base::on_find_finished, this->shared_from_this(),
-					meta, std::placeholders::_1, std::placeholders::_2));
+					std::placeholders::_1, std::placeholders::_2));
 	}
 
-	virtual void on_find_finished(const bucket_meta_raw &meta, const elliptics::sync_find_indexes_result &result,
+	virtual void on_find_finished(const elliptics::sync_find_indexes_result &result,
 			const elliptics::error_info &error) {
-		(void) meta;
 		if (error) {
 			this->log(swarm::SWARM_LOG_ERROR, "list-base: find-finished: error: %s",
 					error.message().c_str());

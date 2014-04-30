@@ -18,12 +18,7 @@ static std::string meta_from_key(const swarm::http_request &request, const ellip
 }
 
 template <typename Server, typename Stream>
-class meta_create_mixin_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
-{
-};
-
-template <typename Server, typename Stream>
-class meta_create_base : public rift::bucket_mixin<meta_create_mixin_base<Server, Stream>, rift::bucket_acl::flags_noauth_all>
+class meta_create_base : public rift::bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::flags_noauth_all>, public std::enable_shared_from_this<Stream>
 {
 public:
 	meta_create_base() : m_meta(this->bucket_mixin_meta)
@@ -264,14 +259,9 @@ class meta_create : public rift::indexed_upload_mixin<meta_create_base<Server, m
 public:
 };
 
-template <typename Server, typename Stream>
-class on_delete_mixin_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
-{
-};
-
 // remove bucket and all objects within
 template <typename Server, typename Stream>
-class on_delete_base : public bucket_mixin<on_delete_mixin_base<Server, on_delete_base<Server, Stream>>, rift::bucket_acl::flags_noauth_all>
+class on_delete_base : public bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::flags_noauth_all>, public std::enable_shared_from_this<Stream>
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
