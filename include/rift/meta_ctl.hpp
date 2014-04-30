@@ -264,30 +264,23 @@ class meta_create : public rift::indexed_upload_mixin<meta_create_base<Server, m
 public:
 };
 
+template <typename Server, typename Stream>
+class on_delete_mixin_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
+{
+};
+
 // remove bucket and all objects within
 template <typename Server, typename Stream>
-class on_delete_base : public bucket_processing<Server, Stream>
+class on_delete_base : public bucket_mixin<on_delete_mixin_base<Server, on_delete_base<Server, Stream>>, rift::bucket_acl::flags_noauth_all>
 {
 public:
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &query = req.url().query();
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
-			this->log(swarm::SWARM_LOG_ERROR, "delete-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-					query.to_string().c_str(), verdict);
-
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, verdict: %d, removing: %s, passed-no-auth-check",
-				query.to_string().c_str(), verdict, meta.key.c_str());
 
 		(void) buffer;
 
 		elliptics::key key;
-		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta, key);
+		elliptics::session session = this->server()->create_session(static_cast<Stream&>(*this), req, key);
 
 		std::string parent = meta_from_key(req, key);
 		if (parent.size() == 0) {
@@ -300,27 +293,27 @@ public:
 
 
 		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using data session",
-				query.to_string().c_str(), meta.key.c_str());
-		session.remove_index(meta.key + ".index", true).connect(std::bind(&on_delete_base::on_delete_finished, this->shared_from_this(),
+				query.to_string().c_str(), this->bucket_mixin_meta.key.c_str());
+		session.remove_index(this->bucket_mixin_meta.key + ".index", true).connect(std::bind(&on_delete_base::on_delete_finished, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
 
 		std::string bucket_namespace = "bucket";
 
 		elliptics::key unused;
-		elliptics::session metadata_session = this->server()->elliptics()->write_metadata_session(req, meta, unused);
+		elliptics::session metadata_session = this->server()->elliptics()->write_metadata_session(req, this->bucket_mixin_meta, unused);
 		metadata_session.set_namespace(bucket_namespace.c_str(), bucket_namespace.size());
 
 		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using metadata session in '%s' namespace",
-				query.to_string().c_str(), meta.key.c_str(), bucket_namespace.c_str());
-		metadata_session.remove(meta.key);
+				query.to_string().c_str(), this->bucket_mixin_meta.key.c_str(), bucket_namespace.c_str());
+		metadata_session.remove(this->bucket_mixin_meta.key);
 
 		parent += ".index";
 		std::vector<std::string> parent_indexes;
 		parent_indexes.push_back(parent);
 
 		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: from index: '%s' using metadata session in '%s' namespace",
-				query.to_string().c_str(), meta.key.c_str(), parent.c_str(), bucket_namespace.c_str());
-		metadata_session.remove_indexes(meta.key, parent_indexes);
+				query.to_string().c_str(), this->bucket_mixin_meta.key.c_str(), parent.c_str(), bucket_namespace.c_str());
+		metadata_session.remove_indexes(this->bucket_mixin_meta.key, parent_indexes);
 	}
 
 	virtual void on_delete_finished(const elliptics::sync_generic_result &result, const elliptics::error_info &error) {

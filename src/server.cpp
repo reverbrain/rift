@@ -91,11 +91,11 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::methods("POST")
 	);
 
-	on<rift::bucket_ctl::on_delete<example_server>>(
+	on<rift::bucket_processor<example_server, rift::bucket_ctl::on_delete<example_server>>>(
 		options::prefix_match("/delete-bucket-directory/"),
 		options::methods("POST")
 	);
-	on<rift::bucket_ctl::on_delete<example_server>>(
+	on<rift::bucket_processor<example_server, rift::bucket_ctl::on_delete<example_server>>>(
 		options::prefix_match("/delete-bucket/"),
 		options::methods("POST")
 	);
