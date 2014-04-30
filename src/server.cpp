@@ -218,20 +218,6 @@ bool example_server::query_ok(const swarm::http_request &request) const {
 	return true;
 }
 
-elliptics::session example_server::read_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const {
-	auto session = m_elliptics.read_data_session(req, meta, key);
-	check_cache(key, session);
-
-	return session;
-}
-
-elliptics::session example_server::write_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const {
-	auto session = m_elliptics.write_data_session(req, meta, key);
-	check_cache(key, session);
-
-	return session;
-}
-
 template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
 elliptics::session example_server::create_session(rift::bucket_mixin<BaseStream, Flags> &mixin, const swarm::http_request &req, elliptics::key &key) const {
 	const bool is_read = (Flags == rift::bucket_acl::flags_noauth_read);

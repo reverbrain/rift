@@ -41,8 +41,6 @@ public:
 	void check_cache(const elliptics::key &key, elliptics::session &sess) const;
 	bool query_ok(const swarm::http_request &request) const;
 
-	elliptics::session read_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const;
-	elliptics::session write_data_session_cache(const swarm::http_request &req, const rift::bucket_meta_raw &meta, elliptics::key &key) const;
 	template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
 	elliptics::session create_session(rift::bucket_mixin<BaseStream, Flags> &mixin, const swarm::http_request &req, elliptics::key &key) const;
 
