@@ -134,6 +134,14 @@ class bucket : public metadata_updater, public std::enable_shared_from_this<buck
 		std::map<std::string, std::shared_ptr<bucket_meta>> m_meta;
 };
 
+/*!
+ * Bucket mixin adds authorization support for rift handlers.
+ *
+ * It makes possible to check access for different types of actions
+ * like write or read access dependent on the value of Flags parameter.
+ *
+ * Also this mixin stores bucket's information in \a bucket_mixin_meta.
+ */
 template <bucket_acl::flags_noauth Flags>
 class bucket_mixin_base
 {
@@ -152,6 +160,17 @@ class bucket_mixin : public BaseStream, public bucket_mixin_base<Flags>
 public:
 };
 
+/*!
+ * Bucket processor is a proxy handler.
+ *
+ * As it receives the http_request it asks server to check the access rights.
+ *
+ * As server gives positive verdict processor creates underlying stream and
+ * initializes it with all known information.
+ *
+ * Underlying socket must be successor of \a bucket_mixin to be able to store
+ * bucket's information.
+ */
 template <typename Server, typename BaseStream>
 class bucket_processor : public thevoid::request_stream<Server>, public std::enable_shared_from_this<bucket_processor<Server, BaseStream>>
 {
@@ -269,6 +288,11 @@ protected:
 	bucket_acl m_acl;
 };
 
+/*!
+ * Indexed upload mixin adds ability to BaseStream to add file to secondary indexes after succesfull write.
+ *
+ * It overrides on_write_finished method, so it should be properly defined in BaseStream.
+ */
 template <typename BaseStream>
 class indexed_upload_mixin : public BaseStream {
 public:

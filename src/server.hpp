@@ -44,6 +44,13 @@ public:
 	template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
 	elliptics::session create_session(rift::bucket_mixin<BaseStream, Flags> &mixin, const swarm::http_request &req, elliptics::key &key) const;
 
+	/*!
+	 * \brief on_upload class provides HTTP API for requesting data from Elliptics storage
+	 *
+	 * It inherits bucket_mixin to have authorization support.
+	 *
+	 * It inherits indexed_upload_mixin to be able to add file to secondary indexes after succesfull write.
+	 */
 	class on_upload : public rift::indexed_upload_mixin<rift::bucket_mixin<rift::io::on_upload_base<example_server, on_upload>, rift::bucket_acl::flags_noauth_all>>
 	{
 	public:
