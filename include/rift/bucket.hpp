@@ -134,26 +134,6 @@ class bucket : public metadata_updater, public std::enable_shared_from_this<buck
 		std::map<std::string, std::shared_ptr<bucket_meta>> m_meta;
 };
 
-template <typename Server, typename Stream>
-class bucket_processing : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
-{
-public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		try {
-			this->server()->process(req, buffer, std::bind(&bucket_processing::checked, this->shared_from_this(),
-				std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
-		} catch (const std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "%s: uri: %s, processing error: %s",
-					req.url().path().c_str(), req.url().query().to_string().c_str(), e.what());
-
-			this->send_reply(swarm::http_response::bad_request);
-		}
-	}
-
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) = 0;
-};
-
 template <bucket_acl::flags_noauth Flags>
 class bucket_mixin_base
 {
