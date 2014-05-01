@@ -42,7 +42,7 @@ class TestCases:
     def test_create_bucket(self, client):
         assert isinstance(client, rift_client.Client)
 
-        self.create_bucket(client, client.user, command='/update-bucket/' + client.bucket)
+        self.create_bucket(client, command='/update-bucket/' + client.bucket)
 
     def test_upload(self, client):
         assert isinstance(client, rift_client.Client)
@@ -74,7 +74,7 @@ class TestCases:
 
         bucket_proxy = rift_client.ClientProxy(client, user)
 
-        self.create_bucket(bucket_proxy, flags, command='/update-bucket/' + client.bucket)
+        self.create_bucket(bucket_proxy, flags=flags, command='/update-bucket/' + client.bucket)
 
         noauth_data = uuid.uuid4().hex
         auth_data = uuid.uuid4().hex
@@ -250,7 +250,7 @@ class TestCases:
         user = client.generate_user()
         subbucket_proxy = rift_client.ClientProxy(client, user)
 
-        self.create_bucket(subbucket_proxy, 0, command='/update-bucket/' + client.bucket)
+        self.create_bucket(subbucket_proxy, flags=0, command='/update-bucket/' + client.bucket)
 
         r = bucket_proxy.get('/list-bucket-directory')
 
