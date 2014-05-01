@@ -82,7 +82,7 @@ public:
 
 			session.remove_indexes(key, indexes);
 
-			rift::io::on_delete_base::on_delete_finished(result, error);
+			rift::io::on_delete_base<example_server, on_delete>::on_delete_finished(result, error);
 		}
 	};
 
