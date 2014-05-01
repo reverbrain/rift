@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.7.4
+Version:	2.25.0.8.0
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -71,6 +71,15 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Thu May 01 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.0
+- rift: switched to new URL schema
+- rift: Added a bit of documentation about mixins
+- rift: Removed bucket_processing
+- rift: Moved last handler to bucket_processor
+- rift: Moved bucket_ctl::on_delete to bucket_mixin
+- rift: Removed some useless methods
+- rift: Moved more handlers to bucket-less API
+
 * Wed Apr 30 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.7.4
 - delete-meta: check if delete-bucket has bucket directory name
 - tests: test server should use only 1 index shard

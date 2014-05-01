@@ -1,3 +1,15 @@
+rift (2.25.0.8.0) unstable; urgency=low
+
+  * rift: switched to new URL schema
+  * rift: Added a bit of documentation about mixins
+  * rift: Removed bucket_processing
+  * rift: Moved last handler to bucket_processor
+  * rift: Moved bucket_ctl::on_delete to bucket_mixin
+  * rift: Removed some useless methods
+  * rift: Moved more handlers to bucket-less API
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Thu, 01 May 2014 23:42:48 +0400
+
 rift (2.25.0.7.4) unstable; urgency=low
 
   * delete-meta: check if delete-bucket has bucket directory name
