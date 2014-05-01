@@ -89,12 +89,10 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 
 	auto user = query.item_value("user");
 	if (!user) {
-		// no username found in request, return error
-		verdict = swarm::http_response::forbidden;
+		user = "*";
 
-		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: acls: %zd: no user in URI -> %d",
-				query.to_string().c_str(), meta.key.c_str(), meta.acl.size(), verdict);
-		return verdict;
+		logger.log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %zd: no user in URI -> searching for '*' wildcard",
+				query.to_string().c_str(), meta.key.c_str(), meta.acl.size());
 	}
 
 	auto it = meta.acl.find(*user);
