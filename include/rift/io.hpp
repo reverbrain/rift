@@ -2,11 +2,12 @@
 #define __IOREMAP_RIFT_IO_HPP
 
 #include "rift/jsonvalue.hpp"
-#include "rift/bucket.hpp"
 #include "rift/url.hpp"
 
 #include <swarm/url.hpp>
 #include <swarm/url_query.hpp>
+
+#include <elliptics/session.hpp>
 
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
@@ -160,62 +161,6 @@ public:
 
 		result_object.AddMember("info", infos, allocator);
 	}
-
-	typedef std::function<void (const swarm::http_response::status_type, const std::string &)>
-		upload_completion_callback_t;
-
-	static void upload_update_indexes(const elliptics::session &data_session, const bucket_meta_raw &meta,
-			const elliptics::key &key, const elliptics::sync_write_result &write_result,
-			const upload_completion_callback_t &callback) {
-		auto result_object = std::make_shared<rift::JsonValue>();
-		upload_completion::fill_upload_reply(write_result, *result_object, result_object->GetAllocator());
-
-		if (meta.flags & RIFT_BUCKET_META_NO_INDEX_UPDATE) {
-			auto data = result_object->ToString();
-			callback(swarm::http_response::ok, data);
-			return;
-		}
-
-		std::vector<std::string> indexes;
-		indexes.push_back(meta.key + ".index");
-
-		msgpack::sbuffer buf;
-		bucket_meta_index_data index_data;
-		index_data.key = key.to_string();
-		dnet_current_time(&index_data.ts);
-		msgpack::pack(buf, index_data);
-
-		std::vector<elliptics::data_pointer> datas;
-		datas.emplace_back(elliptics::data_pointer::copy(buf.data(), buf.size()));
-
-		elliptics::session session = data_session;
-
-		// only update indexes in non-cached groups
-		if (meta.groups.size()) {
-			session.set_groups(meta.groups);
-		}
-
-		session.update_indexes(key, indexes, datas).connect(
-			std::bind(&upload_completion::on_index_update_finished,
-				result_object, callback, std::placeholders::_1, std::placeholders::_2));
-	}
-
-	static void on_index_update_finished(const std::shared_ptr<rift::JsonValue> &result_object,
-			const upload_completion_callback_t &callback,
-			const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error) {
-		(void) result;
-
-		if (error) {
-			callback(swarm::http_response::internal_server_error, std::string());
-			return;
-		}
-
-		// Here we could update result Json object and put index data there
-		// But we don't
-
-		auto data = result_object->ToString();
-		callback(swarm::http_response::ok, data);
-	}
 };
 
 // write data object, get file-info json in response
@@ -224,38 +169,9 @@ class on_upload_base : public thevoid::buffered_request_stream<Server>, public s
 {
 public:
 	virtual void on_request(const swarm::http_request &req) {
-		try {
-			boost::asio::const_buffer buffer;
-			this->server()->process(req, buffer, std::bind(&on_upload_base::checked, this->shared_from_this(),
-				std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
-		} catch (const std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "%s: uri: %s, processing error: %s",
-					req.url().path().c_str(), req.url().query().to_string().c_str(), e.what());
-
-			this->send_reply(swarm::http_response::bad_request);
-		}
-	}
-
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
 		this->set_chunk_size(10 * 1024 * 1024);
 
 		const auto &query = req.url().query();
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-upload-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-					query.to_string().c_str(), verdict);
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-upload-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
-				query.to_string().c_str(), verdict);
-
-		(void) buffer;
-
-		m_req = req;
-		m_meta = meta;
 
 		m_offset = query.item_value("offset", 0llu);
 		if (auto size = req.headers().content_length())
@@ -263,38 +179,13 @@ public:
 		else
 			m_size = 0;
 
-		auto session = this->server()->elliptics()->write_data_session(req, m_meta);
-
-		m_key = elliptics::key(this->server()->key(req));
-		session.transform(m_key);
-
-		this->server()->check_cache(m_key, session);
-
-		bool m_has_chunk = false;
-		{
-			std::lock_guard<std::mutex> guard(m_chunk_mutex);
-			m_session.reset(new elliptics::session(session));
-			m_has_chunk = !m_chunk.empty();
-		}
-
-		if (m_has_chunk) {
-			on_chunk(boost::asio::buffer(m_chunk.data(), m_chunk.size()), m_chunk_flags);
-		}
+		m_session.reset(new elliptics::session(this->server()->create_session(static_cast<Stream&>(*this), req, m_key)));
 	}
 
 	virtual void on_chunk(const boost::asio::const_buffer &buffer, unsigned int flags) {
-		{
-			std::lock_guard<std::mutex> guard(m_chunk_mutex);
-			if (!m_session) {
-				m_chunk = elliptics::data_pointer::copy(create_data(buffer));
-				m_chunk_flags = flags;
-				return;
-			}
-		}
-
 		const auto data = create_data(buffer);
 
-		const auto &query = m_req.url().query();
+		const auto &query = this->request().url().query();
 		this->log(swarm::SWARM_LOG_INFO, "on_chunk: url: %s, size: %zu, m_offset: %lu, flags: %u",
 				query.to_string().c_str(), data.size(), m_offset, flags);
 
@@ -311,7 +202,7 @@ public:
 	}
 
 	elliptics::async_write_result write(const elliptics::data_pointer &data, unsigned int flags) {
-		const auto &query = m_req.url().query();
+		const auto &query = this->request().url().query();
 
 		if (flags == thevoid::buffered_request_stream<Server>::single_chunk) {
 			return m_session->write_data(m_key, data, m_offset);
@@ -337,14 +228,14 @@ public:
 	}
 
 	virtual void on_error(const boost::system::error_code &error) {
-		const auto &query = m_req.url().query();
+		const auto &query = this->request().url().query();
 		this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s, error: %s",
 				query.to_string().c_str(), error.message().c_str());
 	}
 
 	virtual void on_write_partial(const elliptics::sync_write_result &result, const elliptics::error_info &error) {
 		if (error) {
-			const auto &query = m_req.url().query();
+			const auto &query = this->request().url().query();
 			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s, partial write error: %s",
 					query.to_string().c_str(), error.message().c_str());
 			this->on_write_finished(result, error);
@@ -363,33 +254,13 @@ public:
 				groups.push_back(entry.command()->id.group_id);
 		}
 
-		elliptics::session tmp = *m_session;
+		elliptics::session tmp = m_session->clone();
 		tmp.set_groups(rem_groups);
 		tmp.remove(m_key);
 
 		m_session->set_groups(groups);
 
-		if (m_meta.groups.size()) {
-			using std::swap;
-			swap(m_meta.groups, groups);
-		}
-
 		this->try_next_chunk();
-	}
-
-	void completion(const swarm::http_response::status_type &status, const std::string &data) {
-		if (status != swarm::http_response::ok) {
-			this->send_reply(status);
-			return;
-		}
-
-		swarm::http_response reply;
-
-		reply.set_code(swarm::http_response::ok);
-		reply.headers().set_content_type("text/json");
-		reply.headers().set_content_length(data.size());
-
-		this->send_reply(std::move(reply), std::move(data));
 	}
 
 	virtual void on_write_finished(const elliptics::sync_write_result &result,
@@ -399,26 +270,22 @@ public:
 			return;
 		}
 
-		try {
-			upload_completion::upload_update_indexes(*m_session, m_meta, m_key, result,
-					std::bind(&on_upload_base::completion, this->shared_from_this(),
-						std::placeholders::_1, std::placeholders::_2));
-		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, namespace: %s, exception: %s",
-					m_key.to_string().c_str(), m_meta.key.c_str(), e.what());
-			m_session->remove(m_key);
-			this->send_reply(swarm::http_response::bad_request);
-		}
+		rift::JsonValue value;
+		upload_completion::fill_upload_reply(result, value, value.GetAllocator());
+
+		std::string data = value.ToString();
+
+		swarm::http_response reply;
+		reply.set_code(swarm::http_response::ok);
+		reply.headers().set_content_type("text/json");
+		reply.headers().set_content_length(data.size());
+
+		this->send_reply(std::move(reply), std::move(data));
 	}
 
 
-private:
+protected:
 	elliptics::key m_key;
-	bucket_meta_raw m_meta;
-	swarm::http_request m_req;
-	elliptics::data_pointer m_chunk;
-	unsigned int m_chunk_flags;
-	std::mutex m_chunk_mutex;
 	std::unique_ptr<elliptics::session> m_session;
 
 	uint64_t m_offset;
@@ -433,33 +300,17 @@ public:
 
 // perform lookup, get file-info json in response
 template <typename Server, typename Stream>
-class on_download_info_base : public bucket_processing<Server, Stream>
+class on_download_info_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
-		const auto &url = req.url();
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
-			this->log(swarm::SWARM_LOG_ERROR, "download-info-base: checked: path: %s, url: %s, verdict: %d, did-not-pass-noauth-check",
-					url.path().c_str(), url.query().to_string().c_str(), verdict);
-
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "download-info-base: checked: path: %s, url: %s, verdict: %d, passed-noauth-check",
-				url.path().c_str(), url.query().to_string().c_str(), verdict);
-
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
-		elliptics::session session = this->server()->elliptics()->read_data_session(req, meta);
-		elliptics::key key = elliptics::key(this->server()->key(req));
-		session.transform(key);
-		this->server()->check_cache(key, session);
+		elliptics::key key;
+		elliptics::session session = this->server()->create_session(static_cast<Stream&>(*this), req, key);
 
 		session.lookup(key).connect(std::bind(&on_download_info_base::on_download_lookup_finished,
-					this->shared_from_this(), acl, std::placeholders::_1, std::placeholders::_2));
+					this->shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 	}
 
 	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time,
@@ -524,7 +375,7 @@ public:
 		return std::move(signature);
 	}
 
-	virtual void on_download_lookup_finished(const bucket_acl &acl, const elliptics::sync_lookup_result &result,
+	virtual void on_download_lookup_finished(const elliptics::sync_lookup_result &result,
 			const elliptics::error_info &error) {
 		if (error) {
 			this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
@@ -540,11 +391,12 @@ public:
 		dnet_time time;
 		dnet_current_time(&time);
 		const std::string time_str = boost::lexical_cast<std::string>(time.tsec);
+		const std::string token = this->server()->signature_token(static_cast<Stream&>(*this));
 
-		if (!acl.token.empty()) {
+		if (!token.empty()) {
 			swarm::http_response::status_type status = swarm::http_response::ok;
 			std::string url;
-			std::string signature = generate_signature(result[0], time_str, acl.token, &url, &status);
+			std::string signature = generate_signature(result[0], time_str, token, &url, &status);
 			if (status != swarm::http_response::ok) {
 				this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
 						error.message().c_str());
@@ -584,11 +436,11 @@ public:
 };
 
 // perform lookup, redirect in response
-template <typename Server>
-class on_redirectable_get : public on_download_info<Server>
+template <typename Server, typename Stream>
+class on_redirectable_get_base : public on_download_info_base<Server, Stream>
 {
 public:
-	virtual void on_download_lookup_finished(const bucket_acl &acl, const elliptics::sync_lookup_result &result,
+	virtual void on_download_lookup_finished(const elliptics::sync_lookup_result &result,
 			const elliptics::error_info &error) {
 		if (error.code() == -ENOENT) {
 			this->send_reply(swarm::http_response::not_found);
@@ -603,11 +455,12 @@ public:
 		dnet_time time;
 		dnet_current_time(&time);
 		const std::string time_str = boost::lexical_cast<std::string>(time.tsec);
+		const std::string token = this->server()->signature_token(static_cast<Stream&>(*this));
 
 		std::string url;
 
 		swarm::http_response::status_type status = swarm::http_response::ok;
-		this->generate_signature(result[0], time_str, acl.token, &url, &status);
+		this->generate_signature(result[0], time_str, token, &url, &status);
 		if (status != swarm::http_response::ok) {
 			this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
 					error.message().c_str());
@@ -625,6 +478,12 @@ public:
 
 		this->send_reply(std::move(reply));
 	}
+};
+
+template <typename Server>
+class on_redirectable_get : public on_redirectable_get_base<Server, on_redirectable_get<Server>>
+{
+public:
 };
 
 class iodevice
@@ -709,40 +568,21 @@ private:
 };
 
 template <typename Server, typename Stream>
-class on_get_base : public bucket_processing<Server, Stream>
+class on_get_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
 	on_get_base() : m_buffer_size(5 * 1025 * 1024)
 	{
 	}
 
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
-		auto data = elliptics::data_pointer::from_raw(
-			const_cast<char *>(boost::asio::buffer_cast<const char*>(buffer)),
-			boost::asio::buffer_size(buffer));
-
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &query = req.url().query();
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-					query.to_string().c_str(), verdict);
-
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
-				query.to_string().c_str(), verdict);
 
 		m_offset = query.item_value("offset", 0llu);
 
 		(void) buffer;
 
-		m_session.reset(new elliptics::session(this->server()->elliptics()->read_data_session(req, meta)));
-		m_key = elliptics::key(this->server()->key(req));
-		m_session->transform(m_key);
-		this->server()->check_cache(m_key, *m_session);
+		m_session.reset(new elliptics::session(this->server()->create_session(static_cast<Stream&>(*this), req, m_key)));
 
 		m_session->lookup(m_key).connect(std::bind(
 			&on_get_base::on_buffered_get_lookup_finished, this->shared_from_this(),
@@ -958,34 +798,15 @@ public:
 };
 
 template <typename Server, typename Stream>
-class on_delete_base : public bucket_processing<Server, Stream>
+class on_delete_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
-		const auto &query = req.url().query();
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
-			this->log(swarm::SWARM_LOG_ERROR, "delete-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-					query.to_string().c_str(), verdict);
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, original-verdict: %d, passed-no-auth-check",
-				query.to_string().c_str(), verdict);
-
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
-		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta);
-		elliptics::key key = elliptics::key(this->server()->key(req));
-		session.transform(key);
-		this->server()->check_cache(key, session);
+		elliptics::key key;
+		elliptics::session session = this->server()->create_session(static_cast<Stream&>(*this), req, key);
 
-		std::vector<std::string> indexes;
-		indexes.push_back(meta.key + ".index");
-
-		session.remove_indexes(key, indexes);
 		session.remove(key).connect(std::bind(
 			&on_delete_base::on_delete_finished, this->shared_from_this(),
 				std::placeholders::_1, std::placeholders::_2));

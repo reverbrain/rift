@@ -4,7 +4,6 @@
 #include <thevoid/server.hpp>
 
 #include "rift/asio.hpp"
-#include "rift/bucket.hpp"
 #include "rift/jsonvalue.hpp"
 #include "rift/url.hpp"
 
@@ -12,24 +11,11 @@ namespace ioremap { namespace rift { namespace index {
 
 // set indexes for given ID
 template <typename Server, typename Stream>
-class on_update_base : public bucket_processing<Server, Stream>
+class on_update_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &query = req.url().query();
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_all()) {
-			this->log(swarm::SWARM_LOG_ERROR, "update-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-				query.to_string().c_str(), verdict);
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "update-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
-			query.to_string().c_str(), verdict);
-
-		(void) meta;
 
 		std::string buf(boost::asio::buffer_cast<const char*>(buffer), boost::asio::buffer_size(buffer));
 		rapidjson::Document doc;
@@ -49,9 +35,8 @@ public:
 			return;
 		}
 
-		elliptics::session session = this->server()->elliptics()->write_data_session(req, meta);
-		elliptics::key key(this->server()->key(req));
-		session.transform(key);
+		elliptics::key key;
+		elliptics::session session = this->server()->create_session(static_cast<Stream&>(*this), req, key);
 
 		std::vector<elliptics::index_entry> indexes_entries;
 
@@ -169,26 +154,11 @@ struct find_serializer {
 
 // find (using 'AND' or 'OR' operator) indexes, which contain given ID
 template <typename Server, typename Stream>
-class on_find_base : public bucket_processing<Server, Stream>
+class on_find_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void checked(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict) {
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &query = req.url().query();
-
-		if ((verdict != swarm::http_response::ok) && !acl.noauth_read()) {
-			this->log(swarm::SWARM_LOG_ERROR, "find-base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
-				query.to_string().c_str(), verdict);
-			this->send_reply(verdict);
-			return;
-		}
-
-		this->log(swarm::SWARM_LOG_NOTICE, "find-base: checked: url: %s, original-verdict: %d, passed-noauth-check",
-				query.to_string().c_str(), verdict);
-
-
-		(void) meta;
-
 		std::string buf(boost::asio::buffer_cast<const char*>(buffer), boost::asio::buffer_size(buffer));
 		rapidjson::Document data;
 		data.Parse<0>(buf.c_str());
@@ -207,9 +177,8 @@ public:
 		if (data.HasMember("view"))
 			m_view = data["view"].GetString();
 
-		m_session.reset(new elliptics::session(this->server()->elliptics()->read_data_session(req, meta)));
-		elliptics::key key(this->server()->key(req));
-		m_session->transform(key);
+		elliptics::key key;
+		m_session.reset(new elliptics::session(this->server()->create_session(static_cast<Stream&>(*this), req, key)));
 
 		const std::string type = data["type"].GetString();
 

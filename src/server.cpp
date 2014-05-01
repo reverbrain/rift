@@ -49,31 +49,31 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		m_secured_http = false;
 	}
 
-	on<rift::index::on_update<example_server>>(
+	on<rift::bucket_processor<example_server, on_update>>(
 		options::prefix_match("/update/"),
 		options::methods("POST")
 	);
-	on<rift::index::on_find<example_server>>(
+	on<rift::bucket_processor<example_server, on_find>>(
 		options::prefix_match("/find/"),
 		options::methods("POST")
 	);
-	on<rift::io::on_redirectable_get<example_server>>(
+	on<rift::bucket_processor<example_server, on_redirectable_get>>(
 		options::prefix_match("/redirect/"),
 		options::methods("GET")
 	);
-	on<rift::io::on_get<example_server>>(
+	on<rift::bucket_processor<example_server, on_get>>(
 		options::prefix_match("/get/"),
 		options::methods("GET")
 	);
-	on<rift::io::on_upload<example_server>>(
+	on<rift::bucket_processor<example_server, on_upload>>(
 		options::prefix_match("/upload/"),
 		options::methods("POST")
 	);
-	on<rift::list::on_list<example_server>>(
+	on<rift::bucket_processor<example_server, rift::list::on_list<example_server>>>(
 		options::prefix_match("/list/"),
 		options::methods("GET")
 	);
-	on<rift::io::on_download_info<example_server>>(
+	on<rift::bucket_processor<example_server, on_download_info>>(
 		options::prefix_match("/download-info/"),
 		options::methods("GET")
 	);
@@ -86,16 +86,16 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::methods("POST")
 	);
 
-	on<rift::io::on_delete<example_server>>(
+	on<rift::bucket_processor<example_server, on_delete>>(
 		options::prefix_match("/delete/"),
 		options::methods("POST")
 	);
 
-	on<rift::bucket_ctl::on_delete<example_server>>(
+	on<rift::bucket_processor<example_server, rift::bucket_ctl::on_delete<example_server>>>(
 		options::prefix_match("/delete-bucket-directory/"),
 		options::methods("POST")
 	);
-	on<rift::bucket_ctl::on_delete<example_server>>(
+	on<rift::bucket_processor<example_server, rift::bucket_ctl::on_delete<example_server>>>(
 		options::prefix_match("/delete-bucket/"),
 		options::methods("POST")
 	);
@@ -110,7 +110,7 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::methods("POST")
 	);
 
-	on<rift::list::on_list<example_server>>(
+	on<rift::bucket_processor<example_server, rift::list::on_list<example_server>>>(
 		options::prefix_match("/list-bucket-directory/"),
 		options::methods("GET")
 	);
@@ -149,6 +149,12 @@ swarm::url example_server::generate_url_base(dnet_addr *addr, const std::string 
 	}
 
 	return std::move(url);
+}
+
+template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
+std::string example_server::signature_token(rift::bucket_mixin<BaseStream, Flags> &mixin) const
+{
+	return mixin.bucket_mixin_acl.token;
 }
 
 const rift::elliptics_base *example_server::elliptics() const {
@@ -202,6 +208,19 @@ bool example_server::query_ok(const swarm::http_request &request) const {
 	}
 
 	return true;
+}
+
+template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
+elliptics::session example_server::create_session(rift::bucket_mixin<BaseStream, Flags> &mixin, const swarm::http_request &req, elliptics::key &key) const {
+	const bool is_read = (Flags == rift::bucket_acl::flags_noauth_read);
+
+	key = ioremap::rift::url::key(req, !!m_bucket);
+	auto session = is_read
+		? m_elliptics.read_data_session(req, mixin.bucket_mixin_meta)
+		: m_elliptics.write_data_session(req, mixin.bucket_mixin_meta);
+	check_cache(key, session);
+
+	return session;
 }
 
 } // namespace rift_server
