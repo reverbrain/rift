@@ -1,3 +1,11 @@
+rift (2.25.0.8.1) unstable; urgency=low
+
+  * bucket: search for wildcard user if there is no user in URI
+  * tests: fixed bucket create arguments
+  * server: fixed on_delete_base class instantiation
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Fri, 02 May 2014 02:37:23 +0400
+
 rift (2.25.0.8.0) unstable; urgency=low
 
   * rift: switched to new URL schema

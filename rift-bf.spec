@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.8.0
+Version:	2.25.0.8.1
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -71,6 +71,11 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Fri May 02 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.1
+- bucket: search for wildcard user if there is no user in URI
+- tests: fixed bucket create arguments
+- server: fixed on_delete_base class instantiation
+
 * Thu May 01 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.0
 - rift: switched to new URL schema
 - rift: Added a bit of documentation about mixins
