@@ -28,7 +28,8 @@ void bucket_meta::check_and_run_raw(const swarm::http_request &request, const bo
 
 	m_bucket->logger().log(swarm::SWARM_LOG_NOTICE,
 			"bucket: check-and-run-raw: bucket: %s, groups: %s, uptodate: %d, req: %s, acl: '%s', verdict: %d",
-			m_raw.key.c_str(), ss.str().c_str(), uptodate, request.url().query().to_string().c_str(), acl.to_string().c_str(), v);
+			m_raw.key.c_str(), ss.str().c_str(), uptodate, request.url().query().to_string().c_str(),
+			acl.to_string().c_str(), v);
 
 	if ((v != swarm::http_response::ok) && !uptodate) {
 		update_and_check(request, buffer, continue_handler);
@@ -66,7 +67,8 @@ void bucket_meta::update_and_check(const swarm::http_request &request, const boo
 				request, buffer, continue_handler, std::placeholders::_1, std::placeholders::_2));
 }
 
-swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logger, const bucket_meta_raw &meta, const swarm::http_request &request, bucket_acl &acl)
+swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logger,
+		const bucket_meta_raw &meta, const swarm::http_request &request, bucket_acl &acl)
 {
 	auto verdict = swarm::http_response::not_found;
 	const auto &query = request.url().query();
@@ -91,7 +93,8 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 	if (!user) {
 		user = "*";
 
-		logger.log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %zd: no user in URI -> searching for '*' wildcard",
+		logger.log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %zd: no user in URI -> "
+				"searching for '*' wildcard",
 				query.to_string().c_str(), meta.key.c_str(), meta.acl.size());
 	}
 
@@ -100,8 +103,10 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 		// no username found, return error
 		verdict = swarm::http_response::forbidden;
 
-		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: no user in acl list -> %d",
-				query.to_string().c_str(), meta.key.c_str(), (*user).c_str(), meta.acl.size(), verdict);
+		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
+				"no user in acl list -> %d",
+				query.to_string().c_str(), meta.key.c_str(), (*user).c_str(),
+				meta.acl.size(), verdict);
 		return verdict;
 	}
 
@@ -111,7 +116,8 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 		// noauth check passed
 		verdict = swarm::http_response::ok;
 
-		logger.log(swarm::SWARM_LOG_INFO, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: passed total noauth check -> %d",
+		logger.log(swarm::SWARM_LOG_INFO, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
+				"passed total noauth check -> %d",
 				query.to_string().c_str(), meta.key.c_str(), (*user).c_str(), meta.acl.size(), verdict);
 		return verdict;
 	}
@@ -120,8 +126,10 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 	if (!auth) {
 		verdict = swarm::http_response::unauthorized;
 
-		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: no 'Authorization' header -> %d",
-				query.to_string().c_str(), meta.key.c_str(), (*user).c_str(), meta.acl.size(), verdict);
+		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
+				"no 'Authorization' header -> %d",
+				query.to_string().c_str(), meta.key.c_str(), (*user).c_str(),
+				meta.acl.size(), verdict);
 		return verdict;
 	}
 
@@ -129,8 +137,10 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 	if (key != *auth) {
 		verdict = swarm::http_response::forbidden;
 
-		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: calculated-key: %s, auth-header: %s: incorrect auth header -> %d",
-				query.to_string().c_str(), meta.key.c_str(), (*user).c_str(), meta.acl.size(), key.c_str(), (*auth).c_str(), verdict);
+		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
+				"calculated-key: %s, auth-header: %s: incorrect auth header -> %d",
+				query.to_string().c_str(), meta.key.c_str(), (*user).c_str(), meta.acl.size(),
+				key.c_str(), (*auth).c_str(), verdict);
 		return verdict;
 	}
 
