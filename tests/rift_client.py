@@ -70,7 +70,8 @@ class Client:
         result_url = urlparse.urlunsplit(('http', 'localhost:8080', path, query, parsed_url.fragment))
 
         with open('/tmp/log.txt', 'a') as f:
-            f.write('"{}" -> "{}"\n'.format(url, result_url))
+            url_str = url + ' -> ' + result_url + '\n'
+            f.write(url_str)
             f.flush()
 
         if user and 'token' in user:
