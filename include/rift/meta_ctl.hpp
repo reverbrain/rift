@@ -318,13 +318,23 @@ public:
 
 		(void) buffer;
 
+		const bucket_meta_raw &meta = this->bucket_mixin_meta;
+
+		if ((this->bucket_mixin_acl.readonly()) || (this->bucket_mixin_acl.user == "*")) {
+			this->log(swarm::SWARM_LOG_ERROR, "meta-read-base: checked: url: %s, meta: '%s': acl: flags: 0x%llx, user: '%s': "
+					"readonly and wildcard users are forbidden",
+					query.to_string().c_str(), meta.key.c_str(),
+					(unsigned long long)this->bucket_mixin_acl.flags, this->bucket_mixin_acl.user.c_str());
+			this->send_reply(swarm::http_response::forbidden);
+			return;
+		}
+
 		std::string ns = "bucket";
 		elliptics::session session = this->server()->elliptics()->read_metadata_session(req, this->bucket_mixin_meta);
 		session.set_namespace(ns.c_str(), ns.size());
 
 		rift::JsonValue result_object;
 
-		const bucket_meta_raw &meta = this->bucket_mixin_meta;
 		auto & allocator = result_object.GetAllocator();
 
 		this->log(swarm::SWARM_LOG_NOTICE, "meta-read-base: checked: url: %s, meta: '%s'",
