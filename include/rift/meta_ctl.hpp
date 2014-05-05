@@ -18,7 +18,7 @@ public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &pc = req.url().path_components();
 		if (pc.size() < 2) {
-			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket/bucket-name/bucket-directory-name or "
+			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket/bucket-directory-name/bucket-name or "
 					"/update-bucket-directory/bucket-directory-name",
 					req.url().path().c_str());
 			this->send_reply(swarm::http_response::bad_request);
@@ -33,18 +33,19 @@ public:
 				return;
 			}
 			m_parent = "bucket-directories.1";
+			m_ctl_meta.key = pc[1];
 		} else if (pc[0] == "update-bucket") {
 			if (pc.size() != 3) {
-				this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket/bucket-name/bucket-directory-name",
+				this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket/bucket-directory-name/bucket-name",
 						req.url().path().c_str());
 				this->send_reply(swarm::http_response::bad_request);
 				return;
 			}
-			m_parent = url::key(req, true);
+			m_parent = pc[1];
+			m_ctl_meta.key = pc[2];
 		}
 
 		try {
-			m_ctl_meta.key = url::bucket(req);
 			m_ctl_meta_namespace = "bucket";
 
 			parse_request(req, buffer, m_ctl_meta);

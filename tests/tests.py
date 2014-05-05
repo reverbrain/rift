@@ -13,36 +13,37 @@ class TestCases:
     def setup(self):
         self.data = os.urandom(1000000 * 30)
 
-    def create_bucket(self, client, flags = 0, command = ''):
+    def create_bucket(self, client, bucket, flags=0, command='/update-bucket'):
         data = {
             'groups': [
                 5, 6
             ],
             'acl': [
                 {
-                    'user': client.user['user'],
-                    'token': client.user['token'],
+                    'user': bucket['user'],
+                    'token': bucket['token'],
                     'flags': flags
                 }
             ]
         }
 
-        r = client.post(command, json.dumps(data))
+        r = client.post(command + '/' + bucket['key'], json.dumps(data))
 
         assert r.status_code == 200
 
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")
     def test_update_directory(self, client):
-        dir_proxy = rift_client.ClientProxy(client, client.directory_user)
-        self.create_bucket(dir_proxy, command='/update-bucket-directory')
+        root_proxy = rift_client.ClientProxy(client, None)
+        self.create_bucket(root_proxy, client.directory_user, command='/update-bucket-directory')
 
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")
     def test_create_bucket(self, client):
         assert isinstance(client, rift_client.Client)
 
-        self.create_bucket(client, command='/update-bucket/' + client.bucket)
+        bucket_proxy = rift_client.ClientProxy(client, client.directory_user)
+        self.create_bucket(bucket_proxy, client.user)
 
     def test_upload(self, client):
         assert isinstance(client, rift_client.Client)
@@ -68,13 +69,14 @@ class TestCases:
     def test_acl(self, client, flags, write_noauth_status, write_auth_status, read_noauth_status, read_auth_status):
         assert isinstance(client, rift_client.Client)
 
-        user = client.generate_user()
+        user_id = str(flags)
+
+        user = client.generate_user(key='bucket_acl_'+user_id, user='user_acl_'+user_id)
         noauth_user = deepcopy(user)
         del noauth_user['token']
 
-        bucket_proxy = rift_client.ClientProxy(client, user)
-
-        self.create_bucket(bucket_proxy, flags=flags, command='/update-bucket/' + client.bucket)
+        bucket_proxy = rift_client.ClientProxy(client, client.directory_user)
+        self.create_bucket(bucket_proxy, user, flags=flags)
 
         noauth_data = uuid.uuid4().hex
         auth_data = uuid.uuid4().hex
@@ -250,7 +252,7 @@ class TestCases:
         user = client.generate_user()
         subbucket_proxy = rift_client.ClientProxy(client, user)
 
-        self.create_bucket(subbucket_proxy, flags=0, command='/update-bucket/' + client.bucket)
+        self.create_bucket(bucket_proxy, user)
 
         r = bucket_proxy.get('/list-bucket-directory')
 

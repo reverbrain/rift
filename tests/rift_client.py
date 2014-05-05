@@ -7,18 +7,17 @@ class Client:
         self.base_url = 'http://localhost:8080'
         self.bucket = option.bucket
         if self.bucket:
-            self.user = self.generate_user()
-            self.directory_user = self.generate_user()
-            self.directory_user['key'] = self.bucket
+            self.user = self.generate_user(key='generic_bucket', user='bucket_user')
+            self.directory_user = self.generate_user(key=self.bucket, user='directory_user')
         else:
             self.user = None
             self.directory_user = None
 
-    def generate_user(self):
+    def generate_user(self, key=uuid.uuid4().hex, user=uuid.uuid4().hex, token=uuid.uuid4().hex):
         return {
-            'key': uuid.uuid4().hex,
-            'user': uuid.uuid4().hex,
-            'token': uuid.uuid4().hex
+            'key': key,
+            'user': user,
+            'token': token
         }
 
     def generate_signature(self, method, url, user, headers=None):
@@ -69,6 +68,10 @@ class Client:
             path = '/'.join(pc)
 
         result_url = urlparse.urlunsplit(('http', 'localhost:8080', path, query, parsed_url.fragment))
+
+        with open('/tmp/log.txt', 'a') as f:
+            f.write('"{}" -> "{}"\n'.format(url, result_url))
+            f.flush()
 
         if user and 'token' in user:
             headers = kwargs['headers'] if 'headers' in kwargs else {}
