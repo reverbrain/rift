@@ -13,6 +13,7 @@ class Client:
             self.user = None
             self.directory_user = None
 
+    # please note that 2 subsequent calls to generate_user() (without arguments) produce the same keys
     def generate_user(self, key=uuid.uuid4().hex, user=uuid.uuid4().hex, token=uuid.uuid4().hex):
         return {
             'key': key,

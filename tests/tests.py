@@ -45,6 +45,26 @@ class TestCases:
         bucket_proxy = rift_client.ClientProxy(client, client.directory_user)
         self.create_bucket(bucket_proxy, client.user)
 
+    @pytest.mark.skipif(not pytest.config.option.bucket,
+                        reason="tests are running without buckets")
+    def test_read_bucket(self, client):
+        assert isinstance(client, rift_client.Client)
+
+        directory_proxy = rift_client.ClientProxy(client, client.directory_user)
+
+        key=uuid.uuid4().hex
+        user_str=uuid.uuid4().hex
+        token=uuid.uuid4().hex
+        user = client.generate_user(key=key, user=user_str, token=token)
+        self.create_bucket(directory_proxy, user)
+
+        bucket_proxy = rift_client.ClientProxy(client, user)
+        r = bucket_proxy.get("/read-bucket/")
+        assert r.status_code == 200
+
+        info = r.json()
+        assert info['key'] == user['key']
+
     def test_upload(self, client):
         assert isinstance(client, rift_client.Client)
         r = client.post("/upload/name", self.data)
@@ -239,7 +259,9 @@ class TestCases:
         assert r.status_code == 200
 
         buckets_list = r.json()
-        assert len(buckets_list['indexes']) == 5
+
+	# this is a number of already written buckets in all previous tests
+        assert len(buckets_list['indexes']) == 6
         assert client.user['key'] in [x['key'] for x in buckets_list['indexes']]
 
     @pytest.mark.skipif(not pytest.config.option.bucket,
