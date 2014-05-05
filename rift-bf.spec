@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.8.1
+Version:	2.25.0.8.2
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -71,6 +71,12 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue May 06 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.2
+- rift: Changed url for update-bucket
+- 	New signature is /update-bucket/directory/bucket
+- tests: Fixed indentation in tests.py
+- rift: indent cleanup
+
 * Fri May 02 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.1
 - bucket: search for wildcard user if there is no user in URI
 - tests: fixed bucket create arguments

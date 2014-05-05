@@ -1,3 +1,12 @@
+rift (2.25.0.8.2) unstable; urgency=low
+
+  * rift: Changed url for update-bucket
+  * 	New signature is /update-bucket/directory/bucket
+  * tests: Fixed indentation in tests.py
+  * rift: indent cleanup
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Tue, 06 May 2014 00:31:06 +0400
+
 rift (2.25.0.8.1) unstable; urgency=low
 
   * bucket: search for wildcard user if there is no user in URI
