@@ -38,6 +38,7 @@ struct bucket_acl {
 	enum flags_noauth {
 		flags_noauth_read = 1<<0,
 		flags_noauth_all = 1<<1,
+		flags_readonly = 1<<2,
 	};
 
 	bool noauth_read() const {
@@ -45,6 +46,9 @@ struct bucket_acl {
 	}
 	bool noauth_all() const {
 		return flags & flags_noauth_all;
+	}
+	bool readonly() const {
+		return flags & flags_readonly;
 	}
 
 	std::string to_string(void) const {
