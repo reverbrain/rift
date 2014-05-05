@@ -191,9 +191,14 @@ void bucket_meta::update_and_check_completed(const swarm::http_request &request,
 	update_finished(result, error);
 
 	if (error) {
+		auto code = swarm::http_response::forbidden;
+
+		if (error.code() == -ENOENT)
+			code = swarm::http_response::not_found;
+
 		bucket_meta_raw meta;
 		bucket_acl acl;
-		continue_handler(request, buffer, meta, acl, swarm::http_response::forbidden);
+		continue_handler(request, buffer, meta, acl, code);
 	} else {
 		check_and_run_raw(request, buffer, continue_handler, true);
 	}
