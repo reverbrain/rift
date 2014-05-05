@@ -100,6 +100,11 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::methods("POST")
 	);
 
+	on<rift::bucket_processor<example_server, rift::bucket_ctl::meta_read<example_server>>>(
+		options::prefix_match("/read-bucket/"),
+		options::methods("GET")
+	);
+
 	on<rift::bucket_ctl::meta_create<example_server>>(
 		options::prefix_match("/update-bucket-directory/"),
 		options::methods("POST")
@@ -196,7 +201,8 @@ bool example_server::query_ok(const swarm::http_request &request) const {
 	if (m_bucket) {
 		min_component_num = 3;
 		if (pc.size() > 1) {
-			if (pc[0] == "list" || pc[0] == "list-bucket-directory" || pc[0] == "update-bucket-directory" || pc[0] == "delete-bucket")
+			if (pc[0] == "list" || pc[0] == "list-bucket-directory" || pc[0] == "update-bucket-directory" ||
+					pc[0] == "delete-bucket" || pc[0] == "read-bucket")
 				min_component_num = 2;
 		}
 	}

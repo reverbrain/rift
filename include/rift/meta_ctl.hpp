@@ -309,6 +309,83 @@ class on_delete : public on_delete_base<Server, on_delete<Server>>
 public:
 };
 
+template <typename Server, typename Stream>
+class meta_read_base : public bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::flags_noauth_all>, public std::enable_shared_from_this<Stream>
+{
+public:
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+		const auto &query = req.url().query();
+
+		(void) buffer;
+
+		std::string ns = "bucket";
+		elliptics::session session = this->server()->elliptics()->read_metadata_session(req, this->bucket_mixin_meta);
+		session.set_namespace(ns.c_str(), ns.size());
+
+		rift::JsonValue result_object;
+
+		const bucket_meta_raw &meta = this->bucket_mixin_meta;
+		auto & allocator = result_object.GetAllocator();
+
+		this->log(swarm::SWARM_LOG_NOTICE, "meta-read-base: checked: url: %s, meta: '%s'",
+				query.to_string().c_str(), meta.key.c_str());
+
+
+		rapidjson::Value jkey(meta.key.c_str(), meta.key.size(), allocator);
+		result_object.AddMember("key", jkey, allocator);
+
+
+		rapidjson::Value jacls;
+		jacls.SetArray();
+
+		for (auto acl = meta.acl.begin(); acl != meta.acl.end(); ++acl) {
+			rapidjson::Value jacl;
+			jacl.SetObject();
+
+			rapidjson::Value user(acl->second.user.c_str(), acl->second.user.size(), allocator);
+			rapidjson::Value token(acl->second.token.c_str(), acl->second.token.size(), allocator);
+
+			jacl.AddMember("user", user, allocator);
+			jacl.AddMember("token", token, allocator);
+			jacl.AddMember("flags", acl->second.flags, allocator);
+
+			jacls.PushBack(jacl, allocator);
+		}
+		result_object.AddMember("acl", jacls, allocator);
+
+
+		rapidjson::Value jgroups;
+		jgroups.SetArray();
+
+		for (auto group = meta.groups.begin(); group != meta.groups.end(); ++group) {
+			jgroups.PushBack(*group, allocator);
+		}
+		result_object.AddMember("groups", jgroups, allocator);
+
+
+		result_object.AddMember("flags", meta.flags, allocator);
+		result_object.AddMember("max_size", meta.max_size, allocator);
+		result_object.AddMember("max_key_num", meta.max_key_num, allocator);
+
+
+		auto data = result_object.ToString();
+
+		swarm::http_response reply;
+
+		reply.set_code(swarm::http_response::ok);
+		reply.headers().set_content_type("text/json");
+		reply.headers().set_content_length(data.size());
+
+		this->send_reply(std::move(reply), std::move(data));
+	}
+};
+
+template <typename Server>
+class meta_read : public meta_read_base<Server, meta_read<Server>>
+{
+public:
+};
+
 }}} // namespace ioremap::rift::bucket_ctl
 
 #endif /* __IOREMAP_RIFT_BUCKET_CTL_HPP */
