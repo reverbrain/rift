@@ -8,8 +8,8 @@ class Client:
         self.bucket = option.bucket
         if self.bucket:
             self.user = self.generate_user()
-	    self.directory_user = self.generate_user()
-	    self.directory_user['key'] = self.bucket
+            self.directory_user = self.generate_user()
+            self.directory_user['key'] = self.bucket
         else:
             self.user = None
             self.directory_user = None
@@ -56,7 +56,7 @@ class Client:
 
         parsed_url = urlparse.urlsplit(url)
 
-	path = parsed_url.path
+        path = parsed_url.path
         query = parsed_url.query
 
         if user:
@@ -64,9 +64,9 @@ class Client:
             qs['user'] = user['user']
             query = urllib.urlencode(qs)
 
-	    pc = path.split('/')
-	    pc.insert(2, user['key'])
-	    path = '/'.join(pc)
+            pc = path.split('/')
+            pc.insert(2, user['key'])
+            path = '/'.join(pc)
 
         result_url = urlparse.urlunsplit(('http', 'localhost:8080', path, query, parsed_url.fragment))
 
