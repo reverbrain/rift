@@ -70,11 +70,6 @@ class Client:
 
         result_url = urlparse.urlunsplit(('http', 'localhost:8080', path, query, parsed_url.fragment))
 
-        with open('/tmp/log.txt', 'a') as f:
-            url_str = url + ' -> ' + result_url + '\n'
-            f.write(url_str)
-            f.flush()
-
         if user and 'token' in user:
             headers = kwargs['headers'] if 'headers' in kwargs else {}
             authorization = self.generate_signature(method, result_url, user, headers)

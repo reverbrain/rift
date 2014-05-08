@@ -43,6 +43,12 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		m_use_hostname = false;
 	}
 
+	if (config.HasMember("path-prefix")) {
+		m_path_prefix.assign(config["path-prefix"].GetString());
+	} else {
+		m_path_prefix = std::string();
+	}
+
 	if (config.HasMember("https")) {
 		m_secured_http = config["https"].GetBool();
 	} else {
@@ -124,8 +130,6 @@ bool example_server::initialize(const rapidjson::Value &config) {
 }
 
 swarm::url example_server::generate_url_base(dnet_addr *addr, const std::string &path, swarm::http_response::status_type *type) {
-	char buffer[128];
-
 	swarm::url url;
 	url.set_scheme(m_secured_http ? "https" : "http");
 
@@ -138,7 +142,7 @@ swarm::url example_server::generate_url_base(dnet_addr *addr, const std::string 
 			*type = swarm::http_response::internal_server_error;
 		}
 	} else {
-		url.set_host(dnet_server_convert_dnet_addr_raw(addr, buffer, sizeof(buffer)));
+		url.set_host(dnet_state_dump_addr_only(addr));
 	}
 
 	if (m_redirect_port > 0) {
