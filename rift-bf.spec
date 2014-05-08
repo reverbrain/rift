@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.8.2
+Version:	2.25.0.8.3
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -71,6 +71,15 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Thu May 08 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.3
+- rift: Added forgotten option path-prefix
+- tests: added read-bucket test
+- meta: forbid bucket metadata reading to wildcard and readonly users
+- acl: added readonly bit
+- meta: added /read-bucket/ handler which returns pretty-formatted bucket metadata json
+- bucket: return 404 instead of 403 if bucket to be processed was not found
+- test: do not use str.format(), since it is not properly supported by RHEL python
+
 * Tue May 06 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.2
 - rift: Changed url for update-bucket
 - 	New signature is /update-bucket/directory/bucket
