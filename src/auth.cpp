@@ -14,17 +14,6 @@ static std::string to_lower(const std::string &str)
 	return result;
 }
 
-static void check_hash(const std::string &message)
-{
-	dnet_raw_id signature;
-	char signature_str[DNET_ID_SIZE * 2 + 1];
-
-	dnet_digest_transform_raw(message.c_str(), message.size(), signature.id, DNET_ID_SIZE);
-	dnet_dump_id_len_raw(signature.id, DNET_ID_SIZE, signature_str);
-
-	std::cout << "\"" << message << "\"\n" << signature_str << std::endl;
-}
-
 std::string http_auth::generate_signature(const swarm::http_request &request, const std::string &key)
 {
 	const auto &url = request.url();
@@ -68,9 +57,6 @@ std::string http_auth::generate_signature(const swarm::http_request &request, co
 		text += it->second;
 		text += '\n';
 	}
-
-	check_hash(key);
-	check_hash(text);
 
 	dnet_raw_id signature;
 	char signature_str[DNET_ID_SIZE * 2 + 1];
