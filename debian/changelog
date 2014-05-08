@@ -1,3 +1,9 @@
+rift (2.25.0.8.4) unstable; urgency=low
+
+  * rift: added some ugly auth debug
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Fri, 09 May 2014 02:29:26 +0400
+
 rift (2.25.0.8.3) unstable; urgency=low
 
   * rift: Added forgotten option path-prefix
