@@ -1,6 +1,8 @@
 #include "rift/auth.hpp"
 #include <elliptics/interface.h>
 
+#include <iostream>
+
 namespace ioremap {
 namespace rift {
 
@@ -19,6 +21,8 @@ static void check_hash(const std::string &message)
 
 	dnet_digest_transform_raw(message.c_str(), message.size(), signature.id, DNET_ID_SIZE);
 	dnet_dump_id_len_raw(signature.id, DNET_ID_SIZE, signature_str);
+
+	std::cout << "\"" << message << "\"\n" << signature_str << std::endl;
 }
 
 std::string http_auth::generate_signature(const swarm::http_request &request, const std::string &key)

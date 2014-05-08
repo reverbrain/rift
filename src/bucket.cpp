@@ -103,10 +103,16 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 		// no username found, return error
 		verdict = swarm::http_response::forbidden;
 
+
 		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
 				"no user in acl list -> %d",
 				query.to_string().c_str(), meta.key.c_str(), (*user).c_str(),
 				meta.acl.size(), verdict);
+
+		for (auto a = meta.acl.begin(); a != meta.acl.end(); ++a) {
+			logger.log(swarm::SWARM_LOG_INFO, "url: %s, acl: '%s'\n",
+					query.to_string().c_str(), a->first.c_str());
+		}
 		return verdict;
 	}
 
