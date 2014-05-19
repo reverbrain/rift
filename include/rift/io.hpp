@@ -532,16 +532,17 @@ class async_device : public iodevice
 {
 public:
 	async_device(const elliptics::session &session, const elliptics::key &id, size_t offset, size_t size)
-		: iodevice(size - offset), m_session(session), m_id(id), m_offset(offset), m_size(size)
+		: iodevice(size), m_session(session), m_id(id), m_offset(offset), m_size(size)
 	{
 	}
 
 	void read(size_t limit, const function &handler)
 	{
 		size_t offset = m_offset;
-		size_t size = std::min(m_size - m_offset, limit);
+		size_t size = std::min(m_size, limit);
 		m_offset += size;
-		bool last = (m_offset == m_size);
+		m_size -= size;
+		bool last = (m_size == 0);
 		m_session.read_data(m_id, offset, size).connect(std::bind(on_result,
 			std::placeholders::_1, std::placeholders::_2, handler, last));
 	}
@@ -579,15 +580,81 @@ public:
 		const auto &query = req.url().query();
 
 		m_offset = query.item_value("offset", 0llu);
+		m_size = query.item_value("size", 0llu);
 
 		(void) buffer;
 
 		m_session.reset(new elliptics::session(this->server()->create_session(static_cast<Stream&>(*this), req, m_key)));
 
-		m_session->lookup(m_key).connect(std::bind(
-			&on_get_base::on_buffered_get_lookup_finished, this->shared_from_this(),
-				std::placeholders::_1, std::placeholders::_2));
+		auto range = this->request().headers().get("Range");
+		if (m_size || !range) {
+			size_t size2read = m_buffer_size;
+			if (m_size != 0)
+				size2read = std::min(m_size, m_buffer_size);
+
+			m_session->read_data(m_key, m_offset, size2read).connect(std::bind(
+				&on_get_base::on_read_data_finished, this->shared_from_this(),
+					std::placeholders::_1, std::placeholders::_2));
+		} else {
+			m_session->lookup(m_key).connect(std::bind(
+				&on_get_base::on_buffered_get_lookup_finished, this->shared_from_this(),
+					std::placeholders::_1, std::placeholders::_2));
+		}
 	}
+
+	void on_read_data_finished(const elliptics::sync_read_result &result, const elliptics::error_info &error) {
+		if (error) {
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: finished-read: error: %s", error.message().c_str());
+			if (error.code() == -ENOENT) {
+				this->send_reply(swarm::http_response::not_found);
+				return;
+			} else if (error.code() == -E2BIG) {
+				this->log(swarm::SWARM_LOG_ERROR, "buffered-get: finished-read: requested offset is too big: offset: %llu",
+						(unsigned long long)m_offset);
+				this->send_reply(swarm::http_response::bad_request);
+				return;
+			} else {
+				this->send_reply(swarm::http_response::internal_server_error);
+				return;
+			}
+		}
+
+		const elliptics::read_result_entry &entry = result[0];
+		const size_t read_size = entry.io_attribute()->size;
+		const size_t total_size = entry.io_attribute()->total_size;
+		const dnet_time &ts = entry.io_attribute()->timestamp;
+
+		if (m_size == 0)
+			m_size = total_size - m_offset;
+
+		if (m_size > total_size - m_offset)
+			m_size = total_size - m_offset;
+
+		swarm::http_response reply;
+		reply.set_code(swarm::http_response::ok);
+		reply.headers().set_content_type("application/octet-stream");
+		reply.headers().set_last_modified(ts.tsec);
+		reply.headers().set_content_length(m_size);
+
+		this->send_headers(std::move(reply), std::function<void (const boost::system::error_code &)>());
+
+		// impossible - server can not return more than requested - offset, but let's check against overflow
+		if (m_size < read_size)
+			m_size = read_size;
+
+
+		// we update m_offset since async_device::read() uses it as offset to read next chunk
+		// but we do not update m_size here 
+		m_offset += read_size;
+		m_size -= read_size;
+
+		if (m_size != 0) {
+			add_async(m_offset, m_size);
+		}
+
+		on_read_finished(0, entry.file(), error, false);
+	}
+
 
 	void on_buffered_get_lookup_finished(const elliptics::sync_lookup_result &result, const elliptics::error_info &error) {
 		if (error) {
@@ -639,9 +706,9 @@ public:
 		swarm::http_response reply;
 		reply.set_code(swarm::http_response::ok);
 		reply.headers().set_content_type("application/octet-stream");
-		reply.headers().set_last_modified(entry.file_info()->mtime.tsec);
+		reply.headers().set_last_modified(ts.tsec);
 
-		add_async(m_offset, size);
+		add_async(m_offset, size - m_offset);
 
 		start(std::move(reply));
 	}
@@ -668,7 +735,7 @@ public:
 
 		this->log(swarm::SWARM_LOG_INFO, "GET, Content-Range: %s", content_range.c_str());
 
-		add_async(range.begin, range.end + 1);
+		add_async(range.begin, range.end - range.begin + 1);
 
 		start(std::move(reply));
 	}
@@ -692,7 +759,7 @@ public:
 			add_buffer(std::move(result));
 			result.clear();
 
-			add_async(it->begin, it->end + 1);
+			add_async(it->begin, it->end - it->begin + 1);
 			result += "\r\n";
 		}
 		result += "--";
@@ -733,8 +800,8 @@ public:
 		if (last)
 			m_devices.pop_front();
 
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: finished-read: offset: %llu, data-size: %llu",
-				(unsigned long long)offset, (unsigned long long)file.size());
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: finished-read: offset: %llu, data-size: %llu, last: %d, empty: %d",
+				(unsigned long long)offset, (unsigned long long)file.size(), last, m_devices.empty());
 
 		auto first_part = file.slice(0, file.size() / 2);
 		auto second_part = file.slice(first_part.size(), file.size() - first_part.size());
@@ -746,11 +813,11 @@ public:
 	virtual void on_part_sent(size_t offset, const boost::system::error_code &error, const elliptics::data_pointer &second_part)
 	{
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get-redirect: finished-part: error: %s, offset: %llu, size: %llu",
-					error.message().c_str(), (unsigned long long)offset, (unsigned long long)0);
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get-redirect: finished-part: error: %s, next-read-offset: %llu, second-part-size: %llu",
+					error.message().c_str(), (unsigned long long)offset, (unsigned long long)second_part.size());
 		} else {
-			this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: finished-part: offset: %llu, size: %llu",
-					(unsigned long long)offset, (unsigned long long)0);
+			this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: finished-part: next-read-offset: %llu, second-part-size: %llu",
+					(unsigned long long)offset, (unsigned long long)second_part.size());
 		}
 
 		if (m_devices.empty()) {
@@ -775,6 +842,9 @@ protected:
 		this->send_headers(std::move(response), std::function<void (const boost::system::error_code &)>());
 		read_next(0);
 	}
+	/*
+	 * @offset is offset within given key to start reading @size bytes
+	 */
 	void add_async(size_t offset, size_t size)
 	{
 		m_devices.emplace_back(new async_device(*m_session, m_key, offset, size));
@@ -789,6 +859,7 @@ protected:
 	elliptics::key m_key;
 	uint64_t m_buffer_size;
 	uint64_t m_offset;
+	uint64_t m_size;
 };
 
 template <typename Server>
