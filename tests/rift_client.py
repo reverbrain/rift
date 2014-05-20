@@ -62,7 +62,7 @@ class Client:
         if user:
             qs = urlparse.parse_qs(parsed_url.query)
             qs['user'] = user['user']
-            query = urllib.urlencode(qs)
+            query = urllib.urlencode(qs, True)
 
             pc = path.split('/')
             pc.insert(2, user['key'])
