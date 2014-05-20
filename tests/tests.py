@@ -359,3 +359,27 @@ class TestCases:
             assert 'time-raw' in data_object['mtime']
             assert 'data' in data_object
             assert data == data_object['data']
+    def test_size_offset(self, client):
+        assert isinstance(client, rift_client.Client)
+
+	rand = os.urandom(1025)
+	data = rand * 1025 * 30
+	key = 'random.bin'
+
+        r = client.post('/upload/' + key, data)
+        assert r.status_code == 200
+
+        offset = 1024
+	size = 17 * 1024 * 1024
+
+        url = '/get/' + key + '?offset=' + str(offset)
+	print url
+	read_offset = client.get(url)
+        assert read_offset.status_code == 200
+	assert data[offset:] == read_offset.content
+
+        url = '/get/' + key + '?offset=' + str(offset) + '&size=' + str(size)
+	print url
+	read_offset_size = client.get(url)
+        assert read_offset_size.status_code == 200
+	assert data[offset:offset+size] == read_offset_size.content
