@@ -1,3 +1,10 @@
+rift (2.25.0.8.7) unstable; urgency=low
+
+  * test: added small size read test
+  * io: fixed last read for one chunk read only. optimized reads which are smaller than chunk size (5mb)
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Wed, 21 May 2014 00:15:48 +0400
+
 rift (2.25.0.8.6) unstable; urgency=low
 
   * rift: use full url string in log
