@@ -89,7 +89,15 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 		return verdict;
 	}
 
-	auto user = query.item_value("user");
+	std::string user;
+	try {
+		verdict = swarm::http_response::bad_request;
+		user = query.item_value("user");
+	} catch (const std::exception &e) {
+		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s: invalid user parameter: %s -> %d",
+				request.url().to_string().c_str(), e.what(), verdict);
+		return verdict;
+	}
 	if (!user) {
 		user = "*";
 

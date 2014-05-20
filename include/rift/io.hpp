@@ -171,9 +171,15 @@ public:
 	virtual void on_request(const swarm::http_request &req) {
 		this->set_chunk_size(10 * 1024 * 1024);
 
-		const auto &query = req.url().query();
+		try {
+			const auto &query = this->request().url().query();
+			m_offset = query.item_value("offset", 0llu);
+		} catch (const std::exception &e) {
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-upload: url: %s: invalid offset parameter: %s", req.url().to_string().c_str(), e.what());
+			this->send_reply(swarm::http_response::bad_request);
+			return;
+		}
 
-		m_offset = query.item_value("offset", 0llu);
 		if (auto size = req.headers().content_length())
 			m_size = *size;
 		else
@@ -185,9 +191,8 @@ public:
 	virtual void on_chunk(const boost::asio::const_buffer &buffer, unsigned int flags) {
 		const auto data = create_data(buffer);
 
-		const auto &query = this->request().url().query();
 		this->log(swarm::SWARM_LOG_INFO, "on_chunk: url: %s, size: %zu, m_offset: %lu, flags: %u",
-				query.to_string().c_str(), data.size(), m_offset, flags);
+				this->request().url().to_string().c_str(), data.size(), m_offset, flags);
 
 		elliptics::async_write_result result = write(data, flags);
 		m_offset += data.size();
@@ -202,42 +207,38 @@ public:
 	}
 
 	elliptics::async_write_result write(const elliptics::data_pointer &data, unsigned int flags) {
-		const auto &query = this->request().url().query();
-
 		if (flags == thevoid::buffered_request_stream<Server>::single_chunk) {
 			return m_session->write_data(m_key, data, m_offset);
 		} else if (m_size > 0) {
 			if (flags & thevoid::buffered_request_stream<Server>::first_chunk) {
 				this->log(swarm::SWARM_LOG_INFO, "buffered-write: prepare: url: %s, offset: %lu, size: %lu",
-						query.to_string().c_str(), m_offset, m_size);
+						this->request().url().to_string().c_str(), m_offset, m_size);
 				return m_session->write_prepare(m_key, data, m_offset, m_offset + m_size);
 			} else if (flags & thevoid::buffered_request_stream<Server>::last_chunk) {
 				this->log(swarm::SWARM_LOG_INFO, "buffered-write: commit: url: %s, offset: %lu, size: %lu",
-						query.to_string().c_str(), m_offset, m_offset + data.size());
+						this->request().url().to_string().c_str(), m_offset, m_offset + data.size());
 				return m_session->write_commit(m_key, data, m_offset, m_offset + data.size());
 			} else {
 				this->log(swarm::SWARM_LOG_INFO, "buffered-write: plain: url: %s, offset: %lu, size: %zu",
-						query.to_string().c_str(), m_offset, data.size());
+						this->request().url().to_string().c_str(), m_offset, data.size());
 				return m_session->write_plain(m_key, data, m_offset);
 			}
 		} else {
 			this->log(swarm::SWARM_LOG_INFO, "buffered-write: write-data: url: %s, offset: %lu, size: %zu",
-					query.to_string().c_str(), m_offset, data.size());
+					this->request().url().to_string().c_str(), m_offset, data.size());
 			return m_session->write_data(m_key, data, m_offset);
 		}
 	}
 
 	virtual void on_error(const boost::system::error_code &error) {
-		const auto &query = this->request().url().query();
 		this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s, error: %s",
-				query.to_string().c_str(), error.message().c_str());
+				this->request().url().to_string().c_str(), error.message().c_str());
 	}
 
 	virtual void on_write_partial(const elliptics::sync_write_result &result, const elliptics::error_info &error) {
 		if (error) {
-			const auto &query = this->request().url().query();
 			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s, partial write error: %s",
-					query.to_string().c_str(), error.message().c_str());
+					this->request().url().to_string().c_str(), error.message().c_str());
 			this->on_write_finished(result, error);
 			return;
 		}
@@ -579,8 +580,14 @@ public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &query = req.url().query();
 
-		m_offset = query.item_value("offset", 0llu);
-		m_size = query.item_value("size", 0llu);
+		try {
+			m_offset = query.item_value("offset", 0llu);
+			m_size = query.item_value("size", 0llu);
+		} catch (const std::exception &e) {
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: url: %s: invalid size/offset parameters: %s", req.url().to_string().c_str(), e.what());
+			this->send_reply(swarm::http_response::bad_request);
+			return;
+		}
 
 		(void) buffer;
 

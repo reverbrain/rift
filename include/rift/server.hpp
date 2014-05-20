@@ -54,9 +54,16 @@ public:
 			session.set_groups(meta.groups);
 		}
 
-		const auto &query = req.url().query();
-		uint32_t ioflags = query.item_value("ioflags", 0u);
-		uint64_t cflags = query.item_value("cflags", 0llu);
+		try {
+			const auto &query = req.url().query();
+			uint32_t ioflags = query.item_value("ioflags", 0u);
+			uint64_t cflags = query.item_value("cflags", 0llu);
+		} catch (const std::exception &e) {
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-upload: url: %s: invalid offset parameter: %s", req.url().to_string().c_str(), e.what());
+			this->send_reply(swarm::http_response::bad_request);
+			return;
+		}
+
 		session.set_ioflags(ioflags);
 		session.set_cflags(cflags);
 
