@@ -1,3 +1,15 @@
+rift (2.25.0.8.6) unstable; urgency=low
+
+  * rift: use full url string in log
+  * rift: wrap all item_value() calls into try/catch block
+  * test: added large file upload and size/offset download test
+  * test: use correct array URI encoding
+  * io: added 'size' URI parameter. If there is no 'range' header or there is 'size' uri parameter, read chunk of data,
+  * 	get total size and continue reading instead of running lookup command and then reading data in chunks.
+  * 	Updated async_device reader to read 'size' bytes from 'offset', previously 'size' field ment total size of the object
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Tue, 20 May 2014 22:24:28 +0400
+
 rift (2.25.0.8.5) unstable; urgency=low
 
   * auth: get rid of unused debug

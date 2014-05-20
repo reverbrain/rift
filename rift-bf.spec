@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.8.5
+Version:	2.25.0.8.6
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -71,6 +71,15 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue May 20 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.6
+- rift: use full url string in log
+- rift: wrap all item_value() calls into try/catch block
+- test: added large file upload and size/offset download test
+- test: use correct array URI encoding
+- io: added 'size' URI parameter. If there is no 'range' header or there is 'size' uri parameter, read chunk of data,
+- 	get total size and continue reading instead of running lookup command and then reading data in chunks.
+- 	Updated async_device reader to read 'size' bytes from 'offset', previously 'size' field ment total size of the object
+
 * Fri May 09 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.5
 - auth: get rid of unused debug
 
