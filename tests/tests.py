@@ -369,17 +369,25 @@ class TestCases:
         r = client.post('/upload/' + key, data)
         assert r.status_code == 200
 
+        offset = 123
+	size = 1
+
+        url = '/get/' + key + '?offset=' + str(offset) + '&size=' + str(size)
+	read = client.get(url)
+        assert read.status_code == 200
+	assert len(read.content) == size
+	assert data[offset:offset+size] == read.content
+
         offset = 1024
 	size = 17 * 1024 * 1024
 
         url = '/get/' + key + '?offset=' + str(offset)
-	print url
-	read_offset = client.get(url)
-        assert read_offset.status_code == 200
-	assert data[offset:] == read_offset.content
+	read = client.get(url)
+        assert read.status_code == 200
+	assert data[offset:] == read.content
 
         url = '/get/' + key + '?offset=' + str(offset) + '&size=' + str(size)
-	print url
-	read_offset_size = client.get(url)
-        assert read_offset_size.status_code == 200
-	assert data[offset:offset+size] == read_offset_size.content
+	read = client.get(url)
+        assert read.status_code == 200
+	assert len(read.content) == size
+	assert data[offset:offset+size] == read.content
