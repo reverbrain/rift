@@ -659,7 +659,7 @@ public:
 			add_async(m_offset, m_size);
 		}
 
-		on_read_finished(0, entry.file(), error, false);
+		on_read_finished(0, entry.file(), error, m_size == 0);
 	}
 
 
@@ -804,17 +804,22 @@ public:
 			return;
 		}
 
-		if (last)
-			m_devices.pop_front();
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: finished-read: offset: %llu, data-size: %llu, last: %d",
+				(unsigned long long)offset, (unsigned long long)file.size(), last);
 
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: finished-read: offset: %llu, data-size: %llu, last: %d, empty: %d",
-				(unsigned long long)offset, (unsigned long long)file.size(), last, m_devices.empty());
+		if (last) {
+			// when we read only one chunk, no devices were created and added into the queue
+			if (!m_devices.empty())
+				m_devices.pop_front();
 
-		auto first_part = file.slice(0, file.size() / 2);
-		auto second_part = file.slice(first_part.size(), file.size() - first_part.size());
+			this->send_data(std::move(file.slice(0, file.size())), std::bind(&on_get_base::close, this->shared_from_this(), std::placeholders::_1));
+		} else {
+			auto first_part = file.slice(0, file.size() / 2);
+			auto second_part = file.slice(first_part.size(), file.size() - first_part.size());
 
-		this->send_data(std::move(first_part), std::bind(&on_get_base::on_part_sent,
-			this->shared_from_this(), offset + file.size(), std::placeholders::_1, second_part));
+			this->send_data(std::move(first_part), std::bind(&on_get_base::on_part_sent,
+				this->shared_from_this(), offset + file.size(), std::placeholders::_1, second_part));
+		}
 	}
 
 	virtual void on_part_sent(size_t offset, const boost::system::error_code &error, const elliptics::data_pointer &second_part)
