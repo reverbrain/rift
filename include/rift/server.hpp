@@ -58,9 +58,11 @@ public:
 			const auto &query = req.url().query();
 			uint32_t ioflags = query.item_value("ioflags", 0u);
 			uint64_t cflags = query.item_value("cflags", 0llu);
+			uint64_t trace_id = query.item_value("trace_id", 0llu);
 
 			session.set_ioflags(ioflags);
 			session.set_cflags(cflags);
+			session.set_trace_id(trace_id);
 
 		} catch (const std::exception &e) {
 			m_logger.log(swarm::SWARM_LOG_ERROR, "data-session: url: %s: invalid ioflags/cflags parameters: %s",
