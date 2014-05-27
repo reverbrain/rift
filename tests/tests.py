@@ -370,7 +370,7 @@ class TestCases:
         assert r.status_code == 200
 
         offset = 123
-	size = 1
+	size = 64
 
         url = '/get/' + key + '?offset=' + str(offset) + '&size=' + str(size)
 	read = client.get(url)

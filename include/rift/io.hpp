@@ -26,6 +26,8 @@ static inline elliptics::data_pointer create_data(const boost::asio::const_buffe
 	);
 }
 
+struct srange_info;
+
 struct range_info
 {
 	size_t begin;
@@ -36,9 +38,17 @@ struct range_info
 		return std::make_pair(begin, end) < std::make_pair(other.begin, other.end);
 	}
 
-	static bool parse_range(const std::string &range, size_t data_size, size_t &begin, size_t &end) {
-		begin = 0;
-		end = data_size - 1;
+	static std::vector<range_info> create(size_t size, const std::vector<srange_info> &ranges);
+};
+
+struct srange_info
+{
+	boost::optional<size_t> begin;
+	boost::optional<size_t> end;
+
+	static bool parse_range(const std::string &range, srange_info &info) {
+		info.begin.reset();
+		info.end.reset();
 
 		if (range.size() <= 1)
 			return false;
@@ -48,45 +58,32 @@ struct range_info
 			if (separator == std::string::npos)
 				return false;
 
-			if (separator == 0) {
-				auto tmp = boost::lexical_cast<size_t>(range.substr(separator + 1));
-				if (tmp > data_size)
-					begin = 0;
-				else
-					begin = data_size - tmp;
-			} else {
-				if (separator > 0)
-					begin = boost::lexical_cast<size_t>(range.substr(0, separator));
+			if (separator > 0)
+				info.begin = boost::lexical_cast<size_t>(range.substr(0, separator));
 
-				if (separator + 1 < range.size())
-					end = boost::lexical_cast<size_t>(range.substr(separator + 1));
-			}
+			if (separator + 1 < range.size())
+				info.end = boost::lexical_cast<size_t>(range.substr(separator + 1));
 		} catch (...) {
 			return false;
 		}
 
-		if (begin > end)
+		if (info.begin && info.end && info.begin.get() > info.end.get())
 			return false;
-
-		if (begin >= data_size)
-			return false;
-
-		end = std::min(data_size - 1, end);
 
 		return true;
 	}
 
-	static std::vector<range_info> parse(std::string range, size_t size, bool *many, bool *ok)
+	static std::vector<srange_info> parse(std::string range, bool *many, bool *ok)
 	{
 		*many = false;
 		*ok = false;
 
 		if (range.compare(0, 6, "bytes=") != 0)
-			return std::vector<range_info>();
+			return std::vector<srange_info>();
 
 		*ok = true;
 
-		std::vector<range_info> ranges;
+		std::vector<srange_info> ranges;
 
 		std::vector<std::string> ranges_str;
 		range.erase(range.begin(), range.begin() + 6);
@@ -95,16 +92,43 @@ struct range_info
 		*many = ranges_str.size() > 1;
 
 		for (auto it = ranges_str.begin(); it != ranges_str.end(); ++it) {
-			range_info info;
-			if (parse_range(*it, size, info.begin, info.end))
+			srange_info info;
+			if (parse_range(*it, info))
 				ranges.push_back(info);
 		}
-
-		std::sort(ranges.begin(), ranges.end());
 
 		return ranges;
 	}
 };
+
+inline std::vector<range_info> range_info::create(size_t size, const std::vector<srange_info> &ranges)
+{
+	std::vector<range_info> results;
+	results.reserve(ranges.size());
+
+	for (auto it = ranges.begin(); it != ranges.end(); ++it) {
+		range_info result;
+		const srange_info &info = *it;
+
+		if (info.begin) {
+			if (*info.begin >= size)
+				continue;
+
+			result.begin = *info.begin;
+			result.end = info.end ? std::min(size - 1, *info.end) : (size - 1);
+		} else {
+			if (*info.end > size)
+				result.begin = 0;
+			else
+				result.begin = size - *info.end;
+			result.end = size - 1;
+		}
+
+		results.push_back(result);
+	}
+
+	return results;
+}
 
 class upload_completion {
 public:
@@ -513,6 +537,10 @@ class buffer_device : public iodevice
 {
 public:
 	buffer_device(std::string &&data)
+		: iodevice(data.size()), m_str(std::move(data)), m_data(elliptics::data_pointer::from_raw(m_str))
+	{
+	}
+	buffer_device(elliptics::data_pointer &&data)
 		: iodevice(data.size()), m_data(std::move(data))
 	{
 	}
@@ -520,12 +548,11 @@ public:
 	void read(size_t limit, const function &handler)
 	{
 		(void) limit;
-
-		elliptics::data_pointer data = elliptics::data_pointer::from_raw(m_data);
-		handler(data, elliptics::error_info(), true);
+		handler(m_data, elliptics::error_info(), true);
 	}
 private:
-	std::string m_data;
+	std::string m_str;
+	elliptics::data_pointer m_data;
 };
 
 
@@ -573,7 +600,7 @@ template <typename Server, typename Stream>
 class on_get_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	on_get_base() : m_buffer_size(5 * 1025 * 1024)
+	on_get_base() : m_prefetched_offset(0), m_buffer_size(5 * 1025 * 1024)
 	{
 	}
 
@@ -594,19 +621,88 @@ public:
 		m_session.reset(new elliptics::session(this->server()->create_session(static_cast<Stream&>(*this), req, m_key)));
 
 		auto range = this->request().headers().get("Range");
-		if (m_size || !range) {
+
+		if (range) {
+			this->log(swarm::SWARM_LOG_INFO, "GET, Range: \"%s\"", range->c_str());
+			bool ok = false;
+
+			m_ranges = srange_info::parse(*range, &m_many_ranges, &ok);
+
+			if (ok) {
+				for (size_t i = 0; i < m_ranges.size(); ++i) {
+					const srange_info &info = m_ranges.at(i);
+
+					if (info.begin) {
+						size_t size2read = info.end ? std::min(m_buffer_size, *info.end + 1 - *info.begin) : m_buffer_size;
+						if (m_size)
+							size2read = std::min(m_size, size2read);
+
+						m_session->read_data(m_key, m_offset, size2read).connect(std::bind(
+							&on_get_base::on_read_data_finished, this->shared_from_this(),
+								std::placeholders::_1, std::placeholders::_2));
+
+						return;
+					}
+				}
+			} else {
+				m_ranges.clear();
+			}
+		} else {
 			size_t size2read = m_buffer_size;
-			if (m_size != 0)
-				size2read = std::min(m_size, m_buffer_size);
+			if (m_size)
+				size2read = std::min(m_size, size2read);
 
 			m_session->read_data(m_key, m_offset, size2read).connect(std::bind(
 				&on_get_base::on_read_data_finished, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
-		} else {
-			m_session->lookup(m_key).connect(std::bind(
-				&on_get_base::on_buffered_get_lookup_finished, this->shared_from_this(),
-					std::placeholders::_1, std::placeholders::_2));
+			return;
 		}
+
+		m_session->lookup(m_key).connect(std::bind(
+			&on_get_base::on_buffered_get_lookup_finished, this->shared_from_this(),
+				std::placeholders::_1, std::placeholders::_2));
+	}
+
+	void on_first_chunk_read(size_t size, const dnet_time &ts)
+	{
+		if (m_size)
+			size = std::min(size, m_offset + m_size);
+
+		if (size <= m_offset) {
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: finished-lookup: requested offset is too big: offset: %llu, file-size: %llu",
+					(unsigned long long)m_offset, (unsigned long long)size);
+
+			this->send_reply(swarm::http_response::bad_request);
+			return;
+		}
+
+		if (!m_ranges.empty()) {
+			std::vector<range_info> ranges = range_info::create(size - m_offset, m_ranges);
+			for (auto it = ranges.begin(); it != ranges.end(); ++it) {
+				it->begin += m_offset;
+				it->end += m_offset;
+			}
+
+			if (ranges.empty()) {
+				this->send_reply(swarm::http_response::requested_range_not_satisfiable);
+				return;
+			}
+
+			if (m_many_ranges)
+				on_ranges(ranges, size, ts);
+			else
+				on_range(ranges.front(), size, ts);
+			return;
+		}
+
+		swarm::http_response reply;
+		reply.set_code(swarm::http_response::ok);
+		reply.headers().set_content_type("application/octet-stream");
+		reply.headers().set_last_modified(ts.tsec);
+
+		add_async(m_offset, size - m_offset);
+
+		start(std::move(reply));
 	}
 
 	void on_read_data_finished(const elliptics::sync_read_result &result, const elliptics::error_info &error) {
@@ -627,39 +723,13 @@ public:
 		}
 
 		const elliptics::read_result_entry &entry = result[0];
-		const size_t read_size = entry.io_attribute()->size;
 		const size_t total_size = entry.io_attribute()->total_size;
 		const dnet_time &ts = entry.io_attribute()->timestamp;
 
-		if (m_size == 0)
-			m_size = total_size - m_offset;
+		m_prefetched_offset = entry.io_attribute()->offset;
+		m_prefetched_data = entry.file();
 
-		if (m_size > total_size - m_offset)
-			m_size = total_size - m_offset;
-
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::ok);
-		reply.headers().set_content_type("application/octet-stream");
-		reply.headers().set_last_modified(ts.tsec);
-		reply.headers().set_content_length(m_size);
-
-		this->send_headers(std::move(reply), std::function<void (const boost::system::error_code &)>());
-
-		// impossible - server can not return more than requested - offset, but let's check against overflow
-		if (m_size < read_size)
-			m_size = read_size;
-
-
-		// we update m_offset since async_device::read() uses it as offset to read next chunk
-		// but we do not update m_size here 
-		m_offset += read_size;
-		m_size -= read_size;
-
-		if (m_size != 0) {
-			add_async(m_offset, m_size);
-		}
-
-		on_read_finished(0, entry.file(), error, m_size == 0);
+		on_first_chunk_read(total_size, ts);
 	}
 
 
@@ -678,46 +748,8 @@ public:
 		const elliptics::lookup_result_entry &entry = result[0];
 		const size_t size = entry.file_info()->size;
 		const dnet_time &ts = entry.file_info()->mtime;
-		if (size <= m_offset) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: finished-lookup: requested offset is too big: offset: %llu, file-size: %llu",
-					(unsigned long long)m_offset, (unsigned long long)size);
 
-			this->send_reply(swarm::http_response::bad_request);
-			return;
-		}
-
-		if (auto range = this->request().headers().get("Range")) {
-			this->log(swarm::SWARM_LOG_INFO, "GET, Range: \"%s\"", range->c_str());
-			bool many = false;
-			bool ok = false;
-			std::vector<range_info> ranges = range_info::parse(*range, size - m_offset, &many, &ok);
-			if (ok) {
-				for (auto it = ranges.begin(); it != ranges.end(); ++it) {
-					it->begin += m_offset;
-					it->end += m_offset;
-				}
-
-				if (ranges.empty()) {
-					this->send_reply(swarm::http_response::requested_range_not_satisfiable);
-					return;
-				}
-
-				if (many)
-					on_ranges(ranges, size, ts);
-				else
-					on_range(ranges.front(), size, ts);
-				return;
-			}
-		}
-
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::ok);
-		reply.headers().set_content_type("application/octet-stream");
-		reply.headers().set_last_modified(ts.tsec);
-
-		add_async(m_offset, size - m_offset);
-
-		start(std::move(reply));
+		on_first_chunk_read(size, ts);
 	}
 
 	std::string create_content_range(size_t begin, size_t end, size_t data_size) {
@@ -807,19 +839,16 @@ public:
 		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: finished-read: offset: %llu, data-size: %llu, last: %d",
 				(unsigned long long)offset, (unsigned long long)file.size(), last);
 
-		if (last) {
-			// when we read only one chunk, no devices were created and added into the queue
-			if (!m_devices.empty())
-				m_devices.pop_front();
+		if (last)
+			m_devices.pop_front();
 
-			this->send_data(std::move(file.slice(0, file.size())), std::bind(&on_get_base::close, this->shared_from_this(), std::placeholders::_1));
-		} else {
-			auto first_part = file.slice(0, file.size() / 2);
-			auto second_part = file.slice(first_part.size(), file.size() - first_part.size());
+		const size_t second_size = file.size() / 2;
 
-			this->send_data(std::move(first_part), std::bind(&on_get_base::on_part_sent,
-				this->shared_from_this(), offset + file.size(), std::placeholders::_1, second_part));
-		}
+		auto first_part = file.slice(0, file.size()  - second_size);
+		auto second_part = file.slice(first_part.size(), second_size);
+
+		this->send_data(std::move(first_part), std::bind(&on_get_base::on_part_sent,
+			this->shared_from_this(), offset + file.size(), std::placeholders::_1, second_part));
 	}
 
 	virtual void on_part_sent(size_t offset, const boost::system::error_code &error, const elliptics::data_pointer &second_part)
@@ -836,7 +865,8 @@ public:
 			this->send_data(elliptics::data_pointer(second_part),
 				std::bind(&on_get_base::close, this->shared_from_this(), std::placeholders::_1));
 		} else {
-			this->send_data(elliptics::data_pointer(second_part), std::function<void (const boost::system::error_code &)>());
+			if (!second_part.empty())
+				this->send_data(elliptics::data_pointer(second_part), std::function<void (const boost::system::error_code &)>());
 			read_next(offset);
 		}
 	}
@@ -844,6 +874,9 @@ public:
 protected:
 	void start(swarm::http_response &&response)
 	{
+		m_prefetched_offset = 0;
+		m_prefetched_data = elliptics::data_pointer();
+
 		size_t size = 0;
 
 		for (auto it = m_devices.begin(); it != m_devices.end(); ++it)
@@ -859,15 +892,63 @@ protected:
 	 */
 	void add_async(size_t offset, size_t size)
 	{
+		if (m_prefetched_data.empty()
+			|| m_prefetched_offset >= offset + size
+			|| m_prefetched_offset + m_prefetched_data.size() <= offset) {
+			add_async_raw(offset, size);
+			return;
+		}
+
+		if (offset < m_prefetched_offset) {
+			const size_t delta = std::min(size, m_prefetched_offset - offset);
+
+			add_async_raw(offset, delta);
+
+			size -= delta;
+			offset += delta;
+		}
+
+		if (!size)
+			return;
+
+		elliptics::data_pointer data;
+
+		if (offset > m_prefetched_offset) {
+			data = m_prefetched_data.slice(offset - m_prefetched_offset, size);
+		} else {
+			data = m_prefetched_data.slice(0, size);
+		}
+
+		if (!data.empty()) {
+			offset += data.size();
+			size -= data.size();
+
+			add_buffer(std::move(data));
+		}
+
+		if (size) {
+			add_async_raw(offset, size);
+		}
+	}
+	void add_async_raw(size_t offset, size_t size)
+	{
 		m_devices.emplace_back(new async_device(*m_session, m_key, offset, size));
 	}
 	void add_buffer(std::string &&data)
 	{
 		m_devices.emplace_back(new buffer_device(std::move(data)));
 	}
+	void add_buffer(elliptics::data_pointer &&data)
+	{
+		m_devices.emplace_back(new buffer_device(std::move(data)));
+	}
 
 	std::deque<std::unique_ptr<iodevice>> m_devices;
 	std::unique_ptr<elliptics::session> m_session;
+	std::vector<srange_info> m_ranges;
+	bool m_many_ranges;
+	size_t m_prefetched_offset;
+	elliptics::data_pointer m_prefetched_data;
 	elliptics::key m_key;
 	uint64_t m_buffer_size;
 	uint64_t m_offset;
