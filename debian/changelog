@@ -1,3 +1,11 @@
+rift (2.25.0.8.8) unstable; urgency=low
+
+  * rift: Changed Authorization header
+  * rift: Lookup optimization for range requests
+  * session: added trace_id URI parameter
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Wed, 28 May 2014 20:23:01 +0400
+
 rift (2.25.0.8.7) unstable; urgency=low
 
   * test: added small size read test

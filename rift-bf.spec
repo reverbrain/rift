@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.8.7
+Version:	2.25.0.8.8
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -71,6 +71,11 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Wed May 28 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.8
+- rift: Changed Authorization header
+- rift: Lookup optimization for range requests
+- session: added trace_id URI parameter
+
 * Wed May 21 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.7
 - test: added small size read test
 - io: fixed last read for one chunk read only. optimized reads which are smaller than chunk size (5mb)
