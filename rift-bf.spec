@@ -61,6 +61,15 @@ rm -rf %{buildroot}
 
 %files
 %defattr(-,root,root,-)
+%doc README.md
+%doc example/http_auth.py
+%doc example/bucket_create.json
+%doc example/bucket_directory.json
+%doc example/find-example.json
+%doc example/update-example.json
+%doc example/server-config.json
+%doc example/listing.py
+%doc example/init.d/rift
 %{_bindir}/*
 %{_libdir}/*.so.*
 

@@ -1,1 +1,9 @@
 README.md
+example/http_auth.py
+example/bucket_create.json
+example/bucket_directory.json
+example/find-example.json
+example/update-example.json
+example/server-config.json
+example/listing.py
+example/init.d/rift

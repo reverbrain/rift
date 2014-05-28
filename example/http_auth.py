@@ -1,12 +1,11 @@
+#!/usr/bin/python
+
 import requests
 import hmac
 import hashlib
 import urlparse
 import urllib
-
-def check_hash(name, message):
-    print("{0}: {1}".format(name, hashlib.sha512(message).hexdigest()))
-
+import argparse
 
 def generate_signature(key, method, url, headers=None):
     parsed_url = urlparse.urlparse(url)
@@ -26,28 +25,28 @@ def generate_signature(key, method, url, headers=None):
         for header in headers:
             text += header[0] + ':' + header[1] + '\n'
 
-    check_hash('key', key)
-    check_hash('message', text)
+    return hmac.new(key, text, hashlib.sha512).hexdigest()
 
-    print '"' + text + '"'
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Send request to rift.')
+    parser.add_argument('url', metavar='URL', help='Url for processing')
+    parser.add_argument('--file', dest='file', action='store', default=None, help='File to send with POST request')
+    parser.add_argument('--user', dest='user', action='store', default=None, help='Token owner to sign request')
+    parser.add_argument('--token', dest='token', action='store', default=None, help='Secure token to sign request')
+    args = parser.parse_args()
 
-    result = hmac.new(key, text, hashlib.sha512).hexdigest()
-    print result
-    return result
+    headers = {}
+    if args.token and args.user:
+        headers['Authorization'] = 'riftv1 {0}:{1}'.format(args.user, generate_signature(args.token, 'POST' if args.file else 'GET', args.url))
+    elif args.token or args.user:
+		raise Exception('Both --user and --token must be specified at the same time')
 
-original_data = "some-text"
+    if not args.file:
+        r = requests.get(args.url, headers=headers)
+    else:
+        with open(args.file) as f:
+            data = f.read()
+            r = requests.post(args.url, data, headers=headers)
 
-r = requests.post("http://localhost:8080/upload?name=123&namespace=qwerty", original_data, headers={
-    "Authorization": generate_signature('trello', 'POST', '/upload?name=123&namespace=qwerty'),
-    "x-ell-ololo": "trash"
-})
-print r, r.headers
-
-r = requests.get("http://localhost:8080/get?name=123&namespace=qwerty", headers={
-    "Authorization": generate_signature('trello', 'GET', '/get?name=123&namespace=qwerty'),
-    "x-ell-ololo": "trash"
-})
-
-print r, r.headers
-
-print 'Same data:', (r.content == original_data)
+    print r.status_code
+    print r.content
