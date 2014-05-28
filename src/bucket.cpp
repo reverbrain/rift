@@ -89,23 +89,45 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 		return verdict;
 	}
 
-	std::string user = "*";
-	try {
-		verdict = swarm::http_response::bad_request;
-		auto tmp = query.item_value("user");
-		if (!tmp) {
-			logger.log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %zd: no user in URI -> "
-					"searching for '*' wildcard",
-					request.url().to_string().c_str(), meta.key.c_str(), meta.acl.size());
-		} else {
-			user = *tmp;
-		}
-	} catch (const std::exception &e) {
-		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s: invalid user parameter: %s -> %d",
-				request.url().to_string().c_str(), e.what(), verdict);
-		return verdict;
-	}
+	std::string user;
+	std::string token;
 
+	if (auto auth = request.headers().get("Authorization")) {
+		// Authorization: riftv1 user:token
+
+		const std::string &authorization = *auth;
+		const size_t end_of_method = authorization.find(' ');
+		if (end_of_method == std::string::npos) {
+			// Hack for previous implementation: ?user=user and Authorization: token
+			if (auto user_ptr = query.item_value("user")) {
+				user = *user_ptr;
+				token = authorization;
+			} else {
+				verdict = swarm::http_response::forbidden;
+				logger.log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %zd: invalid auth: %s",
+						request.url().to_string().c_str(), meta.key.c_str(), meta.acl.size(), auth->c_str());
+				return verdict;
+			}
+		} else {
+			if (authorization.compare(0, end_of_method, "riftv1", 6) != 0) {
+				verdict = swarm::http_response::forbidden;
+				logger.log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %zd: unknown auth: %s",
+						request.url().to_string().c_str(), meta.key.c_str(), meta.acl.size(), auth->c_str());
+				return verdict;
+			}
+
+			const size_t end_of_user = authorization.find(':', end_of_method + 1);
+			user = authorization.substr(end_of_method + 1, end_of_user - end_of_method - 1);
+
+			if (end_of_user != std::string::npos)
+				token = authorization.substr(end_of_user + 1);
+		}
+	} else if (auto user_ptr = query.item_value("user")) {
+		// Makes possible to get user from '?user=user'
+		user = *user_ptr;
+	} else {
+		user = "*";
+	}
 
 	auto it = meta.acl.find(user);
 	if (it == meta.acl.end()) {
@@ -137,8 +159,7 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 		return verdict;
 	}
 
-	auto auth = request.headers().get("Authorization");
-	if (!auth) {
+	if (token.empty()) {
 		verdict = swarm::http_response::unauthorized;
 
 		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
@@ -149,13 +170,13 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 	}
 
 	auto key = http_auth::generate_signature(request, acl.token);
-	if (key != *auth) {
+	if (key != token) {
 		verdict = swarm::http_response::forbidden;
 
 		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
 				"calculated-key: %s, auth-header: %s: incorrect auth header -> %d",
 				request.url().to_string().c_str(), meta.key.c_str(), user.c_str(), meta.acl.size(),
-				key.c_str(), (*auth).c_str(), verdict);
+				key.c_str(), token.c_str(), verdict);
 		return verdict;
 	}
 

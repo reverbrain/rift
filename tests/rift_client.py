@@ -60,10 +60,6 @@ class Client:
         query = parsed_url.query
 
         if user:
-            qs = urlparse.parse_qs(parsed_url.query)
-            qs['user'] = user['user']
-            query = urllib.urlencode(qs, True)
-
             pc = path.split('/')
             pc.insert(2, user['key'])
             path = '/'.join(pc)
@@ -73,7 +69,11 @@ class Client:
         if user and 'token' in user:
             headers = kwargs['headers'] if 'headers' in kwargs else {}
             authorization = self.generate_signature(method, result_url, user, headers)
-            headers['Authorization'] = authorization
+            headers['Authorization'] = 'riftv1 {0}:{1}'.format(user['user'], authorization)
+            kwargs['headers'] = headers
+	elif user:
+	    headers = kwargs['headers'] if 'headers' in kwargs else {}
+            headers['Authorization'] = 'riftv1 {0}'.format(user['user'])
             kwargs['headers'] = headers
 
         return result_url, kwargs
