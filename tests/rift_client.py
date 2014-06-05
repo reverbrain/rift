@@ -7,7 +7,7 @@ class Client:
         self.base_url = 'http://localhost:8080'
         self.bucket = option.bucket
         if self.bucket:
-            self.user = self.generate_user(key='generic_bucket', user='bucket_user')
+            self.user = self.generate_user(key='generic_bucket:123', user='bucket_user.xxx')
             self.directory_user = self.generate_user(key=self.bucket, user='directory_user')
         else:
             self.user = None
