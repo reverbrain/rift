@@ -32,7 +32,7 @@ class Client:
         queries.sort()
         text = ''
         text += method + '\n'
-        text += parsed_url.path
+        text += urllib.quote(parsed_url.path)
         if len(queries) > 0:
             text += '?' + urllib.urlencode(queries)
         text += '\n'
