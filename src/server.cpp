@@ -21,7 +21,7 @@ bool example_server::initialize(const rapidjson::Value &config) {
 	if (config.HasMember("cache")) {
 		m_cache = std::make_shared<rift::cache>();
 		if (!m_cache->initialize(config["cache"], m_elliptics.node(), logger(),
-		&m_async, m_elliptics.metadata_groups()))
+				&m_async, m_elliptics.metadata_groups()))
 			return false;
 	}
 
@@ -30,6 +30,13 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		if (!m_bucket->initialize(config["bucket"], m_elliptics, &m_async))
 			return false;
 	}
+
+	int stat_timeout = 30;
+	if (config.HasMember("stat_timeout") && config["stat_timeout"].IsInt()) {
+		stat_timeout = config["stat_timeout"].GetInt();
+	}
+
+	m_async.add_action(std::bind(&ioremap::rift::elliptics_base::stat_update, &m_elliptics), stat_timeout);
 
 	if (config.HasMember("redirect-port")) {
 		m_redirect_port = config["redirect-port"].GetInt();

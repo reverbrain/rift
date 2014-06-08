@@ -36,6 +36,7 @@
         },
 	"read-timeout": 10,
 	"write-timeout": 16,
+	"stat_timeout": 60,
         "XXX-redirect-port": 8080
     }
 }
