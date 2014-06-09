@@ -262,7 +262,7 @@ class TestCases:
 
 	# this is a number of already written buckets in all previous tests
         assert len(buckets_list['indexes']) == 6
-        assert client.user['key'] in [x['key'] for x in buckets_list['indexes']]
+        assert client.user['key'].decode('utf-8') in [x['key'] for x in buckets_list['indexes']]
 
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")

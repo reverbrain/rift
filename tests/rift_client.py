@@ -1,3 +1,5 @@
+# coding=utf-8
+
 import requests
 import uuid
 
@@ -7,7 +9,7 @@ class Client:
         self.base_url = 'http://localhost:8080'
         self.bucket = option.bucket
         if self.bucket:
-            self.user = self.generate_user(key='generic_bucket:123', user='bucket_user.xxx')
+            self.user = self.generate_user(key='generic_bucket:123:привет, Россия!11', user='bucket_user.xxx')
             self.directory_user = self.generate_user(key=self.bucket, user='directory_user')
         else:
             self.user = None
@@ -32,7 +34,7 @@ class Client:
         queries.sort()
         text = ''
         text += method + '\n'
-        text += urllib.quote(parsed_url.path)
+        text += parsed_url.path
         if len(queries) > 0:
             text += '?' + urllib.urlencode(queries)
         text += '\n'

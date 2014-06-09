@@ -39,16 +39,18 @@ std::string http_auth::generate_signature(const swarm::http_request &request, co
 
 	std::sort(query_items.begin(), query_items.end());
 
-	swarm::url result_url;
-	result_url.set_path(url.path());
-
-	for (auto it = query_items.begin(); it != query_items.end(); ++it) {
-		result_url.query().add_item(it->first, it->second);
-	}
-
 	std::string text = request.method();
 	text += '\n';
-	text += result_url.to_string();
+	text += url.path();
+	if (!query_items.empty()) {
+		swarm::url_query query;
+		for (auto it = query_items.begin(); it != query_items.end(); ++it) {
+			query.add_item(it->first, it->second);
+		}
+
+		text += '?';
+		text += query.to_string();
+	}
 	text += '\n';
 
 	for (auto it = headers.begin(); it != headers.end(); ++it) {
