@@ -91,7 +91,7 @@ protected:
 		session.set_namespace(m_ctl_meta_namespace.c_str(), m_ctl_meta_namespace.size());
 
 		this->log(swarm::SWARM_LOG_NOTICE, "%s: reading meta key '%s', namespace: '%s', parent: '%s'",
-				m_request.url().to_string().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
+				m_request.url().to_human_readable().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
 
 		session.read_data(m_ctl_meta.key, 0, 0).connect(
 				std::bind(&meta_create_base::check_completion, this->shared_from_this(),
@@ -100,7 +100,7 @@ protected:
 
 	void check_completion(const elliptics::sync_read_result &result, const elliptics::error_info &error) {
 		this->log(swarm::SWARM_LOG_NOTICE, "%s: read meta key '%s', namespace: '%s', parent: '%s', error-code: %d",
-				m_request.url().to_string().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str(), error.code());
+				m_request.url().to_human_readable().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str(), error.code());
 		if (error.code() == -ENOENT) {
 			// there is no metadata object with given name, just create a new one
 			write_metadata();
@@ -109,7 +109,7 @@ protected:
 
 		if (error) {
 			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: metadata read error: %s",
-					m_request.url().to_string().c_str(), error.message().c_str());
+					m_request.url().to_human_readable().c_str(), error.message().c_str());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
@@ -128,16 +128,16 @@ protected:
 		auto v = bucket_meta::verdict(this->logger(), read_meta, m_request, acl);
 
 		this->log(swarm::SWARM_LOG_NOTICE, "%s: read meta key '%s', namespace: '%s', parent: '%s', security verdict: %d",
-				m_request.url().to_string().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str(), v);
+				m_request.url().to_human_readable().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str(), v);
 
 		if (v != swarm::http_response::ok) {
 			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s, parent: '%s', verdict: %d: read metadata doesn't allow update",
-					m_request.url().to_string().c_str(), m_parent.c_str(), v);
+					m_request.url().to_human_readable().c_str(), m_parent.c_str(), v);
 			this->send_reply(v);
 			return;
 
 			elliptics::throw_error(v, "bucket-meta-create: url: %s, parent: '%s', verdict: %d: read metadata doesn't allow update",
-					m_request.url().to_string().c_str(), m_parent.c_str(), v);
+					m_request.url().to_human_readable().c_str(), m_parent.c_str(), v);
 		}
 
 		write_metadata();
@@ -157,7 +157,7 @@ protected:
 		tmp.groups = session.get_groups();
 
 		this->log(swarm::SWARM_LOG_NOTICE, "%s: write meta key '%s', namespace: '%s', parent: '%s'",
-				m_request.url().to_string().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
+				m_request.url().to_human_readable().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
 
 		meta_create_base::set_meta(tmp);
 		meta_create_base::set_key(m_ctl_meta.key);
@@ -169,29 +169,27 @@ protected:
 	}
 
 	void parse_request(const swarm::http_request &request, const boost::asio::const_buffer &buffer, bucket_meta_raw &meta) {
-		const auto &query = request.url().query();
-
 		std::string buf(boost::asio::buffer_cast<const char*>(buffer), boost::asio::buffer_size(buffer));
 		rapidjson::Document doc;
 		doc.Parse<0>(buf.c_str());
 
 		if (doc.HasParseError()) {
 			elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: request parsing error offset: %zd, message: %s",
-					query.to_string().c_str(), doc.GetErrorOffset(), doc.GetParseError());
+					request.url().to_human_readable().c_str(), doc.GetErrorOffset(), doc.GetParseError());
 		}
 
 		const char *mandatory_members[] = {"groups", NULL};
 		for (auto ptr = mandatory_members; *ptr != NULL; ++ptr) {
 			if (!doc.HasMember(*ptr)) {
 				elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: request doesn't have '%s' member",
-						query.to_string().c_str(), *ptr);
+						request.url().to_human_readable().c_str(), *ptr);
 			}
 		}
 
 		auto & groups = doc["groups"];
 		if (!groups.IsArray()) {
 			elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: 'groups' member is not array",
-					query.to_string().c_str());
+					request.url().to_human_readable().c_str());
 		}
 		for (auto it = groups.Begin(); it != groups.End(); ++it) {
 			meta.groups.push_back(it->GetInt());
@@ -201,7 +199,7 @@ protected:
 		for (auto ptr = optional_members; *ptr != NULL; ++ptr) {
 			if (!doc.HasMember(*ptr)) {
 				this->log(swarm::SWARM_LOG_NOTICE, "bucket-meta-create: url: %s: (warning) request doesn't have '%s' member",
-						query.to_string().c_str(), *ptr);
+						request.url().to_human_readable().c_str(), *ptr);
 			}
 		}
 
@@ -209,7 +207,7 @@ protected:
 			auto & acl_array = doc["acl"];
 			if (!acl_array.IsArray()) {
 				elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: 'acl' member is not array",
-						query.to_string().c_str());
+						request.url().to_human_readable().c_str());
 			}
 
 			const char *acl_members[] = {"user", "token", "flags", NULL};
@@ -218,7 +216,7 @@ protected:
 				if (!it->IsObject()) {
 					elliptics::throw_error(swarm::http_response::bad_request,
 							"bucket-meta-create: url: %s: %zd'th ACL member array isnt't valid object, but has type %d",
-							query.to_string().c_str(), it - acl_array.Begin(), it->GetType());
+							request.url().to_human_readable().c_str(), it - acl_array.Begin(), it->GetType());
 				}
 
 				auto & acl_obj = *it;
@@ -226,7 +224,7 @@ protected:
 					if (!acl_obj.HasMember(*ptr)) {
 						elliptics::throw_error(swarm::http_response::bad_request,
 								"bucket-meta-create: url: %s: %zd'th ACL member doesn't contain '%s' member",
-								query.to_string().c_str(), it - acl_array.Begin(), *ptr);
+								request.url().to_human_readable().c_str(), it - acl_array.Begin(), *ptr);
 					}
 				}
 
@@ -238,7 +236,7 @@ protected:
 				meta.acl[acl.user] = acl;
 
 				this->log(swarm::SWARM_LOG_DEBUG, "bucket-meta-create: url: %s: found acl '%s:%s:%llx'",
-						query.to_string().c_str(), acl.user.c_str(), acl.token.c_str(), (unsigned long long)acl.flags);
+						request.url().to_human_readable().c_str(), acl.user.c_str(), acl.token.c_str(), (unsigned long long)acl.flags);
 			}
 		}
 
@@ -263,14 +261,12 @@ class on_delete_base : public bucket_mixin<thevoid::simple_request_stream<Server
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		const auto &query = req.url().query();
-
 		(void) buffer;
 
 		elliptics::session session = this->server()->elliptics()->write_metadata_session(req, this->bucket_mixin_meta);
 
 		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using data session",
-				query.to_string().c_str(), this->bucket_mixin_meta.key.c_str());
+				req.url().to_human_readable().c_str(), this->bucket_mixin_meta.key.c_str());
 		session.remove_index(this->bucket_mixin_meta.key + ".index", true).connect(std::bind(&on_delete_base::on_delete_finished, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
 
@@ -314,8 +310,6 @@ class meta_read_base : public bucket_mixin<thevoid::simple_request_stream<Server
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		const auto &query = req.url().query();
-
 		(void) buffer;
 
 		const bucket_meta_raw &meta = this->bucket_mixin_meta;
@@ -323,7 +317,7 @@ public:
 		if ((this->bucket_mixin_acl.readonly()) || (this->bucket_mixin_acl.user == "*")) {
 			this->log(swarm::SWARM_LOG_ERROR, "meta-read-base: checked: url: %s, meta: '%s': acl: flags: 0x%llx, user: '%s': "
 					"readonly and wildcard users are forbidden",
-					query.to_string().c_str(), meta.key.c_str(),
+					req.url().to_human_readable().c_str(), meta.key.c_str(),
 					(unsigned long long)this->bucket_mixin_acl.flags, this->bucket_mixin_acl.user.c_str());
 			this->send_reply(swarm::http_response::forbidden);
 			return;
@@ -338,7 +332,7 @@ public:
 		auto & allocator = result_object.GetAllocator();
 
 		this->log(swarm::SWARM_LOG_NOTICE, "meta-read-base: checked: url: %s, meta: '%s'",
-				query.to_string().c_str(), meta.key.c_str());
+				req.url().to_human_readable().c_str(), meta.key.c_str());
 
 
 		rapidjson::Value jkey(meta.key.c_str(), meta.key.size(), allocator);

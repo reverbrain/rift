@@ -196,8 +196,8 @@ public:
 				std::bind(&bucket_processor::on_checked, this->shared_from_this(),
 					std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
 		} catch (const std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "%s: uri: %s, processing error: %s",
-					req.url().path().c_str(), req.url().query().to_string().c_str(), e.what());
+			this->log(swarm::SWARM_LOG_ERROR, "url: %s, processing error: %s",
+					req.url().to_human_readable().c_str(), e.what());
 
 			this->send_reply(swarm::http_response::bad_request);
 		}
@@ -221,9 +221,8 @@ public:
 		{
 			std::lock_guard<std::mutex> lock(m_stream_mutex);
 			if (!m_stream) {
-				const swarm::url &url = m_request.url();
-				this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: on_close called: path: %s, url: %s, error: %s",
-						url.path().c_str(), url.query().to_string().c_str(), err.message().c_str());
+				this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: on_close called: url: %s, error: %s",
+						m_request.url().to_human_readable().c_str(), err.message().c_str());
 				m_closed = true;
 				m_was_error = !!err;
 				return;
@@ -236,18 +235,16 @@ public:
 protected:
 	void on_checked(const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict)
 	{
-		const swarm::url &url = m_request.url();
-
 		if ((verdict != swarm::http_response::ok) && (bucket_flags == int(bucket_acl::flags_noauth_read) ? !acl.noauth_read() : !acl.noauth_all())) {
-			this->log(swarm::SWARM_LOG_ERROR, "bucket_processor_base: checked: path: %s, url: %s, verdict: %d, did-not-pass-noauth-check",
-					url.path().c_str(), url.query().to_string().c_str(), verdict);
+			this->log(swarm::SWARM_LOG_ERROR, "bucket_processor_base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+					m_request.url().to_human_readable().c_str(), verdict);
 
 			this->send_reply(verdict);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: checked: path: %s, url: %s, verdict: %d, passed-noauth-check",
-				url.path().c_str(), url.query().to_string().c_str(), verdict);
+		this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: checked: url: %s, verdict: %d, passed-noauth-check",
+				m_request.url().to_human_readable().c_str(), verdict);
 
 		auto stream = std::make_shared<BaseStream>();
 		stream->bucket_mixin_meta = meta;
@@ -258,8 +255,8 @@ protected:
 		{
 			std::lock_guard<std::mutex> lock(m_stream_mutex);
 			if (m_closed && m_was_error) {
-				this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: already closed: path: %s, url: %s",
-						url.path().c_str(), url.query().to_string().c_str());
+				this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: already closed: url: %s",
+						m_request.url().to_human_readable().c_str());
 				// Connection is already closed, so we should die
 				return;
 			}
@@ -267,16 +264,16 @@ protected:
 			m_stream = stream;
 			m_stream->on_headers(std::move(m_request));
 
-			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: on_headers called: path: %s, url: %s",
-					url.path().c_str(), url.query().to_string().c_str());
+			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: on_headers called: url: %s",
+					m_request.url().to_human_readable().c_str());
 		}
 
 		if (m_closed) {
 			m_stream->on_data(boost::asio::const_buffer());
 			m_stream->on_close(boost::system::error_code());
 		} else if (m_on_data_called) {
-			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: want_more called: path: %s, url: %s",
-					url.path().c_str(), url.query().to_string().c_str());
+			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: want_more called: url: %s",
+					m_request.url().to_human_readable().c_str());
 			// on_data method was already called, so we should to call it again
 			this->get_reply()->want_more();
 		}

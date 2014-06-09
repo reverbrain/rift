@@ -15,22 +15,20 @@ class on_update_base : public thevoid::simple_request_stream<Server>, public std
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		const auto &query = req.url().query();
-
 		std::string buf(boost::asio::buffer_cast<const char*>(buffer), boost::asio::buffer_size(buffer));
 		rapidjson::Document doc;
 		doc.Parse<0>(buf.c_str());
 
 		if (doc.HasParseError()) {
 			this->log(swarm::SWARM_LOG_ERROR, "update-base: url: %s: request parsing error offset: %zd, message: %s",
-					query.to_string().c_str(), doc.GetErrorOffset(), doc.GetParseError());
+					req.url().to_human_readable().c_str(), doc.GetErrorOffset(), doc.GetParseError());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
 
 		if (!doc.HasMember("indexes")) {
 			this->log(swarm::SWARM_LOG_ERROR, "update-base: url: %s: document doesn't contain 'indexes' member",
-					query.to_string().c_str());
+					req.url().to_human_readable().c_str());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
@@ -158,7 +156,6 @@ class on_find_base : public thevoid::simple_request_stream<Server>, public std::
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
-		const auto &query = req.url().query();
 		std::string buf(boost::asio::buffer_cast<const char*>(buffer), boost::asio::buffer_size(buffer));
 		rapidjson::Document data;
 		data.Parse<0>(buf.c_str());
@@ -196,7 +193,7 @@ public:
 
 		if (type != "and" && type != "or") {
 			this->log(swarm::SWARM_LOG_ERROR, "find-base: checked: url: %s, 'type' field must be 'and' or 'or', not '%s'",
-				query.to_string().c_str(), type.c_str());
+				req.url().to_human_readable().c_str(), type.c_str());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}

@@ -28,7 +28,7 @@ void bucket_meta::check_and_run_raw(const swarm::http_request &request, const bo
 
 	m_bucket->logger().log(swarm::SWARM_LOG_NOTICE,
 			"bucket: check-and-run-raw: bucket: %s, groups: %s, uptodate: %d, req: %s, acl: '%s', verdict: %d",
-			m_raw.key.c_str(), ss.str().c_str(), uptodate, request.url().to_string().c_str(),
+			m_raw.key.c_str(), ss.str().c_str(), uptodate, request.url().to_human_readable().c_str(),
 			acl.to_string().c_str(), v);
 
 	if ((v != swarm::http_response::ok) && !uptodate) {
@@ -76,7 +76,7 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 	// if no groups exist, then given bucket is 'empty', or basically it was not written into the storage
 	if (meta.groups.empty()) {
 		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: no groups in bucket -> %d",
-				request.url().to_string().c_str(), meta.key.c_str(), verdict);
+				request.url().to_human_readable().c_str(), meta.key.c_str(), verdict);
 		return verdict;
 	}
 
@@ -85,7 +85,7 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 		verdict = swarm::http_response::ok;
 
 		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: acls: %zd: acl list is empty -> %d",
-				request.url().to_string().c_str(), meta.key.c_str(), meta.acl.size(), verdict);
+				request.url().to_human_readable().c_str(), meta.key.c_str(), meta.acl.size(), verdict);
 		return verdict;
 	}
 
@@ -105,14 +105,14 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 			} else {
 				verdict = swarm::http_response::forbidden;
 				logger.log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %zd: invalid auth: %s",
-						request.url().to_string().c_str(), meta.key.c_str(), meta.acl.size(), auth->c_str());
+						request.url().to_human_readable().c_str(), meta.key.c_str(), meta.acl.size(), auth->c_str());
 				return verdict;
 			}
 		} else {
 			if (authorization.compare(0, end_of_method, "riftv1", 6) != 0) {
 				verdict = swarm::http_response::forbidden;
 				logger.log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %zd: unknown auth: %s",
-						request.url().to_string().c_str(), meta.key.c_str(), meta.acl.size(), auth->c_str());
+						request.url().to_human_readable().c_str(), meta.key.c_str(), meta.acl.size(), auth->c_str());
 				return verdict;
 			}
 
@@ -137,12 +137,12 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 
 		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
 				"no user in acl list -> %d",
-				request.url().to_string().c_str(), meta.key.c_str(), user.c_str(),
+				request.url().to_human_readable().c_str(), meta.key.c_str(), user.c_str(),
 				meta.acl.size(), verdict);
 
 		for (auto a = meta.acl.begin(); a != meta.acl.end(); ++a) {
 			logger.log(swarm::SWARM_LOG_INFO, "url: %s, acl: '%s'\n",
-					request.url().to_string().c_str(), a->first.c_str());
+					request.url().to_human_readable().c_str(), a->first.c_str());
 		}
 		return verdict;
 	}
@@ -155,7 +155,7 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 
 		logger.log(swarm::SWARM_LOG_INFO, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
 				"passed total noauth check -> %d",
-				request.url().to_string().c_str(), meta.key.c_str(), user.c_str(), meta.acl.size(), verdict);
+				request.url().to_human_readable().c_str(), meta.key.c_str(), user.c_str(), meta.acl.size(), verdict);
 		return verdict;
 	}
 
@@ -164,7 +164,7 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 
 		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
 				"no 'Authorization' header -> %d",
-				request.url().to_string().c_str(), meta.key.c_str(), user.c_str(),
+				request.url().to_human_readable().c_str(), meta.key.c_str(), user.c_str(),
 				meta.acl.size(), verdict);
 		return verdict;
 	}
@@ -175,7 +175,7 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 
 		logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
 				"calculated-key: %s, auth-header: %s: incorrect auth header -> %d",
-				request.url().to_string().c_str(), meta.key.c_str(), user.c_str(), meta.acl.size(),
+				request.url().to_human_readable().c_str(), meta.key.c_str(), user.c_str(), meta.acl.size(),
 				key.c_str(), token.c_str(), verdict);
 		return verdict;
 	}
@@ -183,7 +183,7 @@ swarm::http_response::status_type bucket_meta::verdict(const swarm::logger &logg
 	verdict = swarm::http_response::ok;
 
 	logger.log(swarm::SWARM_LOG_INFO, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: auth-header: %s: OK -> %d",
-			request.url().to_string().c_str(), meta.key.c_str(), user.c_str(), meta.acl.size(), key.c_str(), verdict);
+			request.url().to_human_readable().c_str(), meta.key.c_str(), user.c_str(), meta.acl.size(), key.c_str(), verdict);
 
 	return verdict;
 }

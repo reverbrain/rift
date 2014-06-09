@@ -72,7 +72,7 @@ public:
 
 		} catch (const std::exception &e) {
 			m_logger.log(swarm::SWARM_LOG_ERROR, "data-session: url: %s: invalid ioflags/cflags parameters: %s",
-					req.url().to_string().c_str(), e.what());
+					req.url().to_human_readable().c_str(), e.what());
 		}
 
 		return session;
