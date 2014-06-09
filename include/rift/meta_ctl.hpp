@@ -383,7 +383,7 @@ public:
 		swarm::http_response reply;
 
 		reply.set_code(swarm::http_response::ok);
-		reply.headers().set_content_type("text/json");
+		reply.headers().set_content_type("text/json; charset=utf-8");
 		reply.headers().set_content_length(data.size());
 
 		this->send_reply(std::move(reply), std::move(data));
