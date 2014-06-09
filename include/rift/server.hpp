@@ -37,6 +37,9 @@ public:
 
 		m_session.reset(new elliptics::session(*m_node));
 
+		// do not throw session exceptions, in particular TIMEOUT error forces rift to terminate
+		m_session->set_exceptions_policy(elliptics::session::no_exceptions);
+
 		if (!prepare_session(config, *m_session)) {
 			return false;
 		}
