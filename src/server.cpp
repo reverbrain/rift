@@ -32,8 +32,8 @@ bool example_server::initialize(const rapidjson::Value &config) {
 	}
 
 	int stat_timeout = 30;
-	if (config.HasMember("stat_timeout") && config["stat_timeout"].IsInt()) {
-		stat_timeout = config["stat_timeout"].GetInt();
+	if (config.HasMember("stat-timeout") && config["stat-timeout"].IsInt()) {
+		stat_timeout = config["stat-timeout"].GetInt();
 	}
 
 	m_async.add_action(std::bind(&ioremap::rift::elliptics_base::stat_update, &m_elliptics), stat_timeout);
