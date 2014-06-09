@@ -283,7 +283,6 @@ private:
 	void vfs_stat_complete(const elliptics::error_info &error) {
 		if (error) {
 			m_logger.log(swarm::SWARM_LOG_ERROR, "vfs-stat-completion: error: %d: %s", error.code(), error.message().c_str());
-			return;
 		}
 
 		// iterate over all groups and hosts and sum up size statistics
