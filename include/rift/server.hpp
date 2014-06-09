@@ -199,10 +199,9 @@ private:
 	long m_write_timeout;
 
 	struct host_stat {
-		struct dnet_time	vfs_update_time;
 		struct dnet_stat	vfs;
 
-		struct dnet_time	monitor_update_time;
+		// 'backend' monitoring output (json) from elliptics node
 		std::string		monitor;
 
 		// base_size from backend monitor output
@@ -213,21 +212,33 @@ private:
 
 		host_stat() : used_size(0), generation(0) {
 			memset(&vfs, 0, sizeof(struct dnet_stat));
-			memset(&vfs_update_time, 0, sizeof(struct dnet_time));
-			memset(&monitor_update_time, 0, sizeof(struct dnet_time));
 		}
 	};
 
 	struct group_meta {
 		uint64_t				total_size, free_size, used_size;
+
+		/*!
+		 * address string to per-host statistics map
+		 */
 		std::map<std::string, host_stat>	hosts;
 
 		group_meta() : total_size(0), free_size(0), used_size(0) {}
 	};
 
+	/*!
+	 *
+	 * group_id to group metadata map, must be accessed under @m_lock
+	 */
 	std::map<int, group_meta> m_group_meta;
 	std::mutex m_lock;
 
+	/*!
+	 * Generation is increased for every stat request, it is needed to detect nodes which
+	 * were updated long ago (much smaller generation number). We only account nodes
+	 * whose generation number is at most 1 generation ago from the last one, i.e.
+	 * m_generation - host.generation <= 1
+	 */
 	int m_generation;
 
 	/*!
@@ -263,7 +274,6 @@ private:
 		std::unique_lock<std::mutex> guard(m_lock);
 		auto & host = get_host_stat(group_id, addr);
 
-		dnet_current_time(&host.vfs_update_time);
 		host.vfs = *res.statistics();
 
 		m_logger.log(swarm::SWARM_LOG_NOTICE, "%s: VFS statistics updated, generation: %d", addr.c_str(), host.generation);
@@ -275,6 +285,12 @@ private:
 			return;
 		}
 
+		// iterate over all groups and hosts and sum up size statistics
+		// we do this in VFS completion callback, since this command was started after monitor request,
+		// this doesn't mean vfs stat command will be completed after monitor one, but its probability is rather high
+		//
+		// If vfs stat command comes before monitor one, it is possible, that we will account previous generation of the monitor data
+		// This is not a huge problem (stats are updated periodically, so error will not accumulate) though.
 		std::unique_lock<std::mutex> guard(m_lock);
 
 		for (auto group = m_group_meta.begin(); group != m_group_meta.end(); ++group) {
@@ -301,6 +317,8 @@ private:
 			group_meta.used_size = used_size;
 			group_meta.free_size = free_size;
 
+			// Only write size summary into the log, eventually we will export it to clients and/or some other monitoring
+			// tool, which will provide per-bucket statistics
 			m_logger.log(swarm::SWARM_LOG_INFO, "statistics: group: %d, total-size: %llu, used-size: %llu, free-size: %llu, "
 					"generation: %d, hosts: %zd/%zd",
 					group->first, (unsigned long long)total_size, (unsigned long long)used_size, (unsigned long long)free_size,
@@ -312,24 +330,30 @@ private:
 		int group_id = res.command()->id.group_id;
 		std::string addr(dnet_server_convert_dnet_addr(res.address()));
 
+		// parse 'backend' monitoring stats
+		// we want to sum up all blob sizes (data and indexes)
 		rapidjson::Document doc;
 		doc.Parse<0>(res.statistics().c_str());
 
 		uint64_t base_size = 0;
 
 		if (doc.HasMember("backend")) {
+			// Right now we only support one backend per elliptics node, after this is changed,
+			// we must account backend array/map here
 			const auto & backend = doc["backend"];
 			if (backend.IsObject()) {
 				if (backend.HasMember("base_stats")) {
 					const auto & base = backend["base_stats"];
 					if (base.IsObject()) {
+						// Iterate over blob data
 						for (rapidjson::Value::ConstMemberIterator it = base.MemberBegin(); it != base.MemberEnd(); ++it) {
 							const auto & blob = it->value;
 
+							// base_size contains summed up size of the data and all indexes
 							if (blob.HasMember("base_size")) {
 								const auto & bsize = blob["base_size"];
 								if (bsize.IsNumber()) {
-									base_size = bsize.GetUint64();
+									base_size += bsize.GetUint64();
 								}
 							}
 						}
@@ -341,7 +365,6 @@ private:
 		std::unique_lock<std::mutex> guard(m_lock);
 		auto & host = get_host_stat(group_id, addr);
 
-		dnet_current_time(&host.monitor_update_time);
 		host.monitor = res.statistics();
 		host.used_size = base_size;
 
@@ -353,7 +376,6 @@ private:
 			m_logger.log(swarm::SWARM_LOG_ERROR, "monitor-stat-completion: error: %d: %s", error.code(), error.message().c_str());
 		}
 	}
-
 };
 
 }} // namespace ioremap::rift
