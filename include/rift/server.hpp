@@ -9,8 +9,6 @@
 #include <swarm/logger.hpp>
 #include <elliptics/session.hpp>
 
-#include <atomic>
-
 namespace ioremap {
 namespace rift {
 
