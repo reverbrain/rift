@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.8.8
+Version:	2.25.0.8.9
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -80,6 +80,16 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Mon Jun 09 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.9
+- rift: switched to  human readable URLs printed in logs
+- rift: Added charset to content-type in json replies
+- Auth: Returned previous authorization method (path is not decoded)
+- timer: added 'timeout' timer
+- rift: do not throw session exceptions
+- rift: added async statistics gathering mechanism
+- tests: include .: special symbols in default bucket/user names
+- example: added various examples into debian/rhel packages and git repo
+
 * Wed May 28 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.8
 - rift: Changed Authorization header
 - rift: Lookup optimization for range requests

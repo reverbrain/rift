@@ -1,3 +1,16 @@
+rift (2.25.0.8.9) unstable; urgency=low
+
+  * rift: switched to  human readable URLs printed in logs
+  * rift: Added charset to content-type in json replies
+  * Auth: Returned previous authorization method (path is not decoded)
+  * timer: added 'timeout' timer
+  * rift: do not throw session exceptions
+  * rift: added async statistics gathering mechanism
+  * tests: include .: special symbols in default bucket/user names
+  * example: added various examples into debian/rhel packages and git repo
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Mon, 09 Jun 2014 19:31:58 +0400
+
 rift (2.25.0.8.8) unstable; urgency=low
 
   * rift: Changed Authorization header
