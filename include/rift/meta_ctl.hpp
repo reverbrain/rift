@@ -8,7 +8,9 @@
 namespace ioremap { namespace rift { namespace bucket_ctl {
 
 template <typename Server, typename Stream>
-class meta_create_base : public rift::bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::flags_noauth_all>, public std::enable_shared_from_this<Stream>
+class meta_create_base :
+	public rift::bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::handler_bucket | rift::bucket_acl::handler_not_found_is_ok>,
+	public std::enable_shared_from_this<Stream>
 {
 public:
 	meta_create_base() : m_meta(this->bucket_mixin_meta)
@@ -51,7 +53,7 @@ public:
 			parse_request(req, buffer, m_ctl_meta);
 			m_request = req;
 
-			check_bucket_directory();
+			write_metadata();
 		} catch (const elliptics::error &e) {
 			this->log(swarm::SWARM_LOG_ERROR, "%s: code: %d", e.what(), e.error_code());
 			this->send_reply(e.error_code());
@@ -82,66 +84,6 @@ protected:
 	// this index will be updated when new bucket or bucket directory has been created
 	std::string m_parent;
 	swarm::http_request m_request;
-
-	void check_bucket_directory() {
-		// use empty meta - we use metadata groups and empty this hardcoded namespace
-		bucket_meta_raw meta;
-
-		elliptics::session session = this->server()->elliptics()->read_metadata_session(m_request, meta);
-		session.set_namespace(m_ctl_meta_namespace.c_str(), m_ctl_meta_namespace.size());
-
-		this->log(swarm::SWARM_LOG_NOTICE, "%s: reading meta key '%s', namespace: '%s', parent: '%s'",
-				m_request.url().to_human_readable().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
-
-		session.read_data(m_ctl_meta.key, 0, 0).connect(
-				std::bind(&meta_create_base::check_completion, this->shared_from_this(),
-					std::placeholders::_1, std::placeholders::_2));
-	}
-
-	void check_completion(const elliptics::sync_read_result &result, const elliptics::error_info &error) {
-		this->log(swarm::SWARM_LOG_NOTICE, "%s: read meta key '%s', namespace: '%s', parent: '%s', error-code: %d",
-				m_request.url().to_human_readable().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str(), error.code());
-		if (error.code() == -ENOENT) {
-			// there is no metadata object with given name, just create a new one
-			write_metadata();
-			return;
-		}
-
-		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: metadata read error: %s",
-					m_request.url().to_human_readable().c_str(), error.message().c_str());
-			this->send_reply(swarm::http_response::bad_request);
-			return;
-		}
-
-		// we read some metadata from the storage, let's check if provided security credentials allow us to update it
-		const elliptics::read_result_entry &entry = result[0];
-		const auto &file = entry.file();
-
-		msgpack::unpacked msg;
-		msgpack::unpack(&msg, file.data<char>(), file.size());
-
-		bucket_meta_raw read_meta;
-		msg.get().convert(&read_meta);
-
-		bucket_acl acl;
-		auto v = bucket_meta::verdict(this->logger(), read_meta, m_request, acl);
-
-		this->log(swarm::SWARM_LOG_NOTICE, "%s: read meta key '%s', namespace: '%s', parent: '%s', security verdict: %d",
-				m_request.url().to_human_readable().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str(), v);
-
-		if (v != swarm::http_response::ok) {
-			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s, parent: '%s', verdict: %d: read metadata doesn't allow update",
-					m_request.url().to_human_readable().c_str(), m_parent.c_str(), v);
-			this->send_reply(v);
-			return;
-
-			elliptics::throw_error(v, "bucket-meta-create: url: %s, parent: '%s', verdict: %d: read metadata doesn't allow update",
-					m_request.url().to_human_readable().c_str(), m_parent.c_str(), v);
-		}
-
-		write_metadata();
-	}
 
 	void write_metadata(void) {
 		bucket_meta_raw meta;
@@ -257,7 +199,7 @@ public:
 
 // remove bucket and all objects within
 template <typename Server, typename Stream>
-class on_delete_base : public bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::flags_noauth_all>, public std::enable_shared_from_this<Stream>
+class on_delete_base : public bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::handler_bucket>, public std::enable_shared_from_this<Stream>
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
@@ -277,14 +219,19 @@ public:
 
 		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using metadata session in '%s' namespace",
 				req.url().path().c_str(), this->bucket_mixin_meta.key.c_str(), bucket_namespace.c_str());
-		metadata_session.remove(this->bucket_mixin_meta.key);
+		metadata_session.clone().remove(this->bucket_mixin_meta.key);
 
 		std::vector<elliptics::index_entry> parent_indexes;
 
 		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: clearing its indexes in '%s' namespace",
 				req.url().path().c_str(), this->bucket_mixin_meta.key.c_str(), bucket_namespace.c_str());
 
-		metadata_session.set_indexes(this->bucket_mixin_meta.key, parent_indexes);
+		metadata_session.clone().set_indexes(this->bucket_mixin_meta.key, parent_indexes).connect([this] (elliptics::sync_set_indexes_result result, elliptics::error_info error) {
+			this->log(swarm::SWARM_LOG_ERROR, "FINISHED set_indexes, result.size: %zu, error: '%s'", result.size(), error.message().c_str());
+			for (auto it = result.begin(); it != result.end(); ++it) {
+				this->log(swarm::SWARM_LOG_ERROR, "FINISHED command: %s, error: '%s'", dnet_cmd_string(it->command()->cmd), it->error().message().c_str());
+			}
+		});
 	}
 
 	virtual void on_delete_finished(const elliptics::sync_generic_result &result, const elliptics::error_info &error) {
@@ -306,22 +253,13 @@ public:
 };
 
 template <typename Server, typename Stream>
-class meta_read_base : public bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::flags_noauth_all>, public std::enable_shared_from_this<Stream>
+class meta_read_base : public bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::handler_bucket>, public std::enable_shared_from_this<Stream>
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
 		const bucket_meta_raw &meta = this->bucket_mixin_meta;
-
-		if ((this->bucket_mixin_acl.readonly()) || (this->bucket_mixin_acl.user == "*")) {
-			this->log(swarm::SWARM_LOG_ERROR, "meta-read-base: checked: url: %s, meta: '%s': acl: flags: 0x%llx, user: '%s': "
-					"readonly and wildcard users are forbidden",
-					req.url().to_human_readable().c_str(), meta.key.c_str(),
-					(unsigned long long)this->bucket_mixin_acl.flags, this->bucket_mixin_acl.user.c_str());
-			this->send_reply(swarm::http_response::forbidden);
-			return;
-		}
 
 		std::string ns = "bucket";
 		elliptics::session session = this->server()->elliptics()->read_metadata_session(req, this->bucket_mixin_meta);

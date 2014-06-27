@@ -10,17 +10,18 @@ class Client:
         self.bucket = option.bucket
         if self.bucket:
             self.user = self.generate_user(key='generic_bucket:123:привет, Россия!11', user='bucket_user.xxx')
+	    self.admin = self.generate_user(key=self.user['key'], user='bucket_admin.xxx')
             self.directory_user = self.generate_user(key=self.bucket, user='directory_user')
         else:
             self.user = None
+	    self.admin = None
             self.directory_user = None
 
-    # please note that 2 subsequent calls to generate_user() (without arguments) produce the same keys
-    def generate_user(self, key=uuid.uuid4().hex, user=uuid.uuid4().hex, token=uuid.uuid4().hex):
+    def generate_user(self, key=None, user=None, token=None):
         return {
-            'key': key,
-            'user': user,
-            'token': token
+            'key': uuid.uuid4().hex if key is None else key,
+            'user': uuid.uuid4().hex if user is None else user,
+            'token': uuid.uuid4().hex if token is None else token
         }
 
     def generate_signature(self, method, url, user, headers=None):
