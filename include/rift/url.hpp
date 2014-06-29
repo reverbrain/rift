@@ -7,12 +7,12 @@
 
 namespace ioremap { namespace rift { namespace url {
 
-static inline const std::string key(const swarm::http_request &req, bool m_bucket) {
+static inline const std::string key(const swarm::http_request &req, bool has_bucket) {
 	std::string key;
 
 	const auto &path = req.url().path_components();
 
-	if (!m_bucket) {
+	if (!has_bucket) {
 		size_t prefix_size = 1 + path[0].size() + 1;
 		key = req.url().path().substr(prefix_size);
 	} else {
@@ -26,9 +26,10 @@ static inline const std::string key(const swarm::http_request &req, bool m_bucke
 static inline const std::string bucket(const swarm::http_request &req) {
 	const auto &path = req.url().path_components();
 
-	size_t prefix_size = 1 + path[0].size() + 1;
-
-	return req.url().path().substr(prefix_size, path[1].size());
+	// This is the only method where bucket's name is second component but not the first one
+	if (path[0] == "update-bucket")
+		return path[2];
+	return path[1];
 }
 
 }}} // namespace ioremap::rift::url

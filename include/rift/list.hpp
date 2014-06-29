@@ -16,7 +16,7 @@ namespace ioremap { namespace rift { namespace list {
 
 // return list of keys in bucket
 template <typename Server, typename Stream>
-class on_list_base : public bucket_mixin<thevoid::simple_request_stream<Server>, bucket_acl::flags_noauth_read>, public std::enable_shared_from_this<Stream>
+class on_list_base : public bucket_mixin<thevoid::simple_request_stream<Server>, bucket_acl::handler_read>, public std::enable_shared_from_this<Stream>
 {
 public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {

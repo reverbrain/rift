@@ -1,4 +1,5 @@
 #include "server.hpp"
+#include <rift/auth.hpp>
 
 namespace rift_server {
 
@@ -17,6 +18,9 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		return false;
 
 	m_async.initialize(logger());
+
+	m_auth[std::string()] = std::make_shared<rift::no_authorization>(logger());
+	m_auth["riftv1"] = std::make_shared<rift::rift_authorization>(logger());
 
 	if (config.HasMember("cache")) {
 		m_cache = std::make_shared<rift::cache>();
@@ -118,12 +122,12 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::methods("GET")
 	);
 
-	on<rift::bucket_ctl::meta_create<example_server>>(
+	on<rift::bucket_processor<example_server, rift::bucket_ctl::meta_create<example_server>>>(
 		options::prefix_match("/update-bucket-directory/"),
 		options::methods("POST")
 	);
 
-	on<rift::bucket_ctl::meta_create<example_server>>(
+	on<rift::bucket_processor<example_server, rift::bucket_ctl::meta_create<example_server>>>(
 		options::prefix_match("/update-bucket/"),
 		options::methods("POST")
 	);
@@ -167,7 +171,7 @@ swarm::url example_server::generate_url_base(dnet_addr *addr, const std::string 
 	return std::move(url);
 }
 
-template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
+template <typename BaseStream, uint64_t Flags>
 std::string example_server::signature_token(rift::bucket_mixin<BaseStream, Flags> &mixin) const
 {
 	return mixin.bucket_mixin_acl.token;
@@ -177,19 +181,45 @@ const rift::elliptics_base *example_server::elliptics() const {
 	return &m_elliptics;
 }
 
-bool example_server::process(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-		const rift::continue_handler_t &continue_handler) const {
+bool example_server::process(const rift::authorization_info &info) const {
 	if (!m_bucket) {
-		rift::bucket_meta_raw meta;
-		meta.flags = RIFT_BUCKET_META_NO_INDEX_UPDATE;
-		rift::bucket_acl acl;
-		continue_handler(req, buffer, meta, acl, swarm::http_response::ok);
+		// If there is no bucket support we should create presudo-bucket and give user rights to write files
+		rift::authorization_check_result result;
+		result.meta.flags = RIFT_BUCKET_META_NO_INDEX_UPDATE;
+		result.verdict = swarm::http_response::ok;
+		result.stream = info.stream;
+		result.acl.flags = rift::bucket_acl::auth_write;
+		info.handler(result);
 	} else {
-		if (!query_ok(req)) {
+		rift::authorization_info tmp = info;
+		std::string method;
+
+		if (auto auth = info.request->headers().get("Authorization")) {
+			// Authorization field always looks like 'method-name method-specific-data', so we take the first component
+			const std::string &authorization = *auth;
+			const size_t end_of_method = authorization.find(' ');
+			method = authorization.substr(0, end_of_method);
+		}
+
+		const auto it = m_auth.find(method);
+		if (it != m_auth.end()) {
+			tmp.checker = it->second;
+		} else {
+			// We don't support this authorization method, return 403 Forbidden
+			logger().log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, invalid method: %s",
+					info.request->url().to_human_readable().c_str(), method.c_str());
+
+			rift::authorization_check_result result;
+			result.verdict = swarm::http_response::forbidden;
+			info.handler(result);
 			return false;
 		}
 
-		m_bucket->check(req, buffer, continue_handler);
+		if (!query_ok(*info.request)) {
+			return false;
+		}
+
+		m_bucket->check(ioremap::rift::url::bucket(*info.request), tmp);
 	}
 
 	return true;
@@ -227,9 +257,9 @@ bool example_server::query_ok(const swarm::http_request &request) const {
 	return true;
 }
 
-template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
+template <typename BaseStream, uint64_t Flags>
 elliptics::session example_server::create_session(rift::bucket_mixin<BaseStream, Flags> &mixin, const swarm::http_request &req, elliptics::key &key) const {
-	const bool is_read = (Flags == rift::bucket_acl::flags_noauth_read);
+	const bool is_read = (Flags & rift::bucket_acl::handler_read);
 
 	key = ioremap::rift::url::key(req, !!m_bucket);
 	auto session = is_read

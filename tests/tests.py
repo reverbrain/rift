@@ -5,7 +5,12 @@ import pytest
 import json
 import hashlib
 import uuid
+import time
 
+
+AUTH_NO_TOKEN = 0x01
+AUTH_WRITE = 0x02
+AUTH_ADMIN = 0x04
 
 class TestCases:
     @classmethod
@@ -13,7 +18,7 @@ class TestCases:
     def setup(self):
         self.data = os.urandom(1000000 * 30)
 
-    def create_bucket(self, client, bucket, flags=0, command='/update-bucket'):
+    def create_bucket(self, client, bucket, admin=None, flags=AUTH_WRITE, command='/update-bucket'):
         data = {
             'groups': [
                 5, 6
@@ -26,6 +31,13 @@ class TestCases:
                 }
             ]
         }
+
+        if admin != None:
+            data['acl'].append({
+                'user': admin['user'],
+                'token': admin['token'],
+                'flags': AUTH_ADMIN
+            })
 
         r = client.post(command + '/' + bucket['key'], json.dumps(data))
 
@@ -43,7 +55,7 @@ class TestCases:
         assert isinstance(client, rift_client.Client)
 
         bucket_proxy = rift_client.ClientProxy(client, client.directory_user)
-        self.create_bucket(bucket_proxy, client.user)
+        self.create_bucket(bucket_proxy, client.user, admin=client.admin)
 
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")
@@ -52,13 +64,15 @@ class TestCases:
 
         directory_proxy = rift_client.ClientProxy(client, client.directory_user)
 
-        key=uuid.uuid4().hex
-        user_str=uuid.uuid4().hex
-        token=uuid.uuid4().hex
-        user = client.generate_user(key=key, user=user_str, token=token)
-        self.create_bucket(directory_proxy, user)
+        user = client.generate_user()
+        admin = client.generate_user(key=user['key'])
+        self.create_bucket(directory_proxy, user, admin)
 
         bucket_proxy = rift_client.ClientProxy(client, user)
+        r = bucket_proxy.get("/read-bucket/")
+        assert r.status_code == 403
+
+        bucket_proxy = rift_client.ClientProxy(client, admin)
         r = bucket_proxy.get("/read-bucket/")
         assert r.status_code == 200
 
@@ -81,10 +95,10 @@ class TestCases:
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")
     @pytest.mark.parametrize('flags, write_noauth_status, write_auth_status, read_noauth_status, read_auth_status', [
-        (0, 401, 200, 401, 200),
-        (1, 401, 200, 200, 200),
-        (2, 200, 200, 200, 200),
-        (3, 200, 200, 200, 200),
+        (0,                          401, 403, 401, 200),
+        (AUTH_NO_TOKEN,              403, 403, 200, 200),
+        (AUTH_WRITE,                 401, 200, 401, 200),
+        (AUTH_NO_TOKEN | AUTH_WRITE, 200, 200, 200, 200),
     ])
     def test_acl(self, client, flags, write_noauth_status, write_auth_status, read_noauth_status, read_auth_status):
         assert isinstance(client, rift_client.Client)
@@ -260,7 +274,7 @@ class TestCases:
 
         buckets_list = r.json()
 
-	# this is a number of already written buckets in all previous tests
+        # this is a number of already written buckets in all previous tests
         assert len(buckets_list['indexes']) == 6
         assert client.user['key'].decode('utf-8') in [x['key'] for x in buckets_list['indexes']]
 
@@ -274,7 +288,17 @@ class TestCases:
         user = client.generate_user()
         subbucket_proxy = rift_client.ClientProxy(client, user)
 
-        self.create_bucket(bucket_proxy, user)
+        admin = client.generate_user(key=user['key'])
+        admin_proxy = rift_client.ClientProxy(client, admin)
+
+        r = bucket_proxy.get('/list-bucket-directory')
+
+        assert r.status_code == 200
+
+        buckets_list = r.json()
+        assert user['key'] not in [x['key'] for x in buckets_list['indexes']]
+
+        self.create_bucket(bucket_proxy, user, admin=admin)
 
         r = bucket_proxy.get('/list-bucket-directory')
 
@@ -283,7 +307,7 @@ class TestCases:
         buckets_list = r.json()
         assert user['key'] in [x['key'] for x in buckets_list['indexes']]
 
-        r = subbucket_proxy.post('/delete-bucket', '')
+        r = admin_proxy.post('/delete-bucket', '')
 
         assert r.status_code == 200
 
@@ -359,35 +383,36 @@ class TestCases:
             assert 'time-raw' in data_object['mtime']
             assert 'data' in data_object
             assert data == data_object['data']
+
     def test_size_offset(self, client):
         assert isinstance(client, rift_client.Client)
 
-	rand = os.urandom(1025)
-	data = rand * 1025 * 30
-	key = 'random.bin'
+        rand = os.urandom(1025)
+        data = rand * 1025 * 30
+        key = 'random.bin'
 
         r = client.post('/upload/' + key, data)
         assert r.status_code == 200
 
         offset = 123
-	size = 64
+        size = 64
 
         url = '/get/' + key + '?offset=' + str(offset) + '&size=' + str(size)
-	read = client.get(url)
+        read = client.get(url)
         assert read.status_code == 200
-	assert len(read.content) == size
-	assert data[offset:offset+size] == read.content
+        assert len(read.content) == size
+        assert data[offset:offset+size] == read.content
 
         offset = 1024
-	size = 17 * 1024 * 1024
+        size = 17 * 1024 * 1024
 
         url = '/get/' + key + '?offset=' + str(offset)
-	read = client.get(url)
+        read = client.get(url)
         assert read.status_code == 200
-	assert data[offset:] == read.content
+        assert data[offset:] == read.content
 
         url = '/get/' + key + '?offset=' + str(offset) + '&size=' + str(size)
-	read = client.get(url)
+        read = client.get(url)
         assert read.status_code == 200
-	assert len(read.content) == size
-	assert data[offset:offset+size] == read.content
+        assert len(read.content) == size
+        assert data[offset:offset+size] == read.content

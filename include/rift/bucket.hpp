@@ -1,7 +1,6 @@
 #ifndef __IOREMAP_RIFT_BUCKET_HPP
 #define __IOREMAP_RIFT_BUCKET_HPP
 
-#include "auth.hpp"
 #include "metadata_updater.hpp"
 #include "io.hpp"
 
@@ -34,21 +33,35 @@ struct bucket_acl {
 		serialization_version = 1,
 	};
 
-	// bit fields
-	enum flags_noauth {
-		flags_noauth_read = 1<<0,
-		flags_noauth_all = 1<<1,
-		flags_readonly = 1<<2,
+	// This enum describes per-user authorization flags
+	enum auth_flags {
+		auth_no_token = 0x01, // this user is able to perform requests without the authorization
+		auth_write = 0x02, // this user is able to write to this bucket
+		auth_admin = 0x04 // this user is able to change this bucket
 	};
 
-	bool noauth_read() const {
-		return flags & (flags_noauth_read | flags_noauth_all);
+	// This enum describes per-handler authorization flags
+	enum handler_flags {
+		handler_read = 0x01, // user must have read rights to access this handler
+		handler_write = 0x02, // user must have write rights to access this handler
+		handler_bucket = 0x04, // user must have admin rights to access this handler
+		handler_not_found_is_ok = 0x08 // user is able to access this handler even if bucket doesn't exist
+	};
+
+	bool has_no_token() const {
+		return flags & auth_no_token;
 	}
-	bool noauth_all() const {
-		return flags & flags_noauth_all;
+
+	bool can_read() const {
+		return true;
 	}
-	bool readonly() const {
-		return flags & flags_readonly;
+
+	bool can_write() const {
+		return flags & auth_write;
+	}
+
+	bool can_admin() const {
+		return flags & auth_admin;
 	}
 
 	std::string to_string(void) const {
@@ -86,41 +99,108 @@ struct bucket_meta_raw {
 	}
 };
 
+class bucket_meta;
+
+/*!
+ * \brief The authorization_checker_base class is interface for authentication mechanisms
+ */
+class authorization_checker_base
+{
+public:
+	typedef std::shared_ptr<authorization_checker_base> ptr;
+	typedef std::shared_ptr<thevoid::base_request_stream> request_stream_ptr;
+	typedef std::tuple<swarm::http_response::status_type, request_stream_ptr, bucket_acl> result_tuple;
+
+	/*!
+	 * \brief Aunthenticates user if possible and constructs the authentication proxy if needed.
+	 *
+	 * Returnes tuple of verdict, authentication proxy and user's acl attributes.
+	 *
+	 * Verdict is 200 OK in case if there is a user in bucket's acl which passes the authentication.
+	 * Verdict is 403 Forbidden in case if there is no such user or it doesn't pass authentication.
+	 * Verdict is 401 Unauthorized in case if authorization token is missed but it must be presented.
+	 *
+	 * \attention This method must not return 404 Not Found as it must be returned only in case if there is no such bucket.
+	 */
+	virtual result_tuple check_permission(const request_stream_ptr &stream, const swarm::http_request &request, const bucket_meta_raw &meta) = 0;
+};
+
+/*!
+ * \brief The authorization_checker class helps in integration with specific Server
+ */
+template <typename Server>
+class authorization_checker : public authorization_checker_base
+{
+public:
+	authorization_checker(const std::weak_ptr<Server> &server) : m_server(server)
+	{
+	}
+
+protected:
+	/*!
+	 * \brief Returnes constructed T with server already set.
+	 */
+	template <typename T, typename... Args>
+	std::shared_ptr<thevoid::base_request_stream> create(Args &&...args)
+	{
+		auto stream = std::make_shared<T>(std::forward(args)...);
+		stream->set_server(m_server.lock());
+		return stream;
+	}
+
+	std::weak_ptr<Server> m_server;
+};
+
+struct authorization_check_result
+{
+	swarm::http_response::status_type verdict;
+	bucket_meta_raw meta;
+	bucket_acl acl;
+	std::shared_ptr<thevoid::base_request_stream> stream;
+};
+
+typedef std::function<void (const authorization_check_result &)> continue_handler_t;
+
+struct authorization_info
+{
+	authorization_checker_base::ptr checker;
+	const swarm::http_request *request;
+	continue_handler_t handler;
+	std::shared_ptr<thevoid::base_request_stream> stream;
+};
+
 class bucket;
 
-typedef std::function<void (const swarm::http_request, const boost::asio::const_buffer &buffer,
-		const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict)> continue_handler_t;
-
-class bucket_meta
+class bucket_meta : public std::enable_shared_from_this<bucket_meta>
 {
 	public:
-		bucket_meta(bucket *b, const swarm::http_request &request,
-				const boost::asio::const_buffer &buffer,
-				const continue_handler_t &continue_handler);
+		bucket_meta(bucket *b, const std::string &bucket_name,
+				const authorization_info &info);
 
-		void check_and_run(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
-				const continue_handler_t &continue_handler);
+		bucket_meta(const bucket_meta &) = delete;
+		bucket_meta &operator =(const bucket_meta &) = delete;
 
-		void update(void);
-		void update_and_check(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
-				const continue_handler_t &continue_handler);
+		void check_and_run(const authorization_info &info);
 
-		static swarm::http_response::status_type verdict(const swarm::logger &logger, const bucket_meta_raw &meta,
-				const swarm::http_request &request, bucket_acl &acl);
+		void lock();
+		void unlock();
+
+		bucket_meta_raw raw() const;
 	private:
-		std::mutex m_lock;
+		mutable std::mutex m_lock;
 		bucket_meta_raw m_raw;
 
 		bucket *m_bucket;
 
+		void update();
+		void update_and_check(const authorization_info &info);
+
 		void update_finished(const ioremap::elliptics::sync_read_result &result,
 				const ioremap::elliptics::error_info &error);
-		void update_and_check_completed(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
-				const continue_handler_t &continue_handler, const ioremap::elliptics::sync_read_result &result,
-				const ioremap::elliptics::error_info &error);
+		void update_and_check_completed(const authorization_info &info,
+				const ioremap::elliptics::sync_read_result &result, const ioremap::elliptics::error_info &error);
 
-		void check_and_run_raw(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
-				const continue_handler_t &continue_handler, bool uptodate);
+		void check_and_run_raw(const authorization_info &info, bool uptodate);
 };
 
 class elliptics_base;
@@ -130,8 +210,7 @@ class bucket : public metadata_updater, public std::enable_shared_from_this<buck
 		bucket();
 
 		bool initialize(const rapidjson::Value &config, const elliptics_base &base, async_performer *async);
-		void check(const swarm::http_request &request, const boost::asio::const_buffer &buffer,
-				const continue_handler_t &continue_handler);
+		void check(const std::string &bucket_name, const authorization_info &info);
 
 	private:
 		std::mutex m_lock;
@@ -146,10 +225,12 @@ class bucket : public metadata_updater, public std::enable_shared_from_this<buck
  *
  * Also this mixin stores bucket's information in \a bucket_mixin_meta.
  */
-template <bucket_acl::flags_noauth Flags>
+template <uint64_t Flags>
 class bucket_mixin_base
 {
 public:
+	static_assert(Flags & (bucket_acl::handler_read | bucket_acl::handler_write | bucket_acl::handler_bucket), "Invalid handler flags");
+
 	enum {
 		bucket_mixin_flags = Flags
 	};
@@ -158,7 +239,7 @@ public:
 	bucket_acl bucket_mixin_acl;
 };
 
-template <typename BaseStream, bucket_acl::flags_noauth Flags>
+template <typename BaseStream, uint64_t Flags>
 class bucket_mixin : public BaseStream, public bucket_mixin_base<Flags>
 {
 public:
@@ -192,9 +273,17 @@ public:
 		m_request = std::move(req);
 
 		try {
-			this->server()->process(m_request, boost::asio::const_buffer(),
-				std::bind(&bucket_processor::on_checked, this->shared_from_this(),
-					std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+			auto stream = std::make_shared<BaseStream>();
+			stream->set_server(this->server());
+
+			authorization_info info = {
+				authorization_checker_base::ptr(), // authorization_checker will be set in Server's implementation
+				&m_request, // m_request is guaranteed to be alive as this processor will be alive until the callback will be called
+				std::bind(&bucket_processor::on_checked, this->shared_from_this(), std::placeholders::_1, stream),
+				stream
+			};
+
+			this->server()->process(info);
 		} catch (const std::exception &e) {
 			this->log(swarm::SWARM_LOG_ERROR, "url: %s, processing error: %s",
 					req.url().to_human_readable().c_str(), e.what());
@@ -233,24 +322,48 @@ public:
 	}
 
 protected:
-	void on_checked(const bucket_meta_raw &meta, const bucket_acl &acl, swarm::http_response::status_type verdict)
+	void on_checked(const authorization_check_result &info, const std::shared_ptr<BaseStream> &base_stream)
 	{
-		if ((verdict != swarm::http_response::ok) && (bucket_flags == int(bucket_acl::flags_noauth_read) ? !acl.noauth_read() : !acl.noauth_all())) {
-			this->log(swarm::SWARM_LOG_ERROR, "bucket_processor_base: checked: url: %s, verdict: %d, did-not-pass-noauth-check",
+		const bucket_meta_raw &meta = info.meta;
+		const bucket_acl &acl = info.acl;
+		swarm::http_response::status_type verdict = info.verdict;
+		const auto &stream = info.stream;
+
+		if ((bucket_flags & bucket_acl::handler_not_found_is_ok) && verdict == swarm::http_response::not_found) {
+			// If verdict is 404 the bucket is not created yet,
+			// in such case if handler_not_found_is_ok flag is set
+			// we assume that user passes the authentication
+			verdict = swarm::http_response::ok;
+		} else if (verdict == swarm::http_response::ok) {
+			if ((bucket_flags & bucket_acl::handler_read) && !acl.can_read()) {
+				// Check if user has rights to read
+				verdict = swarm::http_response::forbidden;
+			}
+			if ((bucket_flags & bucket_acl::handler_write) && !acl.can_write()) {
+				// Check if user has rights to write
+				verdict = swarm::http_response::forbidden;
+			}
+			if ((bucket_flags & bucket_acl::handler_bucket) && !acl.can_admin()) {
+				// Check if user has rights to administrate
+				verdict = swarm::http_response::forbidden;
+			}
+		}
+
+		if (verdict != swarm::http_response::ok) {
+			this->log(swarm::SWARM_LOG_ERROR, "bucket_processor_base: checked: url: %s, verdict: %d, did-not-pass-auth-check",
 					m_request.url().to_human_readable().c_str(), verdict);
 
 			this->send_reply(verdict);
-			return;
 		}
 
 		this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: checked: url: %s, verdict: %d, passed-noauth-check",
 				m_request.url().to_human_readable().c_str(), verdict);
 
-		auto stream = std::make_shared<BaseStream>();
-		stream->bucket_mixin_meta = meta;
-		stream->bucket_mixin_acl = acl;
-		stream->initialize(this->get_reply());
-		stream->set_server(this->server());
+		this->log(swarm::SWARM_LOG_NOTICE, "stream: %p", info.stream.get());
+
+		base_stream->bucket_mixin_meta = meta;
+		base_stream->bucket_mixin_acl = acl;
+		info.stream->initialize(this->get_reply());
 
 		{
 			std::lock_guard<std::mutex> lock(m_stream_mutex);
@@ -285,8 +398,6 @@ protected:
 	std::mutex m_stream_mutex;
 	std::shared_ptr<thevoid::base_request_stream> m_stream;
 	swarm::http_request m_request;
-	bucket_meta_raw m_meta;
-	bucket_acl m_acl;
 };
 
 /*!
@@ -330,6 +441,9 @@ public:
 		if (meta.groups.size()) {
 			session.set_groups(meta.groups);
 		}
+
+		this->log(swarm::SWARM_LOG_NOTICE, "indexed_upload_mixin: checked: url: %s, adding object: %s to index: %s in '%s' namespace",
+				this->request().url().path().c_str(), key.to_string().c_str(), indexes.front().c_str(), "<unknown>");
 
 		session.update_indexes(key, indexes, datas).connect(
 			std::bind(&indexed_upload_mixin::on_index_update_finished,

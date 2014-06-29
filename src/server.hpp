@@ -32,17 +32,16 @@ public:
 
 	swarm::url generate_url_base(dnet_addr *addr, const std::string &path, swarm::http_response::status_type *type);
 
-	template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
+	template <typename BaseStream, uint64_t Flags>
 	std::string signature_token(rift::bucket_mixin<BaseStream, Flags> &mixin) const;
 
 	const rift::elliptics_base *elliptics() const;
 
-	bool process(const swarm::http_request &req, const boost::asio::const_buffer &buffer,
-			const rift::continue_handler_t &continue_handler) const;
+	bool process(const rift::authorization_info &info) const;
 	void check_cache(const elliptics::key &key, elliptics::session &sess) const;
 	bool query_ok(const swarm::http_request &request) const;
 
-	template <typename BaseStream, rift::bucket_acl::flags_noauth Flags>
+	template <typename BaseStream, uint64_t Flags>
 	elliptics::session create_session(rift::bucket_mixin<BaseStream, Flags> &mixin, const swarm::http_request &req, elliptics::key &key) const;
 
 	/*!
@@ -52,24 +51,24 @@ public:
 	 *
 	 * It inherits indexed_upload_mixin to be able to add file to secondary indexes after succesfull write.
 	 */
-	class on_upload : public rift::indexed_upload_mixin<rift::bucket_mixin<rift::io::on_upload_base<example_server, on_upload>, rift::bucket_acl::flags_noauth_all>>
+	class on_upload : public rift::indexed_upload_mixin<rift::bucket_mixin<rift::io::on_upload_base<example_server, on_upload>, rift::bucket_acl::handler_write>>
 	{
 	public:
 	};
 
-	class on_get : public rift::bucket_mixin<rift::io::on_get_base<example_server, on_get>, rift::bucket_acl::flags_noauth_read>
+	class on_get : public rift::bucket_mixin<rift::io::on_get_base<example_server, on_get>, rift::bucket_acl::handler_read>
 	{
 	};
 
-	class on_download_info : public rift::bucket_mixin<rift::io::on_download_info_base<example_server, on_download_info>, rift::bucket_acl::flags_noauth_read>
+	class on_download_info : public rift::bucket_mixin<rift::io::on_download_info_base<example_server, on_download_info>, rift::bucket_acl::handler_read>
 	{
 	};
 
-	class on_redirectable_get : public rift::bucket_mixin<rift::io::on_redirectable_get_base<example_server, on_redirectable_get>, rift::bucket_acl::flags_noauth_read>
+	class on_redirectable_get : public rift::bucket_mixin<rift::io::on_redirectable_get_base<example_server, on_redirectable_get>, rift::bucket_acl::handler_read>
 	{
 	};
 
-	class on_delete : public rift::bucket_mixin<rift::io::on_delete_base<example_server, on_delete>, rift::bucket_acl::flags_noauth_all>
+	class on_delete : public rift::bucket_mixin<rift::io::on_delete_base<example_server, on_delete>, rift::bucket_acl::handler_write>
 	{
 	public:
 		virtual void on_delete_finished(const elliptics::sync_remove_result &result,
@@ -86,11 +85,11 @@ public:
 		}
 	};
 
-	class on_update : public rift::bucket_mixin<rift::index::on_update_base<example_server, on_update>, rift::bucket_acl::flags_noauth_all>
+	class on_update : public rift::bucket_mixin<rift::index::on_update_base<example_server, on_update>, rift::bucket_acl::handler_write>
 	{
 	};
 
-	class on_find : public rift::bucket_mixin<rift::index::on_find_base<example_server, on_find>, rift::bucket_acl::flags_noauth_read>
+	class on_find : public rift::bucket_mixin<rift::index::on_find_base<example_server, on_find>, rift::bucket_acl::handler_read>
 	{
 	};
 
@@ -103,6 +102,7 @@ private:
 	std::shared_ptr<rift::cache> m_cache;
 	std::shared_ptr<rift::bucket> m_bucket;
 	rift::async_performer m_async;
+	std::map<std::string, rift::authorization_checker_base::ptr> m_auth;
 };
 
 } // namespace rift_server
