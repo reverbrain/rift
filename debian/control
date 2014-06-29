@@ -1,9 +1,9 @@
 Source: rift
 Priority: extra
 Maintainer: Ruslan Nigmatullin <euroelessar@yandex.ru>
-Build-Depends: cdbs, debhelper (>= 7), cmake, libthevoid-dev (>= 0.6.3.0), libswarm-dev (>= 0.6.3.0), libmsgpack-dev,
-  libboost-system-dev, libboost-thread-dev, libboost-program-options-dev, elliptics-dev (>= 2.25.0.0), elliptics (>= 2.25.0.0),
-  python-pip, python-virtualenv, cocaine-framework-native (>= 0.11.0.1)
+Build-Depends: cdbs, debhelper (>= 7), cmake, libthevoid-dev (>= 0.6.3.8), libswarm-dev (>= 0.6.3.8), libmsgpack-dev,
+  libboost-system-dev, libboost-thread-dev, libboost-program-options-dev, elliptics-dev (>= 2.25.4.20), elliptics (>= 2.25.4.20),
+  python-pip, python-virtualenv, cocaine-framework-native (>= 0.11.2.3)
 Standards-Version: 3.9.3
 Section: libs
 Homepage: https://github.com/reverbrain/rift
@@ -13,13 +13,13 @@ Vcs-Browser: https://github.com/reverbrain/rift
 Package: rift
 Section: utils
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, elliptics-client (>= 2.25.0.0), libthevoid2 (>= 0.6.3.0), libswarm2 (>= 0.6.3.0)
+Depends: ${shlibs:Depends}, ${misc:Depends}, elliptics-client (>= 2.25.4.20), libthevoid2 (>= 0.6.3.8), libswarm2 (>= 0.6.3.8)
 Description: Rift is an HTTP access point to elliptics distributed network
 
 Package: rift-dev
 Section: libdevel
 Architecture: any
-Depends: rift (= ${binary:Version}), libthevoid-dev (>= 0.6.3.0), libswarm-dev (>= 0.6.3.0), libboost-system-dev
+Depends: rift (= ${binary:Version}), libthevoid-dev (>= 0.6.3.8), libswarm-dev (>= 0.6.3.8), libboost-system-dev
 Description: Rift is an HTTP access point to elliptics distributed network (devel)
  Development files
 
