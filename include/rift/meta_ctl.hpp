@@ -7,7 +7,12 @@
 
 namespace ioremap { namespace rift { namespace bucket_ctl {
 
-template <typename Server, typename Stream>
+enum meta_create_type {
+	update_bucket,
+	update_bucket_directory
+};
+
+template <typename Server, typename Stream, meta_create_type Type>
 class meta_create_base :
 	public rift::bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::handler_bucket | rift::bucket_acl::handler_not_found_is_ok>,
 	public std::enable_shared_from_this<Stream>
@@ -27,7 +32,7 @@ public:
 			return;
 		}
 
-		if (pc[0] == "update-bucket-directory") {
+		if (Type == update_bucket_directory) {
 			if (pc.size() != 2) {
 				this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket-directory/bucket-directory-name",
 						req.url().path().c_str());
@@ -36,7 +41,7 @@ public:
 			}
 			m_parent = "bucket-directories.1";
 			m_ctl_meta.key = pc[1];
-		} else if (pc[0] == "update-bucket") {
+		} else if (Type == update_bucket) {
 			if (pc.size() != 3) {
 				this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket/bucket-directory-name/bucket-name",
 						req.url().path().c_str());
@@ -191,8 +196,8 @@ protected:
 	}
 };
 
-template <typename Server>
-class meta_create : public rift::indexed_upload_mixin<meta_create_base<Server, meta_create<Server>>>
+template <typename Server, meta_create_type Type>
+class meta_create : public rift::indexed_upload_mixin<meta_create_base<Server, meta_create<Server, Type>, Type>>
 {
 public:
 };

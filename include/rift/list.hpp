@@ -14,8 +14,13 @@
 
 namespace ioremap { namespace rift { namespace list {
 
+enum list_type {
+	list_bucket,
+	list_bucket_directory
+};
+
 // return list of keys in bucket
-template <typename Server, typename Stream>
+template <typename Server, typename Stream, list_type Type>
 class on_list_base : public bucket_mixin<thevoid::simple_request_stream<Server>, bucket_acl::handler_read>, public std::enable_shared_from_this<Stream>
 {
 public:
@@ -24,14 +29,11 @@ public:
 
 		elliptics::session session = this->server()->elliptics()->read_data_session(req, this->bucket_mixin_meta);
 
-		const auto &pc = req.url().path_components();
-		if (pc.size() >= 1) {
-			if (pc[0] == "list-bucket-directory") {
-				bucket_meta_raw tmp;
-				session = this->server()->elliptics()->read_metadata_session(req, tmp);
-				tmp.key = "bucket";
-				session.set_namespace(tmp.key.c_str(), tmp.key.size());
-			}
+		if (Type == list_bucket_directory) {
+			bucket_meta_raw tmp;
+			session = this->server()->elliptics()->read_metadata_session(req, tmp);
+			tmp.key = "bucket";
+			session.set_namespace(tmp.key.c_str(), tmp.key.size());
 		}
 
 		std::vector<std::string> keys;
@@ -113,8 +115,8 @@ public:
 	}
 };
 
-template <typename Server>
-class on_list : public on_list_base<Server, on_list<Server>>
+template <typename Server, list_type Type>
+class on_list : public on_list_base<Server, on_list<Server, Type>, Type>
 {
 public:
 };
