@@ -5,6 +5,7 @@ import pytest
 
 def pytest_addoption(parser):
     parser.addoption("--server", action="store", help="path to rift_server binary")
+    parser.addoption("--s3server", action="store", help="path to s3_server binary")
     parser.addoption("--remotes", action="store", help="comma-separated list of remote nodes")
     parser.addoption("--bucket", action="store", help="name of bucket")
 
@@ -26,8 +27,8 @@ def server_nodes(request):
     return servers
 
 
-def server_proxy(request):
-    proxy = rift_server.Server(request.config.option)
+def server_proxy(request, binary, port):
+    proxy = rift_server.Server(request.config.option, binary, port)
 
     def fin():
         print("Stopping rift")
@@ -39,6 +40,8 @@ def server_proxy(request):
 @pytest.fixture(scope="session")
 def client(request):
     server_nodes(request)
-    server_proxy(request)
+    server_proxy(request, request.config.option.server, 8080)
+    if request.config.option.bucket:
+        server_proxy(request, request.config.option.s3server, 8081)
 
     return rift_client.Client(request.config.option)

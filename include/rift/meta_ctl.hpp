@@ -20,6 +20,11 @@ class meta_create_base :
 public:
 	meta_create_base() : m_meta(this->bucket_mixin_meta)
 	{
+		m_ctl_meta_namespace = "bucket";
+
+		if (Type == update_bucket_directory) {
+			m_parent = "bucket-directories.1";
+		}
 	}
 
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
@@ -39,7 +44,6 @@ public:
 				this->send_reply(swarm::http_response::bad_request);
 				return;
 			}
-			m_parent = "bucket-directories.1";
 			m_ctl_meta.key = pc[1];
 		} else if (Type == update_bucket) {
 			if (pc.size() != 3) {
@@ -53,10 +57,8 @@ public:
 		}
 
 		try {
-			m_ctl_meta_namespace = "bucket";
 
 			parse_request(req, buffer, m_ctl_meta);
-			m_request = req;
 
 			write_metadata();
 		} catch (const elliptics::error &e) {
@@ -88,12 +90,11 @@ protected:
 	std::unique_ptr<elliptics::session> m_session;
 	// this index will be updated when new bucket or bucket directory has been created
 	std::string m_parent;
-	swarm::http_request m_request;
 
 	void write_metadata(void) {
 		bucket_meta_raw meta;
 
-		elliptics::session session = this->server()->elliptics()->write_metadata_session(m_request, meta);
+		elliptics::session session = this->server()->elliptics()->write_metadata_session(this->request(), meta);
 		session.set_namespace(m_ctl_meta_namespace.c_str(), m_ctl_meta_namespace.size());
 
 		msgpack::sbuffer buf;
@@ -104,7 +105,7 @@ protected:
 		tmp.groups = session.get_groups();
 
 		this->log(swarm::SWARM_LOG_NOTICE, "%s: write meta key '%s', namespace: '%s', parent: '%s'",
-				m_request.url().to_human_readable().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
+				this->request().url().to_human_readable().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
 
 		meta_create_base::set_meta(tmp);
 		meta_create_base::set_key(m_ctl_meta.key);
@@ -327,8 +328,30 @@ public:
 	}
 };
 
+template <typename Server, typename Stream>
+class meta_head_base : public bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::handler_read>, public std::enable_shared_from_this<Stream>
+{
+public:
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+		(void) req;
+		(void) buffer;
+
+		swarm::http_response reply;
+
+		reply.set_code(swarm::http_response::ok);
+
+		this->send_reply(std::move(reply));
+	}
+};
+
 template <typename Server>
 class meta_read : public meta_read_base<Server, meta_read<Server>>
+{
+public:
+};
+
+template <typename Server>
+class meta_head : public meta_head_base<Server, meta_head<Server>>
 {
 public:
 };

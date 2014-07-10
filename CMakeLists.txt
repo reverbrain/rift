@@ -17,6 +17,8 @@ LOCATE_LIBRARY(SWARM "swarm/http_response.hpp" "swarm")
 LOCATE_LIBRARY(SWARM_URLFETCHER "swarm/http_response.hpp" "swarm_urlfetcher")
 LOCATE_LIBRARY(MSGPACK "msgpack.hpp" "msgpack")
 
+find_package(PkgConfig REQUIRED)
+pkg_search_module(CRYPTOPP REQUIRED cryptopp)
 find_package(Boost COMPONENTS system thread program_options REQUIRED)
 find_package(Elliptics ${RIFT_VERSION_ELLIPTICS} REQUIRED)
 
@@ -27,12 +29,14 @@ include_directories(
 	${THEVOID_INCLUDE_DIRS}
 	${SWARM_INCLUDE_DIRS}
 	${ELLIPTICS_INCLUDE_DIRS}
+	${CRYPTOPP_INCLUDE_DIRS}
 )
 
 link_directories(
 	${Boost_LIBRARY_DIRS}
 	${MSGPACK_LIBRARY_DIRS}
 	${THEVOID_LIBRARY_DIRS}
+	${CRYPTOPP_LIBRARY_DIRS}
 )
 
 add_subdirectory(src)

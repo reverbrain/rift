@@ -15,14 +15,7 @@ target_link_libraries(rift
 	${SWARM_LIBRARIES}
 	${SWARM_URLFETCHER_LIBRARIES}
 	${Boost_LIBRARIES}
-)
-
-add_library(rift_server_common STATIC
-	server.hpp
-	server.cpp
-)
-target_link_libraries(rift_server_common
-	rift
+	${CRYPTOPP_LIBRARIES}
 )
 
 set_target_properties(rift PROPERTIES
@@ -30,10 +23,21 @@ set_target_properties(rift PROPERTIES
 	SOVERSION ${RIFT_VERSION_ABI}
 )
 
-add_executable(rift_server main.cpp)
-target_link_libraries(rift_server rift rift_server_common ${Boost_LIBRARIES})
+add_executable(rift_server
+	rift_server.hpp
+	rift_server.cpp
+)
 
-install(TARGETS rift_server
+target_link_libraries(rift_server rift ${Boost_LIBRARIES})
+
+add_executable(s3_server
+	s3_server.hpp
+	s3_server.cpp
+)
+
+target_link_libraries(s3_server rift ${Boost_LIBRARIES})
+
+install(TARGETS rift_server s3_server
 	RUNTIME DESTINATION bin
 	COMPONENT runtime
 )

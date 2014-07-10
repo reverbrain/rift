@@ -5,10 +5,10 @@ import os
 
 
 class Server:
-    def __init__(self, option):
+    def __init__(self, option, binary, port):
         config = {
             "endpoints": [
-                "0.0.0.0:8080"
+                "0.0.0.0:{0}".format(port)
             ],
             "backlog": 128,
             "threads": 2,
@@ -21,7 +21,7 @@ class Server:
                 "fork": False,
                 "uid": 1000
             },
-            "monitor-port": 21000,
+            #"monitor-port": 21000,
             "application": {
                 "remotes": option.remotes,
                 "groups": [
@@ -46,7 +46,7 @@ class Server:
         with open(self.config_path, "w") as f:
             f.write(json_config)
 
-        self.binary = option.server
+        self.binary = binary
         if not self.binary:
             self.binary = "/usr/bin/rift_server"
         self.process = subprocess.Popen(args=[self.binary, "-c", self.config_path],

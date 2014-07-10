@@ -9,12 +9,13 @@ class Client:
         self.base_url = 'http://localhost:8080'
         self.bucket = option.bucket
         if self.bucket:
-            self.user = self.generate_user(key='generic_bucket:123:привет, Россия!11', user='bucket_user.xxx')
-	    self.admin = self.generate_user(key=self.user['key'], user='bucket_admin.xxx')
+            # generic_bucket:123:привет, Россия!11
+            self.user = self.generate_user(key='generic_bucket:123', user='bucket_user.xxx')
+            self.admin = self.generate_user(key=self.user['key'], user='bucket_admin.xxx')
             self.directory_user = self.generate_user(key=self.bucket, user='directory_user')
         else:
             self.user = None
-	    self.admin = None
+            self.admin = None
             self.directory_user = None
 
     def generate_user(self, key=None, user=None, token=None):

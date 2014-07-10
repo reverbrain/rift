@@ -111,6 +111,8 @@ public:
 	typedef std::shared_ptr<thevoid::base_request_stream> request_stream_ptr;
 	typedef std::tuple<swarm::http_response::status_type, request_stream_ptr, bucket_acl> result_tuple;
 
+	authorization_checker_base(const std::shared_ptr<thevoid::base_server> &server);
+
 	/*!
 	 * \brief Aunthenticates user if possible and constructs the authentication proxy if needed.
 	 *
@@ -123,6 +125,11 @@ public:
 	 * \attention This method must not return 404 Not Found as it must be returned only in case if there is no such bucket.
 	 */
 	virtual result_tuple check_permission(const request_stream_ptr &stream, const swarm::http_request &request, const bucket_meta_raw &meta) = 0;
+
+protected:
+	std::tuple<swarm::http_response::status_type, ioremap::rift::bucket_acl> find_user(const swarm::http_request &request, const bucket_meta_raw &meta, const std::string &user);
+
+	swarm::logger m_logger;
 };
 
 /*!
@@ -132,7 +139,7 @@ template <typename Server>
 class authorization_checker : public authorization_checker_base
 {
 public:
-	authorization_checker(const std::weak_ptr<Server> &server) : m_server(server)
+	authorization_checker(const std::shared_ptr<Server> &server) : authorization_checker_base(server), m_server(server)
 	{
 	}
 

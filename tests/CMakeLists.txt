@@ -1,12 +1,15 @@
 find_package(PythonInterp REQUIRED)
 
+set(RIFT_SERVER "${CMAKE_CURRENT_BINARY_DIR}/../src/rift_server")
+set(S3_SERVER "${CMAKE_CURRENT_BINARY_DIR}/../src/s3_server")
+
 add_custom_target(test
     COMMAND virtualenv -p "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_BINARY_DIR}" &&
     . "${CMAKE_CURRENT_BINARY_DIR}/bin/activate" &&
-    pip install pytest requests &&
+    pip install pytest requests boto &&
     export LD_LIBRARY_PATH="\${LD_LIBRARY_PATH}:${CMAKE_CURRENT_BINARY_DIR}/../src" &&
-    py.test "${CMAKE_CURRENT_SOURCE_DIR}/tests.py" "--server=${CMAKE_CURRENT_BINARY_DIR}/../src/rift_server" &&
-    py.test "${CMAKE_CURRENT_SOURCE_DIR}/tests.py" --bucket=xxx "--server=${CMAKE_CURRENT_BINARY_DIR}/../src/rift_server"
+    py.test "${CMAKE_CURRENT_SOURCE_DIR}/tests.py" "--server=${RIFT_SERVER}" &&
+    py.test "${CMAKE_CURRENT_SOURCE_DIR}/tests.py" --bucket=xxx "--server=${RIFT_SERVER}" "--s3server=${S3_SERVER}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-    DEPENDS rift_server
+    DEPENDS rift_server s3_server
 )

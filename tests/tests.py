@@ -6,6 +6,10 @@ import json
 import hashlib
 import uuid
 import time
+import boto
+import boto.s3.connection
+import boto.s3.key
+import boto.s3.bucket
 
 
 AUTH_NO_TOKEN = 0x01
@@ -416,3 +420,21 @@ class TestCases:
         assert read.status_code == 200
         assert len(read.content) == size
         assert data[offset:offset+size] == read.content
+
+    @pytest.mark.skipif(not pytest.config.option.bucket,
+                        reason="tests are running without buckets")
+    def test_s3_get(self, client):
+        conn = boto.connect_s3(aws_access_key_id=client.user['user'],
+                                    aws_secret_access_key=client.user['token'],
+                                    host="localhost",
+                                    port=8081,
+                                    debug=10,
+                                    is_secure=False,
+#                                    calling_format=boto.s3.connection.SubdomainCallingFormat(),
+                                    calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+                                    )
+        assert isinstance(conn, boto.s3.connection.S3Connection)
+        bucket = conn.get_bucket(client.user['key'])
+        assert isinstance(bucket, boto.s3.bucket.Bucket)
+        key = bucket.new_key('name')
+        assert self.data == key.get_contents_as_string()

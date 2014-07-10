@@ -1,23 +1,13 @@
 #ifndef RIFT_SERVER_SERVER_HPP
 #define RIFT_SERVER_SERVER_HPP
 
-#include "rift/bucket.hpp"
-#include "rift/cache.hpp"
-#include "rift/common.hpp"
-#include "rift/index.hpp"
-#include "rift/io.hpp"
-#include "rift/list.hpp"
-#include "rift/meta_ctl.hpp"
-#include "rift/server.hpp"
-#include "rift/url.hpp"
-
-#include <boost/algorithm/string.hpp>
+#include "base_server.h"
 
 namespace rift_server {
 
 using namespace ioremap;
 
-class example_server : public thevoid::server<example_server>
+class example_server : public base_server<example_server>
 {
 public:
 	struct signature_info {
@@ -30,19 +20,10 @@ public:
 
 	virtual bool initialize(const rapidjson::Value &config);
 
-	swarm::url generate_url_base(dnet_addr *addr, const std::string &path, swarm::http_response::status_type *type);
+	bool check_query(const swarm::http_request &request) const;
 
-	template <typename BaseStream, uint64_t Flags>
-	std::string signature_token(rift::bucket_mixin<BaseStream, Flags> &mixin) const;
-
-	const rift::elliptics_base *elliptics() const;
-
-	bool process(const rift::authorization_info &info) const;
-	void check_cache(const elliptics::key &key, elliptics::session &sess) const;
-	bool query_ok(const swarm::http_request &request) const;
-
-	template <typename BaseStream, uint64_t Flags>
-	elliptics::session create_session(rift::bucket_mixin<BaseStream, Flags> &mixin, const swarm::http_request &req, elliptics::key &key) const;
+	std::string extract_key(const swarm::http_request &request) const;
+	std::string extract_bucket(const swarm::http_request &request) const;
 
 	/*!
 	 * \brief on_upload class provides HTTP API for requesting data from Elliptics storage
@@ -92,17 +73,6 @@ public:
 	class on_find : public rift::bucket_mixin<rift::index::on_find_base<example_server, on_find>, rift::bucket_acl::handler_read>
 	{
 	};
-
-private:
-	int m_redirect_port;
-	bool m_secured_http;
-	bool m_use_hostname;
-	std::string m_path_prefix;
-	rift::elliptics_base m_elliptics;
-	std::shared_ptr<rift::cache> m_cache;
-	std::shared_ptr<rift::bucket> m_bucket;
-	rift::async_performer m_async;
-	std::map<std::string, rift::authorization_checker_base::ptr> m_auth;
 };
 
 } // namespace rift_server
