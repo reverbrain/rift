@@ -26,15 +26,18 @@ bool s3_server::initialize(const rapidjson::Value &config)
 	m_auth["AWS4-HMAC-SHA256"] = std::make_shared<rift::s3_v4_authorization<s3_server>>(shared_from_this());
 
 	on<rift::bucket_processor<s3_server, rift::bucket_ctl::meta_head<s3_server>>>(
-		options::prefix_match("/"),
-		options::methods("HEAD"),
-		options::exact_path_components_count(1)
+		options::regex_match("/[^/]+/"),
+		options::methods("HEAD")
+	);
+
+	on<rift::bucket_processor<s3_server, on_upload>>(
+		options::regex_match("/[^/]+/.+"),
+		options::methods("PUT", "POST")
 	);
 
 	on<rift::bucket_processor<s3_server, on_get>>(
-		options::prefix_match("/"),
-		options::methods("GET"),
-		options::minimal_path_components_count(2)
+		options::regex_match("/[^/]+/.+"),
+		options::methods("GET")
 	);
 
 	return true;

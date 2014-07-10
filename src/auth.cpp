@@ -3,10 +3,6 @@
 
 #include <iostream>
 
-#include <cryptopp/hmac.h>
-#include <cryptopp/sha.h>
-#include <cryptopp/base64.h>
-
 namespace ioremap {
 namespace rift {
 
@@ -250,23 +246,6 @@ boost::optional<s3_v2_signature::info> s3_v2_signature::extract_info(const swarm
 	return std::move(info);
 }
 
-template <typename Algorithm>
-static std::string calc_hmac(const std::string &text, const std::string &token)
-{
-	byte digest[Algorithm::DIGESTSIZE];
-	CryptoPP::HMAC<Algorithm> hmac(reinterpret_cast<const byte *>(token.c_str()), token.size());
-	hmac.Update(reinterpret_cast<const byte *>(text.c_str()), text.size());
-	hmac.Final(digest);
-
-	std::string signature;
-	CryptoPP::StringSink sink(signature);
-	CryptoPP::Base64Encoder encoder(NULL, false, 2048);
-	encoder.Put2(digest, Algorithm::DIGESTSIZE, true, true);
-	encoder.TransferAllTo(sink);
-
-	return std::move(signature);
-}
-
 swarm::http_response::status_type s3_v2_signature::check(const swarm::http_request &request, const s3_v2_signature::info &info, const bucket_acl &acl)
 {
 	std::string string_to_sign;
@@ -302,7 +281,7 @@ swarm::http_response::status_type s3_v2_signature::check(const swarm::http_reque
 
 	m_logger.log(swarm::SWARM_LOG_DEBUG, "s3_v2_signature: url: %s, string: '%s'", request.url().original().c_str(), string_to_sign.c_str());
 
-	std::string signature = calc_hmac<CryptoPP::SHA1>(string_to_sign, acl.token);
+	std::string signature = rift::crypto::calc_hmac<CryptoPP::SHA1>(string_to_sign, acl.token);
 
 	if (signature != info.signature) {
 		m_logger.log(swarm::SWARM_LOG_DEBUG, "s3_v2_signature: url: %s, signature mismatch, remote: '%s', local: '%s'",

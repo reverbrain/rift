@@ -437,4 +437,12 @@ class TestCases:
         bucket = conn.get_bucket(client.user['key'])
         assert isinstance(bucket, boto.s3.bucket.Bucket)
         key = bucket.new_key('name')
+        assert isinstance(key, boto.s3.key.Key)
         assert self.data == key.get_contents_as_string()
+        key2 = bucket.new_key('s3-test')
+        assert isinstance(key2, boto.s3.key.Key)
+
+        s3_data = os.urandom(30)
+
+        key2.set_contents_from_string(s3_data)
+        assert s3_data == key2.get_contents_as_string()

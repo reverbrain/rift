@@ -7,6 +7,8 @@
 #include <mutex>
 #include "bucket.hpp"
 
+#include "crypto.hpp"
+
 namespace ioremap {
 namespace rift {
 
@@ -39,6 +41,37 @@ public:
 
 	virtual result_tuple check_permission(
 		const std::shared_ptr<thevoid::base_request_stream> &stream, const swarm::http_request &request, const bucket_meta_raw &meta);
+};
+
+template <typename Server>
+class md5_check_proxy : public thevoid::simple_request_stream<Server>
+{
+public:
+	md5_check_proxy(const authorization_checker_base::request_stream_ptr &stream, const std::string &content_md5)
+		: m_stream(stream), m_content_md5(content_md5)
+	{
+	}
+
+	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer)
+	{
+		std::string content_md5 = rift::crypto::calc_hash<CryptoPP::MD5>(buffer);
+
+		if (content_md5 != m_content_md5) {
+			this->log(swarm::SWARM_LOG_ERROR, "md5_check_proxy, url: %s, mismatched content-md5, local: %s, remote: %s",
+				req.url().to_human_readable().c_str(), content_md5.c_str(), m_content_md5.c_str());
+			this->send_reply(swarm::http_response::forbidden);
+			return;
+		}
+
+		m_stream->initialize(this->get_reply());
+		m_stream->on_headers(swarm::http_request(req));
+		m_stream->on_data(buffer);
+		m_stream->on_close(boost::system::error_code());
+	}
+
+private:
+	authorization_checker_base::request_stream_ptr m_stream;
+	std::string m_content_md5;
 };
 
 class s3_v2_signature
@@ -82,6 +115,12 @@ public:
 		}
 
 		verdict = s3_v2_signature::check(request, *info, acl);
+
+		if (auto content_md5 = request.headers().get("Content-MD5")) {
+			auto new_stream = std::make_shared<md5_check_proxy<Server>>(stream, *content_md5);
+			new_stream->set_server(this->m_server.lock());
+			return std::make_tuple(verdict, new_stream, acl);
+		}
 
 		return std::make_tuple(verdict, stream, acl);
 	}
