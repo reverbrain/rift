@@ -54,7 +54,7 @@ public:
 
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer)
 	{
-		std::string content_md5 = rift::crypto::calc_hash<CryptoPP::MD5>(buffer);
+		std::string content_md5 = rift::crypto::calc_hash<CryptoPP::Weak::MD5>(buffer);
 
 		if (content_md5 != m_content_md5) {
 			this->log(swarm::SWARM_LOG_ERROR, "md5_check_proxy, url: %s, mismatched content-md5, local: %s, remote: %s",
@@ -77,7 +77,7 @@ private:
 class s3_v2_signature
 {
 public:
-	s3_v2_signature(const swarm::logger &logger);
+	s3_v2_signature(const swarm::logger &logger, const std::string &host);
 
 	struct info
 	{
@@ -90,13 +90,15 @@ public:
 
 protected:
 	swarm::logger m_logger;
+	std::string m_host;
 };
 
 template <typename Server>
 class s3_v2_authorization : public authorization_checker<Server>, public s3_v2_signature
 {
 public:
-	s3_v2_authorization(const std::shared_ptr<Server> &server) : authorization_checker<Server>(server), s3_v2_signature(server->logger())
+	s3_v2_authorization(const std::shared_ptr<Server> &server, const std::string &host) :
+		authorization_checker<Server>(server), s3_v2_signature(server->logger(), host)
 	{
 	}
 

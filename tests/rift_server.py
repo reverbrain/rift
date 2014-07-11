@@ -32,7 +32,8 @@ class Server:
                 ],
                 "read-timeout": 10,
                 "write-timeout": 16,
-                "XXX-redirect-port": 8080
+                "XXX-redirect-port": 8080,
+                "host": "localhost" # For s3 server only
             }
         }
 

@@ -22,8 +22,10 @@ public:
 
 	bool check_query(const swarm::http_request &request) const;
 
-	std::string extract_key(const swarm::http_request &request) const;
-	std::string extract_bucket(const swarm::http_request &request) const;
+	template <typename Stream>
+	std::string extract_key(Stream &, const swarm::http_request &request) const;
+	template <typename Stream>
+	std::string extract_bucket(Stream &, const swarm::http_request &request) const;
 
 	/*!
 	 * \brief on_upload class provides HTTP API for requesting data from Elliptics storage

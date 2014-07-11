@@ -423,15 +423,20 @@ class TestCases:
 
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")
-    def test_s3_get(self, client):
+    @pytest.mark.parametrize('calling_format', [
+        (boto.s3.connection.OrdinaryCallingFormat()),
+        (boto.s3.connection.SubdomainCallingFormat())
+    ])
+    def test_s3_get(self, client, calling_format):
         conn = boto.connect_s3(aws_access_key_id=client.user['user'],
                                     aws_secret_access_key=client.user['token'],
                                     host="localhost",
                                     port=8081,
+                                    proxy="127.0.0.1",
+                                    proxy_port=8081,
                                     debug=10,
                                     is_secure=False,
-#                                    calling_format=boto.s3.connection.SubdomainCallingFormat(),
-                                    calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+                                    calling_format=calling_format,
                                     )
         assert isinstance(conn, boto.s3.connection.S3Connection)
         bucket = conn.get_bucket(client.user['key'])

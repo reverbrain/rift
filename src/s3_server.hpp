@@ -18,10 +18,59 @@ public:
 
 	bool check_query(const swarm::http_request &request) const;
 
-	std::string extract_key(const swarm::http_request &request) const;
-	std::string extract_bucket(const swarm::http_request &request) const;
+	template <typename Stream>
+	std::string extract_key(Stream &stream, const swarm::http_request &request) const;
+	template <typename Stream>
+	std::string extract_bucket(Stream &stream, const swarm::http_request &request) const;
 
-	class on_upload : public rift::indexed_upload_mixin<rift::bucket_mixin<rift::io::on_upload_base<s3_server, on_upload>, rift::bucket_acl::handler_write>>
+	enum calling_format {
+		subdomain_format,
+		ordinary_format
+	};
+
+	template <calling_format Format>
+	class calling_format_mixin
+	{
+	public:
+		enum {
+			s3_calling_format = Format
+		};
+	};
+
+	class runtime_calling_format
+	{
+	public:
+		calling_format mixin_s3_calling_format;
+	};
+
+	template <typename Stream, calling_format Format>
+	class runtime_calling_format_mixin : public Stream, public calling_format_mixin<Format>
+	{
+	public:
+		runtime_calling_format_mixin()
+		{
+			Stream::mixin_s3_calling_format = Format;
+		}
+	};
+
+	template <typename BaseStream, calling_format Format>
+	class bucket_processor :
+		public rift::bucket_processor_base<
+			s3_server,
+			bucket_processor<BaseStream, Format>,
+			runtime_calling_format_mixin<BaseStream, Format>
+		>,
+		public calling_format_mixin<Format>
+	{
+	public:
+	};
+
+	class meta_head : public rift::bucket_ctl::meta_head_base<s3_server, meta_head>, public runtime_calling_format
+	{
+	public:
+	};
+
+	class on_upload : public rift::indexed_upload_mixin<rift::bucket_mixin<rift::io::on_upload_base<s3_server, on_upload>, rift::bucket_acl::handler_write>>, public runtime_calling_format
 	{
 	public:
 		void on_chunk(const boost::asio::const_buffer &buffer, unsigned int flags) {
@@ -37,7 +86,7 @@ public:
 				return;
 			}
 
-			byte digest[CryptoPP::MD5::DIGESTSIZE];
+			byte digest[CryptoPP::Weak::MD5::DIGESTSIZE];
 			m_md5.Final(digest);
 
 			std::string etag = "\"";
@@ -53,12 +102,20 @@ public:
 		}
 
 	private:
-		CryptoPP::MD5 m_md5;
+		CryptoPP::Weak::MD5 m_md5;
 	};
 
-	class on_get : public rift::bucket_mixin<rift::io::on_get_base<s3_server, on_get>, rift::bucket_acl::handler_read>
+	class on_get : public rift::bucket_mixin<rift::io::on_get_base<s3_server, on_get>, rift::bucket_acl::handler_read>, public runtime_calling_format
 	{
 	};
+
+	template <typename T, typename... Args>
+	void on_object(Args &&...args);
+	template <typename T, typename... Args>
+	void on_bucket(Args &&...args);
+
+protected:
+	std::string m_host;
 };
 
 } // namespace s3

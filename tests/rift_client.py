@@ -10,7 +10,7 @@ class Client:
         self.bucket = option.bucket
         if self.bucket:
             # generic_bucket:123:привет, Россия!11
-            self.user = self.generate_user(key='generic_bucket:123', user='bucket_user.xxx')
+            self.user = self.generate_user(key='generic_bucket_123', user='bucket_user.xxx')
             self.admin = self.generate_user(key=self.user['key'], user='bucket_admin.xxx')
             self.directory_user = self.generate_user(key=self.bucket, user='directory_user')
         else:

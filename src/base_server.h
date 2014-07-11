@@ -123,7 +123,8 @@ public:
 		return &m_elliptics;
 	}
 
-	bool process(const rift::authorization_info &info) const {
+	template <typename Stream>
+	bool process(Stream &stream, const rift::authorization_info &info) const {
 		if (!m_bucket) {
 			// If there is no bucket support we should create presudo-bucket and give user rights to write files
 			rift::authorization_check_result result;
@@ -162,20 +163,20 @@ public:
 				return false;
 			}
 
-			m_bucket->check(static_cast<const Server *>(this)->extract_bucket(*info.request), tmp);
+			m_bucket->check(static_cast<const Server *>(this)->extract_bucket(stream, *info.request), tmp);
 		}
 
 		return true;
 	}
 
-	template <typename BaseStream, uint64_t Flags>
-	elliptics::session create_session(rift::bucket_mixin<BaseStream, Flags> &mixin, const swarm::http_request &req, elliptics::key &key) const {
-		const bool is_read = (Flags & rift::bucket_acl::handler_read);
+	template <typename Stream>
+	elliptics::session create_session(Stream &stream, const swarm::http_request &req, elliptics::key &key) const {
+		const bool is_read = (Stream::bucket_mixin_flags & rift::bucket_acl::handler_read);
 
-		key = static_cast<const Server *>(this)->extract_key(req);
+		key = static_cast<const Server *>(this)->extract_key(stream, req);
 		auto session = is_read
-			? m_elliptics.read_data_session(req, mixin.bucket_mixin_meta)
-			: m_elliptics.write_data_session(req, mixin.bucket_mixin_meta);
+			? m_elliptics.read_data_session(req, stream.bucket_mixin_meta)
+			: m_elliptics.write_data_session(req, stream.bucket_mixin_meta);
 		check_cache(key, session);
 
 		return session;

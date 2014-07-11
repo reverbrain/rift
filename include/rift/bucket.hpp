@@ -263,15 +263,15 @@ public:
  * Underlying socket must be successor of \a bucket_mixin to be able to store
  * bucket's information.
  */
-template <typename Server, typename BaseStream>
-class bucket_processor : public thevoid::request_stream<Server>, public std::enable_shared_from_this<bucket_processor<Server, BaseStream>>
+template <typename Server, typename Stream, typename BaseStream>
+class bucket_processor_base : public thevoid::request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
 	enum {
 		bucket_flags = BaseStream::bucket_mixin_flags
 	};
 
-	bucket_processor() : m_closed(false), m_on_data_called(false), m_was_error(false)
+	bucket_processor_base() : m_closed(false), m_on_data_called(false), m_was_error(false)
 	{
 	}
 
@@ -286,11 +286,11 @@ public:
 			authorization_info info = {
 				authorization_checker_base::ptr(), // authorization_checker will be set in Server's implementation
 				&m_request, // m_request is guaranteed to be alive as this processor will be alive until the callback will be called
-				std::bind(&bucket_processor::on_checked, this->shared_from_this(), std::placeholders::_1, stream),
+				std::bind(&bucket_processor_base::on_checked, this->shared_from_this(), std::placeholders::_1, stream),
 				stream
 			};
 
-			this->server()->process(info);
+			this->server()->process(static_cast<Stream &>(*this), info);
 		} catch (const std::exception &e) {
 			this->log(swarm::SWARM_LOG_ERROR, "url: %s, processing error: %s",
 					req.url().to_human_readable().c_str(), e.what());
@@ -405,6 +405,12 @@ protected:
 	std::mutex m_stream_mutex;
 	std::shared_ptr<thevoid::base_request_stream> m_stream;
 	swarm::http_request m_request;
+};
+
+template <typename Server, typename BaseStream>
+class bucket_processor : public bucket_processor_base<Server, bucket_processor<Server, BaseStream>, BaseStream>
+{
+public:
 };
 
 /*!

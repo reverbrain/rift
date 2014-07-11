@@ -214,7 +214,7 @@ authorization_checker_base::result_tuple rift_authorization::check_permission_wi
 	return std::make_tuple(verdict, stream, acl);
 }
 
-s3_v2_signature::s3_v2_signature(const swarm::logger &logger) : m_logger(logger)
+s3_v2_signature::s3_v2_signature(const swarm::logger &logger, const std::string &host) : m_logger(logger), m_host(host)
 {
 }
 
@@ -275,6 +275,15 @@ swarm::http_response::status_type s3_v2_signature::check(const swarm::http_reque
 			string_to_sign += ',';
 		}
 		string_to_sign += headers[i].second;
+	}
+
+	if (auto host_ptr = request.headers().get("Host")) {
+		const std::string &host = *host_ptr;
+		const size_t host_size = std::min(host.size(), host.find_first_of(':'));
+		if (host_size >= m_host.size() + 1) {
+			string_to_sign += '/';
+			string_to_sign += host.substr(0, host_size - m_host.size() - 1);
+		}
 	}
 
 	string_to_sign += request.url().path();

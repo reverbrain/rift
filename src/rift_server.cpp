@@ -118,12 +118,14 @@ bool example_server::check_query(const swarm::http_request &request) const {
 	return true;
 }
 
-std::string example_server::extract_key(const swarm::http_request &request) const
+template <typename Stream>
+std::string example_server::extract_key(Stream &, const swarm::http_request &request) const
 {
 	return rift::url::key(request, !!m_bucket);
 }
 
-std::string example_server::extract_bucket(const swarm::http_request &request) const
+template <typename Stream>
+std::string example_server::extract_bucket(Stream &, const swarm::http_request &request) const
 {
 	return rift::url::bucket(request);
 }
