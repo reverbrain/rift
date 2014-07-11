@@ -16,9 +16,8 @@ LOCATE_LIBRARY(THEVOID "thevoid/server.hpp" "thevoid")
 LOCATE_LIBRARY(SWARM "swarm/http_response.hpp" "swarm")
 LOCATE_LIBRARY(SWARM_URLFETCHER "swarm/http_response.hpp" "swarm_urlfetcher")
 LOCATE_LIBRARY(MSGPACK "msgpack.hpp" "msgpack")
+LOCATE_LIBRARY(CRYPTOPP "cryptopp/cryptlib.h" "cryptopp" "crypto++")
 
-find_package(PkgConfig REQUIRED)
-pkg_search_module(CRYPTOPP REQUIRED cryptopp)
 find_package(Boost COMPONENTS system thread program_options REQUIRED)
 find_package(Elliptics ${RIFT_VERSION_ELLIPTICS} REQUIRED)
 

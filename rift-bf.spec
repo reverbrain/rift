@@ -17,7 +17,7 @@ BuildRequires:	gcc44 gcc44-c++
 %endif
 BuildRequires:	boost%{boost_ver}-devel, boost%{boost_ver}-system, boost%{boost_ver}-thread
 BuildRequires:	elliptics-devel >= 2.25.4.20, elliptics-client-devel >= 2.25.4.20
-BuildRequires:  curl-devel, libthevoid-devel >= 0.6.3.8, msgpack-devel, python-virtualenv
+BuildRequires:  curl-devel, libthevoid-devel >= 0.6.3.8, msgpack-devel, python-virtualenv, cryptopp-devel
 BuildRequires:	react-devel >= 1.0.2
 BuildRequires:	cmake
 
