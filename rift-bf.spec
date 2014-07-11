@@ -9,17 +9,9 @@ URL:		https://github.com/reverbrain/rift
 Source0:	%{name}-%{version}.tar.bz2
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
-%if %{defined rhel} && 0%{?rhel} < 6
-BuildRequires:	gcc44 gcc44-c++
-%define boost_ver 141
-%else
-%define boost_ver %{nil}
-%endif
-BuildRequires:	boost%{boost_ver}-devel, boost%{boost_ver}-system, boost%{boost_ver}-thread
+BuildRequires:	boost-devel, boost-system, boost-thread
 BuildRequires:	elliptics-devel >= 2.25.4.20, elliptics-client-devel >= 2.25.4.20
-BuildRequires:  curl-devel, libthevoid-devel >= 0.6.3.8, msgpack-devel, python-virtualenv, cryptopp-devel
-BuildRequires:	react-devel >= 1.0.2
-BuildRequires:	cmake
+BuildRequires:  cmake, libthevoid-devel >= 0.6.5.0, msgpack-devel, python-virtualenv, cryptopp-devel
 
 %description
 Blah, Blah, minor
@@ -37,13 +29,7 @@ Rift devel package
 %setup -q
 
 %build
-%if %{defined rhel} && 0%{?rhel} < 6
-export CC=gcc44
-export CXX=g++44
-CXXFLAGS="-pthread -I/usr/include/boost141" LDFLAGS="-L/usr/lib64/boost141" %{cmake} -DBoost_LIB_DIR=/usr/lib64/boost141 -DBoost_INCLUDE_DIR=/usr/include/boost141 -DBoost_LIBRARYDIR=/usr/lib64/boost141 -DBOOST_LIBRARYDIR=/usr/lib64/boost141 -DCMAKE_CXX_COMPILER=g++44 -DCMAKE_C_COMPILER=gcc44 -DBUILD_NETWORK_MANAGER=off .
-%else
 %{cmake} .
-%endif
 
 make %{?_smp_mflags}
 make test
