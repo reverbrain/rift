@@ -232,6 +232,8 @@ public:
 
 	elliptics::async_write_result write(const elliptics::data_pointer &data, unsigned int flags) {
 		if (flags == thevoid::buffered_request_stream<Server>::single_chunk) {
+			this->log(swarm::SWARM_LOG_INFO, "buffered-write: write-data-single: url: %s, offset: %lu, size: %zu",
+					this->request().url().to_human_readable().c_str(), m_offset, data.size());
 			return m_session->write_data(m_key, data, m_offset);
 		} else if (m_size > 0) {
 			if (flags & thevoid::buffered_request_stream<Server>::first_chunk) {
@@ -267,6 +269,9 @@ public:
 			return;
 		}
 
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_partial: url: %s",
+				this->request().url().to_human_readable().c_str());
+
 		// continue only with the groups where update succeeded
 		std::vector<int> groups, rem_groups;
 
@@ -294,6 +299,9 @@ public:
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
 		}
+
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_finished: url: %s",
+				this->request().url().to_human_readable().c_str());
 
 		rift::JsonValue value;
 		upload_completion::fill_upload_reply(result, value, value.GetAllocator());

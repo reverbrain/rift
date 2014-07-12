@@ -431,6 +431,9 @@ public:
 		io::upload_completion::fill_upload_reply(write_result, *result_object, result_object->GetAllocator());
 
 		if (meta.flags & RIFT_BUCKET_META_NO_INDEX_UPDATE) {
+			this->log(swarm::SWARM_LOG_INFO, "indexed_upload_mixin: no-index, url: %s",
+					this->request().url().to_human_readable().c_str());
+
 			auto data = result_object->ToString();
 			callback(swarm::http_response::ok, data);
 			return;
@@ -455,18 +458,21 @@ public:
 			session.set_groups(meta.groups);
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "indexed_upload_mixin: checked: url: %s, adding object: %s to index: %s in '%s' namespace",
-				this->request().url().path().c_str(), key.to_string().c_str(), indexes.front().c_str(), "<unknown>");
+		this->log(swarm::SWARM_LOG_INFO, "indexed_upload_mixin: checked: url: %s, adding object: %s to index: %s in '%s' namespace",
+				this->request().url().to_human_readable().c_str(), key.to_string().c_str(), indexes.front().c_str(), "<unknown>");
 
 		session.update_indexes(key, indexes, datas).connect(
 			std::bind(&indexed_upload_mixin::on_index_update_finished,
-				result_object, callback, std::placeholders::_1, std::placeholders::_2));
+				this->shared_from_this(), result_object, callback, std::placeholders::_1, std::placeholders::_2));
 	}
 
-	static void on_index_update_finished(const std::shared_ptr<rift::JsonValue> &result_object,
+	void on_index_update_finished(const std::shared_ptr<rift::JsonValue> &result_object,
 			const upload_completion_callback_t &callback,
 			const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error) {
 		(void) result;
+
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: indexed_update_finished: url: %s, err: %s",
+				this->request().url().to_human_readable().c_str(), error.message().c_str());
 
 		if (error) {
 			callback(swarm::http_response::internal_server_error, std::string());
@@ -481,6 +487,9 @@ public:
 	}
 
 	void completion(const swarm::http_response::status_type &status, const std::string &data) {
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: indexed: completion: url: %s, status: %d",
+				this->request().url().to_human_readable().c_str(), int(status));
+
 		if (status != swarm::http_response::ok) {
 			this->send_reply(status);
 			return;
@@ -501,6 +510,9 @@ public:
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
 		}
+
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: indexed: on_write_finished: url: %s",
+				this->request().url().to_human_readable().c_str());
 
 		try {
 			upload_update_indexes(*this->m_session, this->bucket_mixin_meta, this->m_key, result,
