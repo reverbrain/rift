@@ -136,16 +136,18 @@ protected:
 			std::back_inserter(remotes),
 			std::bind(&rapidjson::Value::GetString, std::placeholders::_1));
 
-		try {
-			node.add_remote(remotes);
-			elliptics::session session(node);
-
-			if (!session.get_routes().size()) {
-				m_logger.log(swarm::SWARM_LOG_ERROR, "Didn't add any remote node, exiting.");
-				return false;
+		bool any_added = false;
+		for (auto it = remotes.begin(); it != remotes.end(); ++it) {
+			try {
+				node.add_remote(it->c_str());
+				any_added = true;
+			} catch (...) {
+				// do nothing - its ok not to add some nodes
 			}
-		} catch (const std::exception &e) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "Could not add any out of %zd nodes.", remotes.size());
+		}
+
+		if (!any_added) {
+			m_logger.log(swarm::SWARM_LOG_ERROR, "Didn't add any remote node, exiting.");
 			return false;
 		}
 
