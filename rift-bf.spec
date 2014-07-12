@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.8.9
+Version:	2.25.0.9.0
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -66,6 +66,25 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Sat Jul 12 2014 Ruslan Nigmatullin <euroelessar@yandex.ru> - 2.25.0.9.0
+- server: do not stop vfs completion processing if overall result failed.
+- * This happens when one or more stat transactions failed, since stat and monitor commands are synchronous.
+- * It was changed in elliptics 2.25.4.15, stat/monitor commands became async, so this change could be dropped.
+- rift: Reimplemented authorization mechanism
+- * Authorization mechanism was splitted to separate class based on authorization_checker_base.
+- * Added ability to create read-only users or bucket administrators.
+- * Changed users' flags in bucket's access control list, new flags are: has_no_token, is_writer, is_administrator.
+- rift: Don't check handler's name, check it's type
+- s3: Added authorization and s3_server binary
+- * Common functionality of s3 and rift servers were splitted to base_server class.
+- * Added support for AWS aka s3 version 2 authorization API.
+- * Added base skeleton for s3 version 4 authorization API.
+- * Added meta_head - API for requesting for bucket's existence.
+- s3: Implemented Object PUT handler	    
+- * Added MD5 checksum verification for AWS authorization mechanism
+- s3: Added support for subdomain calling format
+- rift: Added more logs for write operation
+
 * Mon Jun 09 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.8.9
 - rift: switched to  human readable URLs printed in logs
 - rift: Added charset to content-type in json replies
