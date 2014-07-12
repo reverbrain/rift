@@ -1,3 +1,10 @@
+rift (2.25.0.9.1) unstable; urgency=low
+
+  * rift: Added migration for bucket_acl
+  * * This is a migration from old 'noauth' flags to new 'auth' one
+
+ -- Ruslan Nigmatullin <euroelessar@yandex.ru>  Sat, 12 Jul 2014 18:55:53 +0400
+
 rift (2.25.0.9.0) unstable; urgency=low
 
   * server: do not stop vfs completion processing if overall result failed.

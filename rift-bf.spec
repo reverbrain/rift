@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.9.0
+Version:	2.25.0.9.1
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -66,6 +66,10 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Sat Jul 12 2014 Ruslan Nigmatullin <euroelessar@yandex.ru> - 2.25.0.9.1
+- rift: Added migration for bucket_acl
+- * This is a migration from old 'noauth' flags to new 'auth' one
+
 * Sat Jul 12 2014 Ruslan Nigmatullin <euroelessar@yandex.ru> - 2.25.0.9.0
 - server: do not stop vfs completion processing if overall result failed.
 - * This happens when one or more stat transactions failed, since stat and monitor commands are synchronous.
