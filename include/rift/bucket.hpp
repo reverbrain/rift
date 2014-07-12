@@ -30,7 +30,7 @@ struct bucket_meta_index_data {
 
 struct bucket_acl {
 	enum {
-		serialization_version = 1,
+		serialization_version = 2,
 	};
 
 	// This enum describes per-user authorization flags
@@ -569,7 +569,8 @@ static inline ioremap::rift::bucket_acl &operator >>(msgpack::object o, ioremap:
 	uint16_t version = 0;
 	p[0].convert(&version);
 	switch (version) {
-	case 1: {
+	case 1:
+	case 2: {
 		if (size != 4) {
 			std::ostringstream ss;
 			ss << "bucket acl unpack: array size mismatch: read: " << size << ", must be: 4";
@@ -579,6 +580,25 @@ static inline ioremap::rift::bucket_acl &operator >>(msgpack::object o, ioremap:
 		p[1].convert(&acl.user);
 		p[2].convert(&acl.token);
 		p[3].convert(&acl.flags);
+
+		if (version == 1) {
+			using namespace ioremap::rift;
+			// Convert flags from old version to new one
+			const bool noauth_read = acl.flags & (1 << 0);
+			const bool noauth_all = acl.flags & (1 << 1);
+
+			acl.flags = 0;
+
+			// If there was any noauth - we shouldn't check token
+			if (noauth_all || noauth_read) {
+				acl.flags |= bucket_acl::auth_no_token;
+			}
+
+			// If there wasn't 'noauth_read' flag - user is permitted to do everything he want
+			if (!noauth_read) {
+				acl.flags |= bucket_acl::auth_admin | bucket_acl::auth_write;
+			}
+		}
 		break;
 	}
 	default: {
