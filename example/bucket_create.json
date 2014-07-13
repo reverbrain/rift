@@ -1,19 +1,14 @@
 {
-	"groups": [1,2,3,4,5],
+	"groups": [1,2,3],
 	"acl": [
 		{
-			"user": "John",
-			"token": "secure john token",
-			"flags": 0
-		},
-		{
-			"user": "Mary",
-			"token": "secure mary token",
+			"user": "*",
+			"token": "unused-token",
 			"flags": 1
 		},
 		{
 			"user": "write_access",
-			"token": "secure write-access token",
+			"token": "secure-write-access-token",
 			"flags": 2
 		}
 	],
