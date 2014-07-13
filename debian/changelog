@@ -1,3 +1,10 @@
+rift (2.25.0.10.0) unstable; urgency=low
+
+  * indexes: removed index update at upload/delete operations
+  * debug: alot of new debug prints at info level like partial write and so on
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Sun, 13 Jul 2014 04:18:25 +0400
+
 rift (2.25.0.9.1) unstable; urgency=low
 
   * rift: Added migration for bucket_acl

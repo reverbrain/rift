@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.9.1
+Version:	2.25.0.10.0
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -66,6 +66,10 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Sun Jul 13 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.0
+- indexes: removed index update at upload/delete operations
+- debug: alot of new debug prints at info level like partial write and so on
+
 * Sat Jul 12 2014 Ruslan Nigmatullin <euroelessar@yandex.ru> - 2.25.0.9.1
 - rift: Added migration for bucket_acl
 - * This is a migration from old 'noauth' flags to new 'auth' one
