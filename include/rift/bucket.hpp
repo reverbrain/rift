@@ -30,7 +30,7 @@ struct bucket_meta_index_data {
 
 struct bucket_acl {
 	enum {
-		serialization_version = 1,
+		serialization_version = 2,
 	};
 
 	// This enum describes per-user authorization flags
@@ -432,6 +432,9 @@ public:
 		io::upload_completion::fill_upload_reply(write_result, *result_object, result_object->GetAllocator());
 
 		if (meta.flags & RIFT_BUCKET_META_NO_INDEX_UPDATE) {
+			this->log(swarm::SWARM_LOG_INFO, "indexed_upload_mixin: no-index, url: %s",
+					this->request().url().to_human_readable().c_str());
+
 			auto data = result_object->ToString();
 
 			this->log(swarm::SWARM_LOG_INFO, "indexed::upload_update_indexes: url: %s: no index update in metadata, result-size: %zd",
@@ -466,13 +469,16 @@ public:
 
 		session.update_indexes(key, indexes, datas).connect(
 			std::bind(&indexed_upload_mixin::on_index_update_finished,
-				result_object, callback, std::placeholders::_1, std::placeholders::_2));
+				this->shared_from_this(), result_object, callback, std::placeholders::_1, std::placeholders::_2));
 	}
 
-	static void on_index_update_finished(const std::shared_ptr<rift::JsonValue> &result_object,
+	void on_index_update_finished(const std::shared_ptr<rift::JsonValue> &result_object,
 			const upload_completion_callback_t &callback,
 			const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error) {
 		(void) result;
+
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: indexed_update_finished: url: %s, err: %s",
+				this->request().url().to_human_readable().c_str(), error.message().c_str());
 
 		if (error) {
 			callback(swarm::http_response::internal_server_error, std::string());
@@ -487,6 +493,9 @@ public:
 	}
 
 	void completion(const swarm::http_response::status_type &status, const std::string &data) {
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: indexed: completion: url: %s, status: %d",
+				this->request().url().to_human_readable().c_str(), int(status));
+
 		if (status != swarm::http_response::ok) {
 			this->send_reply(status);
 			return;
@@ -510,6 +519,9 @@ public:
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
 		}
+
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: indexed: on_write_finished: url: %s",
+				this->request().url().to_human_readable().c_str());
 
 		try {
 			upload_update_indexes(*this->m_session, this->bucket_mixin_meta, this->m_key, result,
@@ -567,7 +579,8 @@ static inline ioremap::rift::bucket_acl &operator >>(msgpack::object o, ioremap:
 	uint16_t version = 0;
 	p[0].convert(&version);
 	switch (version) {
-	case 1: {
+	case 1:
+	case 2: {
 		if (size != 4) {
 			std::ostringstream ss;
 			ss << "bucket acl unpack: array size mismatch: read: " << size << ", must be: 4";
@@ -577,6 +590,25 @@ static inline ioremap::rift::bucket_acl &operator >>(msgpack::object o, ioremap:
 		p[1].convert(&acl.user);
 		p[2].convert(&acl.token);
 		p[3].convert(&acl.flags);
+
+		if (version == 1) {
+			using namespace ioremap::rift;
+			// Convert flags from old version to new one
+			const bool noauth_read = acl.flags & (1 << 0);
+			const bool noauth_all = acl.flags & (1 << 1);
+
+			acl.flags = 0;
+
+			// If there was any noauth - we shouldn't check token
+			if (noauth_all || noauth_read) {
+				acl.flags |= bucket_acl::auth_no_token;
+			}
+
+			// If there wasn't 'noauth_read' flag - user is permitted to do everything he want
+			if (!noauth_read) {
+				acl.flags |= bucket_acl::auth_admin | bucket_acl::auth_write;
+			}
+		}
 		break;
 	}
 	default: {

@@ -274,6 +274,9 @@ public:
 			return;
 		}
 
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_partial: url: %s",
+				this->request().url().to_human_readable().c_str());
+
 		// continue only with the groups where update succeeded
 		std::vector<int> groups, rem_groups;
 
@@ -306,6 +309,9 @@ public:
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
 		}
+
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_finished: url: %s",
+				this->request().url().to_human_readable().c_str());
 
 		rift::JsonValue value;
 		upload_completion::fill_upload_reply(result, value, value.GetAllocator());
