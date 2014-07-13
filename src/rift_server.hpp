@@ -33,8 +33,14 @@ public:
 	 * It inherits bucket_mixin to have authorization support.
 	 *
 	 * It inherits indexed_upload_mixin to be able to add file to secondary indexes after succesfull write.
+	 *
+	 * Temporarily we do not update indexes.
+	 * Current implementation is slow and doesn't scale.
+	 *
+	 * Previously it used @indexed_upload_mixin wrapper to rewrite virtual on_write_finished() to force
+	 * it sending indexes update
 	 */
-	class on_upload : public rift::indexed_upload_mixin<rift::bucket_mixin<rift::io::on_upload_base<example_server, on_upload>, rift::bucket_acl::handler_write>>
+	class on_upload : public rift::bucket_mixin<rift::io::on_upload_base<example_server, on_upload>, rift::bucket_acl::handler_write>
 	{
 	public:
 	};
@@ -54,13 +60,20 @@ public:
 	class on_delete : public rift::bucket_mixin<rift::io::on_delete_base<example_server, on_delete>, rift::bucket_acl::handler_write>
 	{
 	public:
-		virtual void on_delete_finished(const elliptics::sync_remove_result &result,
+		// Indexes in current elliptics implementation are slow and do not scale
+		// Drop it for now, they do harm
+		//
+		// meta_ctl::on_delete is used for bucket/bucket directory removal operations
+		// Rift server used this on_delete handler with virual on_delete_finished() method, which was translate
+		// to method below which deleted indexes.
+		virtual void on_delete_finished1(const elliptics::sync_remove_result &result,
 				const elliptics::error_info &error) {
 			elliptics::key key;
 			elliptics::session session = this->server()->create_session(*this, this->request(), key);
 
 			std::vector<std::string> indexes;
 			indexes.push_back(this->bucket_mixin_meta.key + ".index");
+
 
 			session.remove_indexes(key, indexes);
 

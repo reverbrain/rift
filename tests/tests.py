@@ -233,7 +233,8 @@ class TestCases:
         assert len(r.content) == len(ideal_data)
         assert r.content == ideal_data
 
-    @pytest.mark.skipif(not pytest.config.option.bucket,
+    #@pytest.mark.skipif(not pytest.config.option.bucket,
+    @pytest.mark.skipif(True,
                         reason="tests are running without buckets")
     @pytest.mark.parametrize('name', [
         ('list')

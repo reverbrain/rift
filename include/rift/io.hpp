@@ -195,11 +195,13 @@ public:
 	virtual void on_request(const swarm::http_request &req) {
 		this->set_chunk_size(10 * 1024 * 1024);
 
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_request: url: %s", this->request().url().to_human_readable().c_str());
+
 		try {
 			const auto &query = this->request().url().query();
 			m_offset = query.item_value("offset", 0llu);
 		} catch (const std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-upload: url: %s: invalid offset parameter: %s", req.url().to_human_readable().c_str(), e.what());
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s: invalid offset parameter: %s", req.url().to_human_readable().c_str(), e.what());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
@@ -215,7 +217,7 @@ public:
 	virtual void on_chunk(const boost::asio::const_buffer &buffer, unsigned int flags) {
 		const auto data = create_data(buffer);
 
-		this->log(swarm::SWARM_LOG_INFO, "on_chunk: url: %s, size: %zu, m_offset: %lu, flags: %u",
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_chunk: url: %s, size: %zu, m_offset: %lu, flags: %u",
 				this->request().url().to_human_readable().c_str(), data.size(), m_offset, flags);
 
 		elliptics::async_write_result result = write(data, flags);
@@ -232,6 +234,8 @@ public:
 
 	elliptics::async_write_result write(const elliptics::data_pointer &data, unsigned int flags) {
 		if (flags == thevoid::buffered_request_stream<Server>::single_chunk) {
+			this->log(swarm::SWARM_LOG_INFO, "buffered-write: write-data-single-chunk: url: %s, offset: %lu, size: %zu",
+					this->request().url().to_human_readable().c_str(), m_offset, data.size());
 			return m_session->write_data(m_key, data, m_offset);
 		} else if (m_size > 0) {
 			if (flags & thevoid::buffered_request_stream<Server>::first_chunk) {
@@ -255,13 +259,16 @@ public:
 	}
 
 	virtual void on_error(const boost::system::error_code &error) {
-		this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s, error: %s",
+		this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_error: url: %s, error: %s",
 				this->request().url().to_human_readable().c_str(), error.message().c_str());
 	}
 
 	virtual void on_write_partial(const elliptics::sync_write_result &result, const elliptics::error_info &error) {
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_partial: url: %s, offset: %lu, size: %zu, error: %s",
+				this->request().url().to_human_readable().c_str(), m_offset, m_size, error.message().c_str());
+
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s, partial write error: %s",
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_write_partial: url: %s, partial write error: %s",
 					this->request().url().to_human_readable().c_str(), error.message().c_str());
 			this->on_write_finished(result, error);
 			return;
@@ -290,7 +297,12 @@ public:
 
 	virtual void on_write_finished(const elliptics::sync_write_result &result,
 			const elliptics::error_info &error) {
+		this->log(swarm::SWARM_LOG_INFO, "on_write_finished: url: %s, offset: %lu, size: %zu, error: %s",
+				this->request().url().to_human_readable().c_str(), m_offset, m_size, error.message().c_str());
+
 		if (error) {
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_write_finished: url: %s, full write error: %s",
+					this->request().url().to_human_readable().c_str(), error.message().c_str());
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
 		}

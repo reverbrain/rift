@@ -372,11 +372,13 @@ protected:
 		base_stream->bucket_mixin_acl = acl;
 		info.stream->initialize(this->get_reply());
 
+		// copy URL here since we will move m_request to on_headers() below
+		std::string url = m_request.url().to_human_readable();
+
 		{
 			std::lock_guard<std::mutex> lock(m_stream_mutex);
 			if (m_closed && m_was_error) {
-				this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: already closed: url: %s",
-						m_request.url().to_human_readable().c_str());
+				this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: already closed: url: %s", url.c_str());
 				// Connection is already closed, so we should die
 				return;
 			}
@@ -384,16 +386,15 @@ protected:
 			m_stream = stream;
 			m_stream->on_headers(std::move(m_request));
 
-			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: on_headers called: url: %s",
-					m_request.url().to_human_readable().c_str());
+			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: on_headers called: url: %s", url.c_str());
 		}
 
 		if (m_closed) {
 			m_stream->on_data(boost::asio::const_buffer());
 			m_stream->on_close(boost::system::error_code());
 		} else if (m_on_data_called) {
-			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: want_more called: url: %s",
-					m_request.url().to_human_readable().c_str());
+			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: want_more called: url: %s", url.c_str());
+
 			// on_data method was already called, so we should to call it again
 			this->get_reply()->want_more();
 		}
@@ -432,6 +433,10 @@ public:
 
 		if (meta.flags & RIFT_BUCKET_META_NO_INDEX_UPDATE) {
 			auto data = result_object->ToString();
+
+			this->log(swarm::SWARM_LOG_INFO, "indexed::upload_update_indexes: url: %s: no index update in metadata, result-size: %zd",
+					this->request().url().to_human_readable().c_str(), data.size());
+
 			callback(swarm::http_response::ok, data);
 			return;
 		}
@@ -455,8 +460,9 @@ public:
 			session.set_groups(meta.groups);
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "indexed_upload_mixin: checked: url: %s, adding object: %s to index: %s in '%s' namespace",
-				this->request().url().path().c_str(), key.to_string().c_str(), indexes.front().c_str(), "<unknown>");
+		this->log(swarm::SWARM_LOG_INFO, "indexed::upload_update_indexes: url: %s: adding object: %s to index: %s in '%s' namespace",
+				this->request().url().to_human_readable().c_str(),
+				key.to_string().c_str(), indexes.front().c_str(), "<unknown>");
 
 		session.update_indexes(key, indexes, datas).connect(
 			std::bind(&indexed_upload_mixin::on_index_update_finished,
@@ -497,6 +503,9 @@ public:
 
 	virtual void on_write_finished(const elliptics::sync_write_result &result,
 			const elliptics::error_info &error) {
+		this->log(swarm::SWARM_LOG_INFO, "indexed::on_write_finished: url: %s: key: %s, namespace: %s, error: %s",
+				this->request().url().to_human_readable().c_str(),
+				this->m_key.to_string().c_str(), this->bucket_mixin_meta.key.c_str(), error.message().c_str());
 		if (error) {
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
@@ -507,7 +516,8 @@ public:
 					std::bind(&indexed_upload_mixin::completion, this->shared_from_this(),
 						std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "post-base: write_finished: key: %s, namespace: %s, exception: %s",
+			this->log(swarm::SWARM_LOG_ERROR, "indexed::on_write_finished: url: %s: key: %s, namespace: %s, exception: %s",
+					this->request().url().to_human_readable().c_str(),
 					this->m_key.to_string().c_str(), this->bucket_mixin_meta.key.c_str(), e.what());
 			this->m_session->remove(this->m_key);
 			this->send_reply(swarm::http_response::bad_request);
