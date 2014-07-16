@@ -749,6 +749,12 @@ public:
 		m_prefetched_offset = entry.io_attribute()->offset;
 		m_prefetched_data = entry.file();
 
+		// do not request checksums for the second and the rest chunks,
+		// since checksum for the first chunk already checked whole file
+		// after we switched to new checksums in elliptics backend
+		// (like csum per X Mb of file) this will not be needed
+		m_session->set_ioflags(m_session->get_ioflags() | DNET_IO_FLAGS_NOCSUM);
+
 		on_first_chunk_read(total_size, ts);
 	}
 
