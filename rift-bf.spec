@@ -10,7 +10,7 @@ Source0:	%{name}-%{version}.tar.bz2
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:	boost-devel, boost-system, boost-thread
-BuildRequires:	elliptics-devel >= 2.25.4.20, elliptics-client-devel >= 2.25.4.20
+BuildRequires:	elliptics-devel >= 2.25.5.0, elliptics-client-devel >= 2.25.5.0
 BuildRequires:  cmake, libthevoid-devel >= 0.6.5.0, msgpack-devel, python-virtualenv, cryptopp-devel
 
 %description
