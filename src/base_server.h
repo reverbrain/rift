@@ -9,6 +9,7 @@
 #include "rift/list.hpp"
 #include "rift/meta_ctl.hpp"
 #include "rift/server.hpp"
+#include "rift/stat.hpp"
 #include "rift/url.hpp"
 
 namespace rift_server {

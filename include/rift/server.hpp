@@ -116,6 +116,19 @@ public:
 				std::bind(&elliptics_base::vfs_stat_complete, this, std::placeholders::_1));
 	}
 
+	template <typename Allocator>
+	void stat(rapidjson::Value &ret, Allocator &allocator) {
+		std::unique_lock<std::mutex> guard(m_lock);
+
+		for (auto it = m_group_meta.begin(); it != m_group_meta.end(); ++it) {
+			rapidjson::Value g(rapidjson::kObjectType);
+
+			it->second.stat(g, allocator);
+
+			ret.AddMember(std::to_string(it->first).c_str(), allocator, g, allocator);
+		}
+	}
+
 protected:
 	virtual bool prepare_config(const rapidjson::Value &config, dnet_config &node_config) {
 		(void) config;
@@ -197,7 +210,7 @@ private:
 	long m_read_timeout;
 	long m_write_timeout;
 
-	struct host_stat {
+	struct node_stat {
 		struct dnet_stat	vfs;
 
 		// 'backend' monitoring output (json) from elliptics node
@@ -209,8 +222,16 @@ private:
 
 		int			generation;
 
-		host_stat() : used_size(0), generation(0) {
+		node_stat() : used_size(0), generation(0) {
 			memset(&vfs, 0, sizeof(struct dnet_stat));
+		}
+
+		template <typename Allocator>
+		void stat(rapidjson::Value &ret, Allocator &allocator) {
+			rapidjson::Value v(rapidjson::kObjectType);
+			v.AddMember("bsize", vfs.bsize, allocator);
+
+			ret.AddMember("vfs", v, allocator);
 		}
 	};
 
@@ -220,9 +241,23 @@ private:
 		/*!
 		 * address string to per-host statistics map
 		 */
-		std::map<std::string, host_stat>	hosts;
+		std::map<std::string, node_stat>	nodes;
 
 		group_meta() : total_size(0), free_size(0), used_size(0) {}
+
+		template <typename Allocator>
+		void stat(rapidjson::Value &g, Allocator &allocator) {
+			g.AddMember("total-size", total_size, allocator);
+			g.AddMember("free-size", free_size, allocator);
+			g.AddMember("used-size", used_size, allocator);
+
+			for (auto it = nodes.begin(); it != nodes.end(); ++it) {
+				rapidjson::Value n(rapidjson::kObjectType);
+
+				it->second.stat(n, allocator);
+				g.AddMember(it->first.c_str(), allocator, n, allocator);
+			}
+		}
 	};
 
 	/*!
@@ -246,18 +281,18 @@ private:
 	 *
 	 * This function MUST be called under m_lock locked. The same applies to returned host statistics reference.
 	 */
-	host_stat &get_host_stat(const int group_id, const std::string &addr) {
+	node_stat &get_host_stat(const int group_id, const std::string &addr) {
 		auto group_it = m_group_meta.find(group_id);
 		if (group_it == m_group_meta.end()) {
 			group_it = m_group_meta.insert(std::make_pair(group_id, group_meta())).first;
 		}
 
-		auto & hosts = group_it->second.hosts;
-		auto it = hosts.find(addr);
-		if (it == hosts.end()) {
-			struct host_stat st;
+		auto & nodes = group_it->second.nodes;
+		auto it = nodes.find(addr);
+		if (it == nodes.end()) {
+			struct node_stat st;
 
-			it = hosts.insert(std::make_pair(addr, st)).first;
+			it = nodes.insert(std::make_pair(addr, st)).first;
 		}
 
 		// this is a bit racy - rift could send multiple stat requests before this reply has been received
@@ -283,7 +318,7 @@ private:
 			m_logger.log(swarm::SWARM_LOG_ERROR, "vfs-stat-completion: error: %d: %s", error.code(), error.message().c_str());
 		}
 
-		// iterate over all groups and hosts and sum up size statistics
+		// iterate over all groups and nodes and sum up size statistics
 		// we do this in VFS completion callback, since this command was started after monitor request,
 		// this doesn't mean vfs stat command will be completed after monitor one, but its probability is rather high
 		//
@@ -297,14 +332,14 @@ private:
 			uint64_t total_size = 0;
 			uint64_t used_size = 0;
 			uint64_t free_size = 0;
-			size_t hosts = 0;
+			size_t nodes = 0;
 
-			for (auto it = group_meta.hosts.begin(); it != group_meta.hosts.end(); ++it) {
+			for (auto it = group_meta.nodes.begin(); it != group_meta.nodes.end(); ++it) {
 				auto & host = it->second;
 
 				int diff = m_generation - host.generation;
 				if (diff <= 1) {
-					hosts++;
+					nodes++;
 					free_size += host.vfs.bsize * host.vfs.bavail;
 					total_size += host.vfs.frsize * host.vfs.blocks;
 					used_size += host.used_size;
@@ -318,9 +353,9 @@ private:
 			// Only write size summary into the log, eventually we will export it to clients and/or some other monitoring
 			// tool, which will provide per-bucket statistics
 			m_logger.log(swarm::SWARM_LOG_INFO, "statistics: group: %d, total-size: %llu, used-size: %llu, free-size: %llu, "
-					"generation: %d, hosts: %zd/%zd",
+					"generation: %d, nodes: %zd/%zd",
 					group->first, (unsigned long long)total_size, (unsigned long long)used_size, (unsigned long long)free_size,
-					m_generation, hosts, group_meta.hosts.size());
+					m_generation, nodes, group_meta.nodes.size());
 		}
 	}
 

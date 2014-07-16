@@ -54,6 +54,10 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::prefix_match("/echo/"),
 		options::methods("POST")
 	);
+	on<rift::stat::on_stat<example_server>>(
+		options::prefix_match("/stat/"),
+		options::methods("GET")
+	);
 
 	on<rift::bucket_processor<example_server, on_delete>>(
 		options::prefix_match("/delete/"),
