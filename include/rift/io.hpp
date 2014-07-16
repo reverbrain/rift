@@ -288,10 +288,16 @@ public:
 
 			if (entry.error()) {
 				rem_groups.push_back(group_id);
-				egroups << std::to_string(group_id) << ":";
+
+				if (egroups.tellp() != 0)
+					egroups << ":";
+				egroups << std::to_string(group_id);
 			} else {
 				groups.push_back(group_id);
-				sgroups << std::to_string(group_id) << ":";
+
+				if (sgroups.tellp() != 0)
+					sgroups << ":";
+				sgroups << std::to_string(group_id);
 			}
 		}
 
@@ -319,31 +325,37 @@ public:
 			return;
 		}
 
+		rift::JsonValue value;
+		upload_completion::fill_upload_reply(result, value, value.GetAllocator());
+
+		rapidjson::Value sgroups_val(rapidjson::kArrayType);
+		rapidjson::Value egroups_val(rapidjson::kArrayType);
+
 		std::ostringstream sgroups, egroups;
 		for (auto it = result.begin(); it != result.end(); ++it) {
 			const elliptics::write_result_entry & entry = *it;
 
 			int group_id = entry.command()->id.group_id;
+			std::string group_str = std::to_string(group_id);
+			rapidjson::Value group_val(group_str.c_str(), group_str.size(), value.GetAllocator());
 
 			if (entry.error()) {
-				egroups << std::to_string(group_id) << ":";
+				if (egroups.tellp() != 0)
+					egroups << ":";
+				egroups << group_str;
+				egroups_val.PushBack(group_val, value.GetAllocator());
 			} else {
-				sgroups << std::to_string(group_id) << ":";
+				if (sgroups.tellp() != 0)
+					sgroups << ":";
+				sgroups << group_str;
+				sgroups_val.PushBack(group_val, value.GetAllocator());
 			}
 		}
 
 		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_finished: url: %s: success-groups: %s, error-groups: %s",
 				this->request().url().to_human_readable().c_str(), sgroups.str().c_str(), egroups.str().c_str());
 
-		rift::JsonValue value;
-		upload_completion::fill_upload_reply(result, value, value.GetAllocator());
-
-		std::string sgroups_str = sgroups.str();
-		rapidjson::Value sgroups_val(sgroups_str.c_str(), sgroups_str.size(), value.GetAllocator());
 		value.AddMember("success-groups", sgroups_val, value.GetAllocator());
-
-		std::string egroups_str = egroups.str();
-		rapidjson::Value egroups_val(egroups_str.c_str(), egroups_str.size(), value.GetAllocator());
 		value.AddMember("error-groups", egroups_val, value.GetAllocator());
 
 		std::string data = value.ToString();
