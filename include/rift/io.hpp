@@ -557,7 +557,7 @@ class buffer_device : public iodevice
 {
 public:
 	buffer_device(std::string &&data)
-		: iodevice(data.size()), m_str(std::move(data)), m_data(elliptics::data_pointer::from_raw(m_str))
+		: iodevice(data.size()), m_str(std::move(data)), m_data(elliptics::data_pointer::copy(m_str))
 	{
 	}
 	buffer_device(elliptics::data_pointer &&data)
@@ -626,12 +626,13 @@ public:
 
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &query = req.url().query();
+		m_url = req.url().to_human_readable();
 
 		try {
 			m_offset = query.item_value("offset", 0llu);
 			m_size = query.item_value("size", 0llu);
 		} catch (const std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: url: %s: invalid size/offset parameters: %s", req.url().to_human_readable().c_str(), e.what());
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_request: url: %s: invalid size/offset parameters: %s", m_url.c_str(), e.what());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
@@ -643,7 +644,7 @@ public:
 		auto range = this->request().headers().get("Range");
 
 		if (range) {
-			this->log(swarm::SWARM_LOG_INFO, "GET, Range: \"%s\"", range->c_str());
+			this->log(swarm::SWARM_LOG_INFO, "buffered-get: on_request: url: %s: range: \"%s\"", m_url.c_str(), range->c_str());
 			bool ok = false;
 
 			m_ranges = srange_info::parse(*range, &m_many_ranges, &ok);
@@ -683,14 +684,13 @@ public:
 				std::placeholders::_1, std::placeholders::_2));
 	}
 
-	void on_first_chunk_read(size_t size, const dnet_time &ts)
-	{
+	void on_first_chunk_read(size_t size, const dnet_time &ts) {
 		if (m_size)
 			size = std::min(size, m_offset + m_size);
 
 		if (size <= m_offset) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: finished-lookup: requested offset is too big: offset: %llu, file-size: %llu",
-					(unsigned long long)m_offset, (unsigned long long)size);
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_first_chunk_read: url: %s: requested offset is too big: offset: %llu, file-size: %llu",
+					m_url.c_str(), (unsigned long long)m_offset, (unsigned long long)size);
 
 			this->send_reply(swarm::http_response::bad_request);
 			return;
@@ -727,13 +727,14 @@ public:
 
 	void on_read_data_finished(const elliptics::sync_read_result &result, const elliptics::error_info &error) {
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: finished-read: error: %s", error.message().c_str());
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_read_data_finished: url: %s: error: %s", m_url.c_str(), error.message().c_str());
+
 			if (error.code() == -ENOENT) {
 				this->send_reply(swarm::http_response::not_found);
 				return;
 			} else if (error.code() == -E2BIG) {
-				this->log(swarm::SWARM_LOG_ERROR, "buffered-get: finished-read: requested offset is too big: offset: %llu",
-						(unsigned long long)m_offset);
+				this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_read_data_finished: url: %s: requested offset is too big: offset: %llu",
+						m_url.c_str(), (unsigned long long)m_offset);
 				this->send_reply(swarm::http_response::bad_request);
 				return;
 			} else {
@@ -755,7 +756,9 @@ public:
 
 	void on_buffered_get_lookup_finished(const elliptics::sync_lookup_result &result, const elliptics::error_info &error) {
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: finished-lookup: error: %s", error.message().c_str());
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_buffered_get_lookup_finished: url: %s: error: %s",
+					m_url.c_str(), error.message().c_str());
+
 			if (error.code() == -ENOENT) {
 				this->send_reply(swarm::http_response::not_found);
 				return;
@@ -792,7 +795,7 @@ public:
 		reply.headers().add("Accept-Ranges", "bytes");
 		reply.headers().add("Content-Range", content_range);
 
-		this->log(swarm::SWARM_LOG_INFO, "GET, Content-Range: %s", content_range.c_str());
+		this->log(swarm::SWARM_LOG_INFO, "buffered-get: on_range: url: %s: Content-Range: %s", m_url.c_str(), content_range.c_str());
 
 		add_async(range.begin, range.end - range.begin + 1);
 
@@ -848,24 +851,29 @@ public:
 			const elliptics::error_info &error, bool last)
 	{
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get-redirect: finished-read: error: %s, offset: %llu",
-					error.message().c_str(), (unsigned long long)offset);
-			auto ec = boost::system::errc::make_error_code(
-					static_cast<boost::system::errc::errc_t>(-error.code()));
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_read_finished: url: %s: error: %s, offset: %llu, last: %d",
+					m_url.c_str(), error.message().c_str(), (unsigned long long)offset, last);
+
+			auto ec = boost::system::errc::make_error_code(static_cast<boost::system::errc::errc_t>(-error.code()));
 			this->get_reply()->close(ec);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: finished-read: offset: %llu, data-size: %llu, last: %d",
-				(unsigned long long)offset, (unsigned long long)file.size(), last);
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: offset: %llu, data-size: %llu, last: %d",
+				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last);
 
 		if (last)
 			m_devices.pop_front();
 
 		const size_t second_size = file.size() / 2;
 
-		auto first_part = file.slice(0, file.size()  - second_size);
+		auto first_part = file.slice(0, file.size() - second_size);
 		auto second_part = file.slice(first_part.size(), second_size);
+
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: offset: %llu, data-size: %llu, last: %d, "
+				"first-part: offset: %zd, size: %zd, second-part: offset: %zd, size: %zd",
+				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last,
+				first_part.offset(), first_part.size(), second_part.offset(), second_part.size());
 
 		this->send_data(std::move(first_part), std::bind(&on_get_base::on_part_sent,
 			this->shared_from_this(), offset + file.size(), std::placeholders::_1, second_part));
@@ -874,11 +882,11 @@ public:
 	virtual void on_part_sent(size_t offset, const boost::system::error_code &error, const elliptics::data_pointer &second_part)
 	{
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get-redirect: finished-part: error: %s, next-read-offset: %llu, second-part-size: %llu",
-					error.message().c_str(), (unsigned long long)offset, (unsigned long long)second_part.size());
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_part_sent: url: %s: error: %s, next-read-offset: %llu, second-part-size: %llu",
+					m_url.c_str(), error.message().c_str(), (unsigned long long)offset, (unsigned long long)second_part.size());
 		} else {
-			this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: finished-part: next-read-offset: %llu, second-part-size: %llu",
-					(unsigned long long)offset, (unsigned long long)second_part.size());
+			this->log(swarm::SWARM_LOG_NOTICE, "buffered-get: on_part_sent: url: %s: next-read-offset: %llu, second-part-size: %llu",
+					m_url.c_str(), (unsigned long long)offset, (unsigned long long)second_part.size());
 		}
 
 		if (m_devices.empty()) {
@@ -973,6 +981,7 @@ protected:
 	uint64_t m_buffer_size;
 	uint64_t m_offset;
 	uint64_t m_size;
+	std::string m_url;
 };
 
 template <typename Server>
