@@ -556,8 +556,8 @@ private:
 class buffer_device : public iodevice
 {
 public:
-	buffer_device(std::string &&data)
-		: iodevice(data.size()), m_str(std::move(data)), m_data(elliptics::data_pointer::copy(m_str))
+	buffer_device(const std::string &data)
+		: iodevice(data.size()), m_data(elliptics::data_pointer::copy(data))
 	{
 	}
 	buffer_device(elliptics::data_pointer &&data)
@@ -571,7 +571,6 @@ public:
 		handler(m_data, elliptics::error_info(), true);
 	}
 private:
-	std::string m_str;
 	elliptics::data_pointer m_data;
 };
 
