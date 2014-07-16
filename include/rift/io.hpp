@@ -195,8 +195,6 @@ public:
 	virtual void on_request(const swarm::http_request &req) {
 		this->set_chunk_size(10 * 1024 * 1024);
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_request: url: %s", this->request().url().to_human_readable().c_str());
-
 		try {
 			const auto &query = this->request().url().query();
 			m_offset = query.item_value("offset", 0llu);
@@ -210,6 +208,10 @@ public:
 			m_size = *size;
 		else
 			m_size = 0;
+
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_request: url: %s, offset: %llu, size: %llu",
+				this->request().url().to_human_readable().c_str(),
+				(unsigned long long)m_offset, (unsigned long long)m_size);
 
 		m_session.reset(new elliptics::session(this->server()->create_session(static_cast<Stream&>(*this), req, m_key)));
 	}
@@ -274,20 +276,27 @@ public:
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_partial: url: %s",
-				this->request().url().to_human_readable().c_str());
-
 		// continue only with the groups where update succeeded
 		std::vector<int> groups, rem_groups;
 
-		for (auto it = result.begin(); it != result.end(); ++it) {
-			elliptics::write_result_entry entry = *it;
+		std::ostringstream sgroups, egroups;
 
-			if (entry.error())
-				rem_groups.push_back(entry.command()->id.group_id);
-			else
-				groups.push_back(entry.command()->id.group_id);
+		for (auto it = result.begin(); it != result.end(); ++it) {
+			const elliptics::write_result_entry & entry = *it;
+
+			int group_id = entry.command()->id.group_id;
+
+			if (entry.error()) {
+				rem_groups.push_back(group_id);
+				egroups << std::to_string(group_id) << ":";
+			} else {
+				groups.push_back(group_id);
+				sgroups << std::to_string(group_id) << ":";
+			}
 		}
+
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_partial: url: %s: success-groups: %s, error-groups: %s",
+				this->request().url().to_human_readable().c_str(), sgroups.str().c_str(), egroups.str().c_str());
 
 		elliptics::session tmp = m_session->clone();
 		tmp.set_groups(rem_groups);
@@ -310,11 +319,32 @@ public:
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_finished: url: %s",
-				this->request().url().to_human_readable().c_str());
+		std::ostringstream sgroups, egroups;
+		for (auto it = result.begin(); it != result.end(); ++it) {
+			const elliptics::write_result_entry & entry = *it;
+
+			int group_id = entry.command()->id.group_id;
+
+			if (entry.error()) {
+				egroups << std::to_string(group_id) << ":";
+			} else {
+				sgroups << std::to_string(group_id) << ":";
+			}
+		}
+
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_finished: url: %s: success-groups: %s, error-groups: %s",
+				this->request().url().to_human_readable().c_str(), sgroups.str().c_str(), egroups.str().c_str());
 
 		rift::JsonValue value;
 		upload_completion::fill_upload_reply(result, value, value.GetAllocator());
+
+		std::string sgroups_str = sgroups.str();
+		rapidjson::Value sgroups_val(sgroups_str.c_str(), sgroups_str.size(), value.GetAllocator());
+		value.AddMember("success-groups", sgroups_val, value.GetAllocator());
+
+		std::string egroups_str = egroups.str();
+		rapidjson::Value egroups_val(egroups_str.c_str(), egroups_str.size(), value.GetAllocator());
+		value.AddMember("error-groups", egroups_val, value.GetAllocator());
 
 		std::string data = value.ToString();
 
