@@ -214,13 +214,17 @@ private:
 		struct dnet_stat	vfs;
 
 		// 'backend' monitoring output (json) from elliptics node
-		std::string		monitor;
+		rapidjson::Value	doc_backend;
 
 		// base_size from backend monitor output
 		// it should be equal to data + all indexes size
 		uint64_t		used_size;
 
 		int			generation;
+
+		node_stat(node_stat &&orig) : used_size(orig.used_size), generation(orig.generation) {
+			doc_backend = orig.doc_backend;
+		}
 
 		node_stat() : used_size(0), generation(0) {
 			memset(&vfs, 0, sizeof(struct dnet_stat));
@@ -232,6 +236,7 @@ private:
 			v.AddMember("bsize", vfs.bsize, allocator);
 
 			ret.AddMember("vfs", v, allocator);
+			ret.AddMember("backend", doc_backend, allocator);
 		}
 	};
 
@@ -292,7 +297,7 @@ private:
 		if (it == nodes.end()) {
 			struct node_stat st;
 
-			it = nodes.insert(std::make_pair(addr, st)).first;
+			it = nodes.emplace(std::make_pair(addr, std::move(st))).first;
 		}
 
 		// this is a bit racy - rift could send multiple stat requests before this reply has been received
@@ -369,11 +374,12 @@ private:
 		doc.Parse<0>(res.statistics().c_str());
 
 		uint64_t base_size = 0;
+		int generation = 0;
 
 		if (doc.HasMember("backend")) {
 			// Right now we only support one backend per elliptics node, after this is changed,
 			// we must account backend array/map here
-			const auto & backend = doc["backend"];
+			auto & backend = doc["backend"];
 			if (backend.IsObject()) {
 				if (backend.HasMember("base_stats")) {
 					const auto & base = backend["base_stats"];
@@ -393,15 +399,17 @@ private:
 					}
 				}
 			}
+
+			std::unique_lock<std::mutex> guard(m_lock);
+			auto & host = get_host_stat(group_id, addr);
+
+			host.doc_backend = backend;
+			host.used_size = base_size;
+
+			generation = host.generation;
 		}
 
-		std::unique_lock<std::mutex> guard(m_lock);
-		auto & host = get_host_stat(group_id, addr);
-
-		host.monitor = res.statistics();
-		host.used_size = base_size;
-
-		m_logger.log(swarm::SWARM_LOG_NOTICE, "%s: MONITOR statistics updated, generation: %d, base-size: %zd", addr.c_str(), host.generation, base_size);
+		m_logger.log(swarm::SWARM_LOG_NOTICE, "%s: MONITOR statistics updated, generation: %d, base-size: %zd", addr.c_str(), generation, base_size);
 	}
 
 	void monitor_stat_complete(const elliptics::error_info &error) {
