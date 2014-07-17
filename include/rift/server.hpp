@@ -297,7 +297,7 @@ private:
 		if (it == nodes.end()) {
 			struct node_stat st;
 
-			it = nodes.emplace(std::make_pair(addr, std::move(st))).first;
+			it = nodes.insert(std::make_pair(addr, std::move(st))).first;
 		}
 
 		// this is a bit racy - rift could send multiple stat requests before this reply has been received
