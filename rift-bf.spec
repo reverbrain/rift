@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.10.0
+Version:	2.25.0.10.1
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -66,6 +66,18 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Thu Jul 17 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.1
+- stat: put backend monitor json object into node_stat. Final stat json contains monitor json as 'backend' object.
+- stat: initial implementation of the internal stats fetching via /stat/ handler
+- Return back bulk dnet_add_state()/add_remote()
+- package: depend on 2.25.5.0+ elliptics-dev/elliptics-client
+- io: use json array when returning success/error write groups, cleaned up write logs
+- io: added success/error groups debug into writing path. write command returns success/error groups in result json now too.
+- io: do not request checksums for the second and the rest chunks. This is temporal change until elliptics backends start supporting partial checksums
+- buffer-device: get rid of internal string
+- io: fixed buffered_device() constructor from std::string.
+- io: added lots of logs with URL string
+
 * Sun Jul 13 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.0
 - indexes: removed index update at upload/delete operations
 - debug: alot of new debug prints at info level like partial write and so on

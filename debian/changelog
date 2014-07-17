@@ -1,3 +1,18 @@
+rift (2.25.0.10.1) unstable; urgency=low
+
+  * stat: put backend monitor json object into node_stat. Final stat json contains monitor json as 'backend' object.
+  * stat: initial implementation of the internal stats fetching via /stat/ handler
+  * Return back bulk dnet_add_state()/add_remote()
+  * package: depend on 2.25.5.0+ elliptics-dev/elliptics-client
+  * io: use json array when returning success/error write groups, cleaned up write logs
+  * io: added success/error groups debug into writing path. write command returns success/error groups in result json now too.
+  * io: do not request checksums for the second and the rest chunks. This is temporal change until elliptics backends start supporting partial checksums
+  * buffer-device: get rid of internal string
+  * io: fixed buffered_device() constructor from std::string.
+  * io: added lots of logs with URL string
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Thu, 17 Jul 2014 04:07:02 +0400
+
 rift (2.25.0.10.0) unstable; urgency=low
 
   * indexes: removed index update at upload/delete operations
