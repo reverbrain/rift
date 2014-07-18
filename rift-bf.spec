@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.10.1
+Version:	2.25.0.10.2
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -66,6 +66,14 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Fri Jul 18 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.2
+- io: added iodevice index, which shows current iodevice to read from when handling client's /get/ request
+- rift-client-test: added 5-seconds request timeout. it is supposed to terminate get/post request on timeout
+- tests: stop after the first failure
+- delete: added logs into delete handler
+- packge: rift must depend on elliptics package, which contains server libs, they are needed to run tests
+- stat: added /stat/ handler
+
 * Thu Jul 17 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.1
 - stat: put backend monitor json object into node_stat. Final stat json contains monitor json as 'backend' object.
 - stat: initial implementation of the internal stats fetching via /stat/ handler
