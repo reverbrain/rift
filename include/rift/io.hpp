@@ -890,11 +890,11 @@ public:
 	{
 		iodevice *device = m_devices.front().get();
 
-		device->read(m_buffer_size, std::bind(
-			&on_get_base::on_read_finished, this->shared_from_this(),
+		device->read(m_buffer_size, std::bind(&on_get_base::on_read_finished, this->shared_from_this(),
 			offset, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 	}
 
+	// @last means the last chunk in given device, not the last chunk in client request
 	virtual void on_read_finished(uint64_t offset, const elliptics::data_pointer &file,
 			const elliptics::error_info &error, bool last)
 	{
@@ -913,7 +913,8 @@ public:
 				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last);
 
 		if (last) {
-			this->send_data(file, std::bind(&on_get_base::close, this->shared_from_this(), std::placeholders::_1));
+			// elliptics::data_pointer() wrapper is needed here since ->send_file() requires modifiable rvalue
+			this->send_data(elliptics::data_pointer(file), std::bind(&on_get_base::close, this->shared_from_this(), std::placeholders::_1));
 		} else {
 			const size_t second_size = file.size() / 2;
 
