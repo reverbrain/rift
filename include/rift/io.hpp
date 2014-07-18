@@ -1044,6 +1044,9 @@ public:
 	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
+		this->log(swarm::SWARM_LOG_INFO, "delete: on_request: url: %s",
+				req.url().to_human_readable().c_str());
+
 		elliptics::key key;
 		elliptics::session session = this->server()->create_session(static_cast<Stream&>(*this), req, key);
 
@@ -1054,6 +1057,9 @@ public:
 
 	virtual void on_delete_finished(const elliptics::sync_remove_result &result,
 			const elliptics::error_info &error) {
+		this->log(swarm::SWARM_LOG_INFO, "delete: on_delete_finished: url: %s, error: %s",
+				this->request().url().to_human_readable().c_str(), error.message().c_str());
+
 		if (error.code() == -ENOENT) {
 			this->send_reply(swarm::http_response::not_found);
 			return;
