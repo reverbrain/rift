@@ -199,7 +199,8 @@ public:
 			const auto &query = this->request().url().query();
 			m_offset = query.item_value("offset", 0llu);
 		} catch (const std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s: invalid offset parameter: %s", req.url().to_human_readable().c_str(), e.what());
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s: invalid offset parameter: %s",
+					req.url().to_human_readable().c_str(), e.what());
 			this->send_reply(swarm::http_response::bad_request);
 			return;
 		}
@@ -898,7 +899,8 @@ public:
 			const elliptics::error_info &error, bool last)
 	{
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_read_finished: url: %s: error: %s, offset: %llu, last: %d",
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_read_finished: url: %s: error: %s, "
+					"offset: %llu, last: %d",
 					m_url.c_str(), error.message().c_str(), (unsigned long long)offset, last);
 
 			auto ec = boost::system::errc::make_error_code(static_cast<boost::system::errc::errc_t>(-error.code()));
@@ -906,44 +908,46 @@ public:
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: offset: %llu, data-size: %llu, last: %d",
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: "
+				"offset: %llu, data-size: %llu, last: %d",
 				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last);
 
-		if (last)
-			m_devices.pop_front();
+		if (last) {
+			this->send_data(file, std::bind(&on_get_base::close, this->shared_from_this(), std::placeholders::_1));
+		} else {
+			const size_t second_size = file.size() / 2;
 
-		const size_t second_size = file.size() / 2;
+			auto first_part = file.slice(0, file.size() - second_size);
+			auto second_part = file.slice(first_part.size(), second_size);
 
-		auto first_part = file.slice(0, file.size() - second_size);
-		auto second_part = file.slice(first_part.size(), second_size);
+			this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: "
+					"fset: %llu, data-size: %llu, last: %d, "
+					"first-part: offset: %zd, size: %zd, second-part: offset: %zd, size: %zd",
+					m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last,
+					first_part.offset(), first_part.size(), second_part.offset(), second_part.size());
 
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: offset: %llu, data-size: %llu, last: %d, "
-				"first-part: offset: %zd, size: %zd, second-part: offset: %zd, size: %zd",
-				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last,
-				first_part.offset(), first_part.size(), second_part.offset(), second_part.size());
-
-		this->send_data(std::move(first_part), std::bind(&on_get_base::on_part_sent,
-			this->shared_from_this(), offset + file.size(), std::placeholders::_1, second_part));
+			this->send_data(std::move(first_part), std::bind(&on_get_base::on_part_sent,
+				this->shared_from_this(), offset + file.size(), std::placeholders::_1, second_part));
+		}
 	}
 
 	virtual void on_part_sent(size_t offset, const boost::system::error_code &error, const elliptics::data_pointer &second_part)
 	{
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_part_sent: url: %s: error: %s, next-read-offset: %llu, second-part-size: %llu",
-					m_url.c_str(), error.message().c_str(), (unsigned long long)offset, (unsigned long long)second_part.size());
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_part_sent: url: %s: error: %s, "
+					"next-read-offset: %llu, second-part-size: %llu",
+					m_url.c_str(), error.message().c_str(),
+					(unsigned long long)offset, (unsigned long long)second_part.size());
 		} else {
-			this->log(swarm::SWARM_LOG_NOTICE, "buffered-get: on_part_sent: url: %s: next-read-offset: %llu, second-part-size: %llu",
+			this->log(swarm::SWARM_LOG_NOTICE, "buffered-get: on_part_sent: url: %s: "
+					"next-read-offset: %llu, second-part-size: %llu",
 					m_url.c_str(), (unsigned long long)offset, (unsigned long long)second_part.size());
 		}
 
-		if (m_devices.empty()) {
+		if (!second_part.empty())
 			this->send_data(elliptics::data_pointer(second_part),
-				std::bind(&on_get_base::close, this->shared_from_this(), std::placeholders::_1));
-		} else {
-			if (!second_part.empty())
-				this->send_data(elliptics::data_pointer(second_part), std::function<void (const boost::system::error_code &)>());
-			read_next(offset);
-		}
+					std::function<void (const boost::system::error_code &)>());
+		read_next(offset);
 	}
 
 protected:
