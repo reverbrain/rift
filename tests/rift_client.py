@@ -84,13 +84,13 @@ class Client:
 
     def authorized_get(self, url, user, **kwargs):
         fixed_url, fixed_args = self.generate_url('GET', url, user, **kwargs)
-        r = requests.get(fixed_url, **fixed_args)
+        r = requests.get(fixed_url, timeout=5, **fixed_args)
         assert isinstance(r, requests.Response)
         return r
 
     def authorized_post(self, url, data, user, **kwargs):
         fixed_url, fixed_args = self.generate_url('POST', url, user, **kwargs)
-        r = requests.post(fixed_url, data, **fixed_args)
+        r = requests.post(fixed_url, data, timeout=5, **fixed_args)
         assert isinstance(r, requests.Response)
         return r
 
