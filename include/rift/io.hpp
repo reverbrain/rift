@@ -662,7 +662,7 @@ template <typename Server, typename Stream>
 class on_get_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	on_get_base() : m_prefetched_offset(0), m_buffer_size(5 * 1025 * 1024)
+	on_get_base() : m_devices_index(0), m_prefetched_offset(0), m_buffer_size(5 * 1025 * 1024)
 	{
 	}
 
@@ -888,13 +888,11 @@ public:
 
 	void read_next(uint64_t offset)
 	{
-		iodevice *device = m_devices.front().get();
-
-		device->read(m_buffer_size, std::bind(&on_get_base::on_read_finished, this->shared_from_this(),
+		m_devices[m_devices_index]->read(m_buffer_size, std::bind(&on_get_base::on_read_finished, this->shared_from_this(),
 			offset, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 	}
 
-	// @last means the last chunk in given device, not the last chunk in client request
+	// @last means the last chunk in given device, not the last chunk in client's request
 	virtual void on_read_finished(uint64_t offset, const elliptics::data_pointer &file,
 			const elliptics::error_info &error, bool last)
 	{
@@ -909,27 +907,33 @@ public:
 		}
 
 		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: "
-				"offset: %llu, data-size: %llu, last: %d",
-				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last);
+				"offset: %llu, data-size: %llu, last-in-current-device: %d, device: %d/%zd",
+				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last,
+				m_devices_index, m_devices.size());
 
+		throw std::runtime_error("test");
 		if (last) {
-			// elliptics::data_pointer() wrapper is needed here since ->send_file() requires modifiable rvalue
-			this->send_data(elliptics::data_pointer(file), std::bind(&on_get_base::close, this->shared_from_this(), std::placeholders::_1));
-		} else {
-			const size_t second_size = file.size() / 2;
-
-			auto first_part = file.slice(0, file.size() - second_size);
-			auto second_part = file.slice(first_part.size(), second_size);
-
-			this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: "
-					"fset: %llu, data-size: %llu, last: %d, "
-					"first-part: offset: %zd, size: %zd, second-part: offset: %zd, size: %zd",
-					m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last,
-					first_part.offset(), first_part.size(), second_part.offset(), second_part.size());
-
-			this->send_data(std::move(first_part), std::bind(&on_get_base::on_part_sent,
-				this->shared_from_this(), offset + file.size(), std::placeholders::_1, second_part));
+			m_devices_index++;
 		}
+
+		if (m_devices_index == m_devices.size()) {
+			this->send_data(elliptics::data_pointer(file), std::bind(&on_get_base::close, this->shared_from_this(), std::placeholders::_1));
+			return;
+		}
+
+		const size_t second_size = file.size() / 2;
+
+		auto first_part = file.slice(0, file.size() - second_size);
+		auto second_part = file.slice(first_part.size(), second_size);
+
+		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: "
+				"fset: %llu, data-size: %llu, last: %d, "
+				"first-part: offset: %zd, size: %zd, second-part: offset: %zd, size: %zd",
+				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last,
+				first_part.offset(), first_part.size(), second_part.offset(), second_part.size());
+
+		this->send_data(std::move(first_part), std::bind(&on_get_base::on_part_sent,
+			this->shared_from_this(), offset + file.size(), std::placeholders::_1, second_part));
 	}
 
 	virtual void on_part_sent(size_t offset, const boost::system::error_code &error, const elliptics::data_pointer &second_part)
@@ -1024,6 +1028,9 @@ protected:
 	}
 
 	std::deque<std::unique_ptr<iodevice>> m_devices;
+	// index of the device to be processed from @m_devices array
+	// when it reaches m_devices.size(), there will be no more packets to client
+	int m_devices_index;
 	std::unique_ptr<elliptics::session> m_session;
 	std::vector<srange_info> m_ranges;
 	bool m_many_ranges;
