@@ -8,8 +8,8 @@ add_custom_target(test
     . "${CMAKE_CURRENT_BINARY_DIR}/bin/activate" &&
     pip install pytest requests boto &&
     export LD_LIBRARY_PATH="\${LD_LIBRARY_PATH}:${CMAKE_CURRENT_BINARY_DIR}/../src" &&
-    py.test "${CMAKE_CURRENT_SOURCE_DIR}/tests.py" "--server=${RIFT_SERVER}" &&
-    py.test "${CMAKE_CURRENT_SOURCE_DIR}/tests.py" --bucket=xxx "--server=${RIFT_SERVER}" "--s3server=${S3_SERVER}"
+    py.test -x "${CMAKE_CURRENT_SOURCE_DIR}/tests.py" "--server=${RIFT_SERVER}" &&
+    py.test -x "${CMAKE_CURRENT_SOURCE_DIR}/tests.py" --bucket=xxx "--server=${RIFT_SERVER}" "--s3server=${S3_SERVER}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
     DEPENDS rift_server s3_server
 )
