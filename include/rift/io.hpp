@@ -911,7 +911,6 @@ public:
 				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last,
 				m_devices_index, m_devices.size());
 
-		throw std::runtime_error("test");
 		if (last) {
 			m_devices_index++;
 		}
