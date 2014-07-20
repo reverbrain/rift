@@ -105,6 +105,10 @@ public:
 		return m_metadata_groups;
 	}
 
+	std::vector<std::pair<struct dnet_id, dnet_addr> > get_routes() const {
+		return m_session->get_routes();
+	}
+
 	void stat_update() {
 		m_generation++;
 
