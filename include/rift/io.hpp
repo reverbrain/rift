@@ -2,6 +2,7 @@
 #define __IOREMAP_RIFT_IO_HPP
 
 #include "rift/jsonvalue.hpp"
+#include "rift/timer.hpp"
 #include "rift/url.hpp"
 
 #include <swarm/url.hpp>
@@ -193,11 +194,13 @@ class on_upload_base : public thevoid::buffered_request_stream<Server>, public s
 {
 public:
 	virtual void on_request(const swarm::http_request &req) {
+		m_timer.restart();
+
 		this->set_chunk_size(10 * 1024 * 1024);
 
 		try {
 			const auto &query = this->request().url().query();
-			m_offset = query.item_value("offset", 0llu);
+			m_orig_offset = m_offset = query.item_value("offset", 0llu);
 		} catch (const std::exception &e) {
 			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s: invalid offset parameter: %s",
 					req.url().to_human_readable().c_str(), e.what());
@@ -262,17 +265,17 @@ public:
 	}
 
 	virtual void on_error(const boost::system::error_code &error) {
-		this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_error: url: %s, error: %s",
-				this->request().url().to_human_readable().c_str(), error.message().c_str());
+		this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_error: url: %s, error: %s, written: %zu/%zu, time: %ld usecs",
+				this->request().url().to_human_readable().c_str(), error.message().c_str(),
+				m_offset - m_orig_offset, m_size, m_timer.elapsed());
 	}
 
 	virtual void on_write_partial(const elliptics::sync_write_result &result, const elliptics::error_info &error) {
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_partial: url: %s, offset: %lu, size: %zu, error: %s",
-				this->request().url().to_human_readable().c_str(), m_offset, m_size, error.message().c_str());
-
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_write_partial: url: %s, partial write error: %s",
-					this->request().url().to_human_readable().c_str(), error.message().c_str());
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_write_partial: url: %s, partial write error: %s, "
+					"written: %zu/%zu, time: %ld usecs",
+					this->request().url().to_human_readable().c_str(), error.message().c_str(),
+					m_offset - m_orig_offset, m_size, m_timer.elapsed());
 			this->on_write_finished(result, error);
 			return;
 		}
@@ -302,8 +305,10 @@ public:
 			}
 		}
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_partial: url: %s: success-groups: %s, error-groups: %s",
-				this->request().url().to_human_readable().c_str(), sgroups.str().c_str(), egroups.str().c_str());
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_partial: url: %s: "
+				"success-groups: %s, error-groups: %s, offset: %lu, written: %zu/%zu, time: %ld usecs",
+				this->request().url().to_human_readable().c_str(), sgroups.str().c_str(), egroups.str().c_str(),
+				m_offset, m_offset - m_orig_offset, m_size, m_timer.elapsed());
 
 		elliptics::session tmp = m_session->clone();
 		tmp.set_groups(rem_groups);
@@ -316,12 +321,11 @@ public:
 
 	virtual void on_write_finished(const elliptics::sync_write_result &result,
 			const elliptics::error_info &error) {
-		this->log(swarm::SWARM_LOG_INFO, "on_write_finished: url: %s, offset: %lu, size: %zu, error: %s",
-				this->request().url().to_human_readable().c_str(), m_offset, m_size, error.message().c_str());
-
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_write_finished: url: %s, full write error: %s",
-					this->request().url().to_human_readable().c_str(), error.message().c_str());
+			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_write_finished: url: %s, full write error: %s, "
+					"written: %zu/%zu, time: %ld usecs",
+					this->request().url().to_human_readable().c_str(), error.message().c_str(),
+					m_offset - m_orig_offset, m_size, m_timer.elapsed());
 			this->send_reply(swarm::http_response::service_unavailable);
 			return;
 		}
@@ -353,11 +357,15 @@ public:
 			}
 		}
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_finished: url: %s: success-groups: %s, error-groups: %s",
-				this->request().url().to_human_readable().c_str(), sgroups.str().c_str(), egroups.str().c_str());
+		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_finished: url: %s: "
+				"success-groups: %s, error-groups: %s, offset: %lu, written: %zu/%zu, time: %ld usecs",
+				this->request().url().to_human_readable().c_str(), sgroups.str().c_str(), egroups.str().c_str(),
+				m_offset, m_offset - m_orig_offset, m_size, m_timer.elapsed());
 
 		value.AddMember("success-groups", sgroups_val, value.GetAllocator());
 		value.AddMember("error-groups", egroups_val, value.GetAllocator());
+		value.AddMember("offset", m_orig_offset, value.GetAllocator());
+		value.AddMember("rate", (double)m_timer.elapsed() / (double)m_size, value.GetAllocator());
 
 		std::string data = value.ToString();
 
@@ -374,8 +382,10 @@ protected:
 	elliptics::key m_key;
 	std::unique_ptr<elliptics::session> m_session;
 
-	uint64_t m_offset;
+	uint64_t m_offset, m_orig_offset;
 	uint64_t m_size;
+
+	rift::timer m_timer;
 };
 
 template <typename Server>
