@@ -295,13 +295,13 @@ public:
 
 				if (egroups.tellp() != 0)
 					egroups << ":";
-				egroups << std::to_string(group_id);
+				egroups << group_id;
 			} else {
 				groups.push_back(group_id);
 
 				if (sgroups.tellp() != 0)
 					sgroups << ":";
-				sgroups << std::to_string(group_id);
+				sgroups << group_id;
 			}
 		}
 
@@ -341,7 +341,7 @@ public:
 			const elliptics::write_result_entry & entry = *it;
 
 			int group_id = entry.command()->id.group_id;
-			std::string group_str = std::to_string(group_id);
+			std::string group_str = std::to_string(static_cast<long long int>(group_id));
 			rapidjson::Value group_val(group_str.c_str(), group_str.size(), value.GetAllocator());
 
 			if (entry.error()) {
