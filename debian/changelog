@@ -1,3 +1,9 @@
+rift (2.25.0.10.4) unstable; urgency=low
+
+  * rift: Added ability to configure threads count
+
+ -- Ruslan Nigmatullin <euroelessar@yandex.ru>  Tue, 22 Jul 2014 17:52:36 +0400
+
 rift (2.25.0.10.3) unstable; urgency=low
 
   * io: get rid of exception added into /get/ handler for test purposes

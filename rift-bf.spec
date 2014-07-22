@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.10.3
+Version:	2.25.0.10.4
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -66,6 +66,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Jul 22 2014 Ruslan Nigmatullin <euroelessar@yandex.ru> - 2.25.0.10.4
+- rift: Added ability to configure threads count
+
 * Tue Jul 22 2014 Ruslan Nigmatullin <euroelessar@yandex.ru> - 2.25.0.10.3
 - io: get rid of exception added into /get/ handler for test purposes
 - io: added write rate calculation, added more upload handler logs
