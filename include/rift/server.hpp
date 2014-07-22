@@ -129,7 +129,7 @@ public:
 
 			it->second.stat(g, allocator);
 
-			ret.AddMember(std::to_string(it->first).c_str(), allocator, g, allocator);
+			ret.AddMember(std::to_string(static_cast<unsigned long long>(it->first)).c_str(), allocator, g, allocator);
 		}
 	}
 

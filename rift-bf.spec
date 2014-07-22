@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.10.2
+Version:	2.25.0.10.3
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -66,6 +66,12 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Jul 22 2014 Ruslan Nigmatullin <euroelessar@yandex.ru> - 2.25.0.10.3
+- io: get rid of exception added into /get/ handler for test purposes
+- io: added write rate calculation, added more upload handler logs
+- stat: added /route/ handler which returns json-encoded elliptics route table
+- io: Fixed segfault in case if there is no filename
+
 * Fri Jul 18 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.2
 - io: added iodevice index, which shows current iodevice to read from when handling client's /get/ request
 - rift-client-test: added 5-seconds request timeout. it is supposed to terminate get/post request on timeout

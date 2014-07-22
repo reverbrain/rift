@@ -1,3 +1,12 @@
+rift (2.25.0.10.3) unstable; urgency=low
+
+  * io: get rid of exception added into /get/ handler for test purposes
+  * io: added write rate calculation, added more upload handler logs
+  * stat: added /route/ handler which returns json-encoded elliptics route table
+  * io: Fixed segfault in case if there is no filename
+
+ -- Ruslan Nigmatullin <euroelessar@yandex.ru>  Tue, 22 Jul 2014 16:45:14 +0400
+
 rift (2.25.0.10.2) unstable; urgency=low
 
   * io: added iodevice index, which shows current iodevice to read from when handling client's /get/ request
