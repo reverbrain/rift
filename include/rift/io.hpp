@@ -917,7 +917,7 @@ public:
 		}
 
 		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: "
-				"offset: %llu, data-size: %llu, last-in-current-device: %d, device: %d/%zd",
+				"offset: %llu, data-size: %llu, last-in-current-device: %d, device: %zd/%zd",
 				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last,
 				m_devices_index, m_devices.size());
 
@@ -1039,7 +1039,7 @@ protected:
 	std::deque<std::unique_ptr<iodevice>> m_devices;
 	// index of the device to be processed from @m_devices array
 	// when it reaches m_devices.size(), there will be no more packets to client
-	int m_devices_index;
+	size_t m_devices_index;
 	std::unique_ptr<elliptics::session> m_session;
 	std::vector<srange_info> m_ranges;
 	bool m_many_ranges;
