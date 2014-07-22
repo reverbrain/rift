@@ -265,7 +265,7 @@ public:
 	}
 
 	virtual void on_error(const boost::system::error_code &error) {
-		this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_error: url: %s, error: %s, written: %zu/%zu, time: %ld usecs",
+		this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_error: url: %s, error: %s, written: %zu/%zu, time: %ld msecs",
 				this->request().url().to_human_readable().c_str(), error.message().c_str(),
 				m_offset - m_orig_offset, m_size, m_timer.elapsed());
 	}
@@ -273,7 +273,7 @@ public:
 	virtual void on_write_partial(const elliptics::sync_write_result &result, const elliptics::error_info &error) {
 		if (error) {
 			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_write_partial: url: %s, partial write error: %s, "
-					"written: %zu/%zu, time: %ld usecs",
+					"written: %zu/%zu, time: %ld msecs",
 					this->request().url().to_human_readable().c_str(), error.message().c_str(),
 					m_offset - m_orig_offset, m_size, m_timer.elapsed());
 			this->on_write_finished(result, error);
@@ -306,7 +306,7 @@ public:
 		}
 
 		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_partial: url: %s: "
-				"success-groups: %s, error-groups: %s, offset: %lu, written: %zu/%zu, time: %ld usecs",
+				"success-groups: %s, error-groups: %s, offset: %lu, written: %zu/%zu, time: %ld msecs",
 				this->request().url().to_human_readable().c_str(), sgroups.str().c_str(), egroups.str().c_str(),
 				m_offset, m_offset - m_orig_offset, m_size, m_timer.elapsed());
 
@@ -323,7 +323,7 @@ public:
 			const elliptics::error_info &error) {
 		if (error) {
 			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_write_finished: url: %s, full write error: %s, "
-					"written: %zu/%zu, time: %ld usecs",
+					"written: %zu/%zu, time: %ld msecs",
 					this->request().url().to_human_readable().c_str(), error.message().c_str(),
 					m_offset - m_orig_offset, m_size, m_timer.elapsed());
 			this->send_reply(swarm::http_response::service_unavailable);
@@ -358,7 +358,7 @@ public:
 		}
 
 		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_finished: url: %s: "
-				"success-groups: %s, error-groups: %s, offset: %lu, written: %zu/%zu, time: %ld usecs",
+				"success-groups: %s, error-groups: %s, offset: %lu, written: %zu/%zu, time: %ld msecs",
 				this->request().url().to_human_readable().c_str(), sgroups.str().c_str(), egroups.str().c_str(),
 				m_offset, m_offset - m_orig_offset, m_size, m_timer.elapsed());
 
