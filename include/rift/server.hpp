@@ -135,8 +135,16 @@ public:
 
 protected:
 	virtual bool prepare_config(const rapidjson::Value &config, dnet_config &node_config) {
-		(void) config;
-		(void) node_config;
+		if (config.HasMember("io-thread-num")) {
+			node_config.io_thread_num = config["io-thread-num"].GetInt();
+		}
+		if (config.HasMember("nonblocking-io-thread-num")) {
+			node_config.nonblocking_io_thread_num = config["nonblocking-io-thread-num"].GetInt();
+		}
+		if (config.HasMember("io-thread-num")) {
+			node_config.net_thread_num = config["net-thread-num"].GetInt();
+		}
+
 		return true;
 	}
 
