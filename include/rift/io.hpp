@@ -146,7 +146,7 @@ public:
 		rapidjson::Value csum_str_value(csum_str, 2 * DNET_ID_SIZE, allocator);
 		result_object.AddMember("csum", csum_str_value, allocator);
 
-		if (entry.file_path()) {
+		if (entry.file_info()->flen > 1) {
 			// copy filename without trailing 0-byte
 			rapidjson::Value filename_value(entry.file_path(), entry.file_info()->flen - 1, allocator);
 			result_object.AddMember("filename", filename_value, allocator);
