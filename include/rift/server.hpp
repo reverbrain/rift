@@ -141,7 +141,7 @@ protected:
 		if (config.HasMember("nonblocking-io-thread-num")) {
 			node_config.nonblocking_io_thread_num = config["nonblocking-io-thread-num"].GetInt();
 		}
-		if (config.HasMember("io-thread-num")) {
+		if (config.HasMember("net-thread-num")) {
 			node_config.net_thread_num = config["net-thread-num"].GetInt();
 		}
 
