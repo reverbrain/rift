@@ -1,3 +1,12 @@
+rift (2.25.0.10.5) unstable; urgency=low
+
+  * config: added new thread options example
+  * io: made iodevices index size_t for easier comparison with .size() methods
+  * io: fixed incorrect timing string: usecs->msecs
+  * server: fixed typo in config option names for the number of network threads
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Wed, 23 Jul 2014 03:24:07 +0400
+
 rift (2.25.0.10.4) unstable; urgency=low
 
   * rift: Added ability to configure threads count

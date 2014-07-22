@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.10.4
+Version:	2.25.0.10.5
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -66,6 +66,12 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Wed Jul 23 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.5
+- config: added new thread options example
+- io: made iodevices index size_t for easier comparison with .size() methods
+- io: fixed incorrect timing string: usecs->msecs
+- server: fixed typo in config option names for the number of network threads
+
 * Tue Jul 22 2014 Ruslan Nigmatullin <euroelessar@yandex.ru> - 2.25.0.10.4
 - rift: Added ability to configure threads count
 
