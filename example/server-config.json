@@ -21,6 +21,9 @@
         "remotes": [
             "localhost:1025:2"
         ],
+	"io-thread-num": 4,
+	"nonblocking-io-thread-num": 1,
+	"net-thread-num": 2,
         "groups": [
             3,4,2
         ],
