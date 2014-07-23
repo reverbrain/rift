@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.10.5
+Version:	2.25.0.10.6
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -66,6 +66,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Wed Jul 23 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.6
+- rift: Added forgotten return in bucket's check
+
 * Wed Jul 23 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.5
 - config: added new thread options example
 - io: made iodevices index size_t for easier comparison with .size() methods
