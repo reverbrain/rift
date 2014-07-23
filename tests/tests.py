@@ -99,8 +99,8 @@ class TestCases:
     @pytest.mark.skipif(not pytest.config.option.bucket,
                         reason="tests are running without buckets")
     @pytest.mark.parametrize('flags, write_noauth_status, write_auth_status, read_noauth_status, read_auth_status', [
-        (0,                          401, 403, 401, 200),
-        (AUTH_NO_TOKEN,              403, 403, 200, 200),
+        (0,                          401, 403, 401, 404),
+        (AUTH_NO_TOKEN,              403, 403, 404, 404),
         (AUTH_WRITE,                 401, 200, 401, 200),
         (AUTH_NO_TOKEN | AUTH_WRITE, 200, 200, 200, 200),
     ])
