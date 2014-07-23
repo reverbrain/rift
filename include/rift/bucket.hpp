@@ -361,6 +361,7 @@ protected:
 					m_request.url().to_human_readable().c_str(), verdict);
 
 			this->send_reply(verdict);
+			return;
 		}
 
 		this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: checked: url: %s, verdict: %d, passed-noauth-check",
