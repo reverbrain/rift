@@ -364,10 +364,8 @@ protected:
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: checked: url: %s, verdict: %d, passed-noauth-check",
-				m_request.url().to_human_readable().c_str(), verdict);
-
-		this->log(swarm::SWARM_LOG_NOTICE, "stream: %p", info.stream.get());
+		this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: checked: url: %s, verdict: %d, passed-auth-check, stream: %p",
+				m_request.url().to_human_readable().c_str(), verdict, info.stream.get());
 
 		base_stream->bucket_mixin_meta = meta;
 		base_stream->bucket_mixin_acl = acl;
