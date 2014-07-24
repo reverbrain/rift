@@ -105,10 +105,6 @@ public:
 		return m_metadata_groups;
 	}
 
-	std::vector<std::pair<struct dnet_id, dnet_addr> > get_routes() const {
-		return m_session->get_routes();
-	}
-
 	void stat_update() {
 		m_generation++;
 
@@ -225,18 +221,19 @@ private:
 	struct node_stat {
 		struct dnet_stat	vfs;
 
+		std::vector<dnet_raw_id>	ids;
+
 		// 'backend' monitoring output (json) from elliptics node
-		rapidjson::Value	doc_backend;
+		// this json string *always* contain 'backend' section, otherwise it is empty
+		// periodic stat update receives monitoring data, parses json and only
+		// assign this string if 'backend' object is present
+		std::string		doc_backend;
 
 		// base_size from backend monitor output
 		// it should be equal to data + all indexes size
 		uint64_t		used_size;
 
 		int			generation;
-
-		node_stat(node_stat &&orig) : used_size(orig.used_size), generation(orig.generation) {
-			doc_backend = orig.doc_backend;
-		}
 
 		node_stat() : used_size(0), generation(0) {
 			memset(&vfs, 0, sizeof(struct dnet_stat));
@@ -248,7 +245,23 @@ private:
 			v.AddMember("bsize", vfs.bsize, allocator);
 
 			ret.AddMember("vfs", v, allocator);
-			ret.AddMember("backend", doc_backend, allocator);
+
+			if (doc_backend.size()) {
+				rapidjson::Document doc(&allocator);
+				doc.Parse<0>(doc_backend.c_str());
+				ret.AddMember("backend", doc["backend"], allocator);
+			}
+
+			rapidjson::Value ids_json(rapidjson::kArrayType);
+			char id_str[2*DNET_ID_SIZE + 1];
+			for (auto id = ids.begin(); id != ids.end(); ++id) {
+				dnet_dump_id_len_raw(id->id, DNET_ID_SIZE, id_str);
+				rapidjson::Value id_val(id_str, DNET_ID_SIZE*2, allocator);
+
+				ids_json.PushBack(id_val, allocator);
+			}
+
+			ret.AddMember("ids", ids_json, allocator);
 		}
 	};
 
@@ -410,15 +423,19 @@ private:
 						}
 					}
 				}
+
+				std::unique_lock<std::mutex> guard(m_lock);
+				auto & host = get_host_stat(group_id, addr);
+
+				host.doc_backend = res.statistics();
+				host.used_size = base_size;
+
+				generation = host.generation;
 			}
 
-			std::unique_lock<std::mutex> guard(m_lock);
-			auto & host = get_host_stat(group_id, addr);
+			// this function parses current route table and updates list of IDs under @m_lock
+			route_update();
 
-			host.doc_backend = backend;
-			host.used_size = base_size;
-
-			generation = host.generation;
 		}
 
 		m_logger.log(swarm::SWARM_LOG_NOTICE, "%s: MONITOR statistics updated, generation: %d, base-size: %zd", addr.c_str(), generation, base_size);
@@ -427,6 +444,64 @@ private:
 	void monitor_stat_complete(const elliptics::error_info &error) {
 		if (error) {
 			m_logger.log(swarm::SWARM_LOG_ERROR, "monitor-stat-completion: error: %d: %s", error.code(), error.message().c_str());
+		}
+	}
+
+	void route_update() {
+		auto routes = m_session->get_routes();
+
+		std::map<int, std::map<std::string, std::vector<dnet_raw_id>>> group_addrs;
+		for (auto it = routes.begin(); it != routes.end(); ++it) {
+			const dnet_addr & addr = it->second;
+			const dnet_id & id = it->first;
+
+			int group_id = id.group_id;
+
+			auto group_it = group_addrs.find(group_id);
+			if (group_it == group_addrs.end()) {
+				group_addrs[group_id] = std::map<std::string, std::vector<dnet_raw_id>>();
+				group_it = group_addrs.find(group_id);
+			}
+
+			auto & addrs = group_it->second;
+
+			std::string addr_string(dnet_server_convert_dnet_addr(&addr));
+
+			auto tmp = addrs.find(addr_string);
+			if (tmp == addrs.end()) {
+				tmp = addrs.insert(std::make_pair(addr_string, std::vector<dnet_raw_id>())).first;
+			}
+
+			dnet_raw_id raw;
+			memcpy(raw.id, id.id, DNET_ID_SIZE);
+
+			tmp->second.emplace_back(raw);
+		}
+
+		struct id_comp {
+			bool operator() (const dnet_raw_id &id1, const dnet_raw_id &id2) const {
+				return dnet_id_cmp_str(id1.id, id2.id) < 0;
+			}
+		};
+
+		for (auto group_it = group_addrs.begin(); group_it != group_addrs.end(); ++group_it) {
+			auto & addrs = group_it->second;
+
+			for (auto addr_it = addrs.begin(); addr_it != addrs.end(); ++addr_it) {
+				std::sort(addr_it->second.begin(), addr_it->second.end(), id_comp());
+			}
+		}
+
+		std::unique_lock<std::mutex> guard(m_lock);
+
+		for (auto group_it = group_addrs.begin(); group_it != group_addrs.end(); ++group_it) {
+			int group_id = group_it->first;
+			auto & addrs = group_it->second;
+
+			for (auto addr_it = addrs.begin(); addr_it != addrs.end(); ++addr_it) {
+				auto &node = get_host_stat(group_id, addr_it->first);
+				node.ids.swap(addr_it->second);
+			}
 		}
 	}
 };
