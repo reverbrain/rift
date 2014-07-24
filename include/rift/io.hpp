@@ -365,7 +365,7 @@ public:
 		value.AddMember("success-groups", sgroups_val, value.GetAllocator());
 		value.AddMember("error-groups", egroups_val, value.GetAllocator());
 		value.AddMember("offset", m_orig_offset, value.GetAllocator());
-		value.AddMember("rate", (double)m_timer.elapsed() / (double)m_size, value.GetAllocator());
+		value.AddMember("rate", (double)m_size * 1000.0 / (double)m_timer.elapsed(), value.GetAllocator());
 
 		std::string data = value.ToString();
 
