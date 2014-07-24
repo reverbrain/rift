@@ -30,7 +30,7 @@
         "metadata-groups": [
             1,2
         ],
-        "cache1": {
+        "cache": {
             "name": "cache",
 	    "timeout": 60
         },
@@ -40,6 +40,6 @@
 	"read-timeout": 10,
 	"write-timeout": 16,
 	"stat-timeout": 60,
-        "XXX-redirect-port": 8080
+        "redirect-port": 80
     }
 }
