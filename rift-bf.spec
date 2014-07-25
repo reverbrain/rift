@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.10.6
+Version:	2.25.0.10.7
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -66,6 +66,13 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Fri Jul 25 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.7
+- upload: return rate in bytes per second
+- stat: get rid of /route/ handler, instead put ids into /stat/ data
+- config: turn on every option in example config
+- bucket: debug printing cleanup
+- tests: Fixed return codes for acl tests
+
 * Wed Jul 23 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.6
 - rift: Added forgotten return in bucket's check
 

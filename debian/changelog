@@ -1,3 +1,13 @@
+rift (2.25.0.10.7) unstable; urgency=low
+
+  * upload: return rate in bytes per second
+  * stat: get rid of /route/ handler, instead put ids into /stat/ data
+  * config: turn on every option in example config
+  * bucket: debug printing cleanup
+  * tests: Fixed return codes for acl tests
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Fri, 25 Jul 2014 21:50:25 +0400
+
 rift (2.25.0.10.6) unstable; urgency=low
 
   * rift: Added forgotten return in bucket's check
