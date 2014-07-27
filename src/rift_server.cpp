@@ -83,17 +83,20 @@ bool example_server::initialize(const rapidjson::Value &config) {
 		options::methods("HEAD")
 	);
 
-	on<rift::bucket_processor<example_server, rift::bucket_ctl::meta_create<example_server, rift::bucket_ctl::update_bucket_directory>>>(
+	on<rift::bucket_processor<example_server, rift::bucket_ctl::meta_create<example_server,
+			rift::bucket_ctl::update_bucket_directory>>>(
 		options::prefix_match("/update-bucket-directory/"),
 		options::methods("POST")
 	);
 
-	on<rift::bucket_processor<example_server, rift::bucket_ctl::meta_create<example_server, rift::bucket_ctl::update_bucket>>>(
+	on<rift::bucket_processor<example_server, rift::bucket_ctl::meta_create<example_server,
+			rift::bucket_ctl::update_bucket>>>(
 		options::prefix_match("/update-bucket/"),
 		options::methods("POST")
 	);
 
-	on<rift::bucket_processor<example_server, rift::list::on_list<example_server, rift::list::list_bucket_directory>>>(
+	on<rift::bucket_processor<example_server, rift::list::on_list<example_server,
+			rift::list::list_bucket_directory>>>(
 		options::prefix_match("/list-bucket-directory/"),
 		options::methods("GET")
 	);

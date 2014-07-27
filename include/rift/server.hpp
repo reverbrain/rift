@@ -125,7 +125,8 @@ public:
 
 			it->second.stat(g, allocator);
 
-			ret.AddMember(std::to_string(static_cast<unsigned long long>(it->first)).c_str(), allocator, g, allocator);
+			ret.AddMember(std::to_string(static_cast<unsigned long long>(it->first)).c_str(),
+					allocator, g, allocator);
 		}
 	}
 
@@ -340,19 +341,23 @@ private:
 
 		host.vfs = *res.statistics();
 
-		m_logger.log(swarm::SWARM_LOG_NOTICE, "%s: VFS statistics updated, generation: %d", addr.c_str(), host.generation);
+		m_logger.log(swarm::SWARM_LOG_NOTICE, "%s: VFS statistics updated, generation: %d",
+				addr.c_str(), host.generation);
 	}
 
 	void vfs_stat_complete(const elliptics::error_info &error) {
 		if (error) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "vfs-stat-completion: error: %d: %s", error.code(), error.message().c_str());
+			m_logger.log(swarm::SWARM_LOG_ERROR, "vfs-stat-completion: error: %d: %s",
+					error.code(), error.message().c_str());
 		}
 
 		// iterate over all groups and nodes and sum up size statistics
 		// we do this in VFS completion callback, since this command was started after monitor request,
-		// this doesn't mean vfs stat command will be completed after monitor one, but its probability is rather high
+		// this doesn't mean vfs stat command will be completed after monitor one,
+		// but its probability is rather high
 		//
-		// If vfs stat command comes before monitor one, it is possible, that we will account previous generation of the monitor data
+		// If vfs stat command comes before monitor one, it is possible,
+		// that we will account previous generation of the monitor data
 		// This is not a huge problem (stats are updated periodically, so error will not accumulate) though.
 		std::unique_lock<std::mutex> guard(m_lock);
 
@@ -380,11 +385,15 @@ private:
 			group_meta.used_size = used_size;
 			group_meta.free_size = free_size;
 
-			// Only write size summary into the log, eventually we will export it to clients and/or some other monitoring
+			// Only write size summary into the log,
+			// eventually we will export it to clients and/or some other monitoring
 			// tool, which will provide per-bucket statistics
-			m_logger.log(swarm::SWARM_LOG_INFO, "statistics: group: %d, total-size: %llu, used-size: %llu, free-size: %llu, "
+			m_logger.log(swarm::SWARM_LOG_INFO, "statistics: group: %d, "
+					"total-size: %llu, used-size: %llu, free-size: %llu, "
 					"generation: %d, nodes: %zd/%zd",
-					group->first, (unsigned long long)total_size, (unsigned long long)used_size, (unsigned long long)free_size,
+					group->first,
+					(unsigned long long)total_size, (unsigned long long)used_size,
+						(unsigned long long)free_size,
 					m_generation, nodes, group_meta.nodes.size());
 		}
 	}
@@ -410,7 +419,8 @@ private:
 					const auto & base = backend["base_stats"];
 					if (base.IsObject()) {
 						// Iterate over blob data
-						for (rapidjson::Value::ConstMemberIterator it = base.MemberBegin(); it != base.MemberEnd(); ++it) {
+						for (rapidjson::Value::ConstMemberIterator it = base.MemberBegin();
+								it != base.MemberEnd(); ++it) {
 							const auto & blob = it->value;
 
 							// base_size contains summed up size of the data and all indexes
@@ -438,12 +448,14 @@ private:
 
 		}
 
-		m_logger.log(swarm::SWARM_LOG_NOTICE, "%s: MONITOR statistics updated, generation: %d, base-size: %zd", addr.c_str(), generation, base_size);
+		m_logger.log(swarm::SWARM_LOG_NOTICE, "%s: MONITOR statistics updated, generation: %d, base-size: %zd",
+				addr.c_str(), generation, base_size);
 	}
 
 	void monitor_stat_complete(const elliptics::error_info &error) {
 		if (error) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "monitor-stat-completion: error: %d: %s", error.code(), error.message().c_str());
+			m_logger.log(swarm::SWARM_LOG_ERROR, "monitor-stat-completion: error: %d: %s",
+					error.code(), error.message().c_str());
 		}
 	}
 
