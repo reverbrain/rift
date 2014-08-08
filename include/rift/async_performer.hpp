@@ -14,10 +14,8 @@ namespace rift {
 class async_performer
 {
 public:
-	async_performer();
+	async_performer(const swarm::logger &logger);
 	~async_performer();
-
-	void initialize(const swarm::logger &logger);
 
 	void stop();
 

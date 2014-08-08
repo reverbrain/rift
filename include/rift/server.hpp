@@ -2,7 +2,6 @@
 #define __IOREMAP_RIFT_SERVER_HPP
 
 #include "rift/bucket.hpp"
-#include "rift/logger.hpp"
 #include "rift/timer.hpp"
 
 #include <thevoid/server.hpp>
@@ -15,11 +14,19 @@ namespace rift {
 class elliptics_base
 {
 public:
-	elliptics_base() : m_read_timeout(0), m_write_timeout(0), m_generation(0) {}
+	elliptics_base(const swarm::logger &logger) :
+		m_logger(logger, blackhole::log::attributes_t({ swarm::keyword::source() = "elliptics" })),
+		m_read_timeout(0),
+		m_write_timeout(0),
+		m_generation(0)
+	{
+	}
 
-	bool initialize(const rapidjson::Value &config, const swarm::logger &logger) {
-		m_logger = logger;
+	~elliptics_base()
+	{
+	}
 
+	bool initialize(const rapidjson::Value &config) {
 		dnet_config node_config;
 		memset(&node_config, 0, sizeof(node_config));
 
@@ -27,7 +34,7 @@ public:
 			return false;
 		}
 
-		m_node.reset(new elliptics::node(swarm_logger(logger), node_config));
+		m_node.reset(new elliptics::node(swarm::logger(m_logger, blackhole::log::attributes_t()), node_config));
 
 		if (!prepare_node(config, *m_node)) {
 			return false;
@@ -49,7 +56,7 @@ public:
 		return *m_node;
 	}
 
-	elliptics::session read_data_session(const swarm::http_request &req, const bucket_meta_raw &meta) const {
+	elliptics::session read_data_session(const thevoid::http_request &req, const bucket_meta_raw &meta) const {
 		auto session = m_session->clone();
 		session.set_timeout(m_read_timeout);
 
@@ -58,47 +65,44 @@ public:
 			session.set_groups(meta.groups);
 		}
 
+		session.set_trace_id(req.request_id());
+		session.set_trace_bit(req.trace_bit());
+
 		try {
 			const auto &query = req.url().query();
 			uint32_t ioflags = query.item_value("ioflags", 0u);
 			uint64_t cflags = query.item_value("cflags", 0llu);
-			uint64_t trace_id = query.item_value("trace_id", 0llu);
 
 			session.set_ioflags(ioflags);
 			session.set_cflags(cflags);
-			session.set_trace_id(trace_id);
 
 		} catch (const std::exception &e) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "data-session: url: %s: invalid ioflags/cflags parameters: %s",
+			BH_LOG(m_logger, SWARM_LOG_ERROR, "data-session: url: %s: invalid ioflags/cflags parameters: %s",
 					req.url().to_human_readable().c_str(), e.what());
 		}
 
 		return session;
 	}
 
-	elliptics::session write_data_session(const swarm::http_request &req, const bucket_meta_raw &meta) const {
+	elliptics::session write_data_session(const thevoid::http_request &req, const bucket_meta_raw &meta) const {
 		auto session = read_data_session(req, meta);
 		session.set_timeout(m_write_timeout);
 
 		return session;
 	}
 
-	elliptics::session read_metadata_session(const swarm::http_request &req, const bucket_meta_raw &meta) const {
+	elliptics::session read_metadata_session(const thevoid::http_request &req, const bucket_meta_raw &meta) const {
 		auto session = read_data_session(req, meta);
 		session.set_groups(m_metadata_groups);
 
 		return session;
 	}
 
-	elliptics::session write_metadata_session(const swarm::http_request &req, const bucket_meta_raw &meta) const {
+	elliptics::session write_metadata_session(const thevoid::http_request &req, const bucket_meta_raw &meta) const {
 		auto session = write_data_session(req, meta);
 		session.set_groups(m_metadata_groups);
 
 		return session;
-	}
-
-	swarm::logger logger() const {
-		return m_logger;
 	}
 
 	const std::vector<int> metadata_groups(void) const {
@@ -147,41 +151,30 @@ protected:
 
 	virtual bool prepare_node(const rapidjson::Value &config, elliptics::node &node) {
 		if (!config.HasMember("remotes")) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "\"remotes\" field is missed");
+			BH_LOG(m_logger, SWARM_LOG_ERROR, "\"remotes\" field is missed");
 			return false;
 		}
 
-		std::vector<std::string> remotes;
+		std::vector<elliptics::address> remotes;
 
 		auto &remotesArray = config["remotes"];
-		std::transform(remotesArray.Begin(), remotesArray.End(),
-			std::back_inserter(remotes),
-			std::bind(&rapidjson::Value::GetString, std::placeholders::_1));
-
-		try {
-			node.add_remote(remotes);
-			elliptics::session session(node);
-
-			if (!session.get_routes().size()) {
-				m_logger.log(swarm::SWARM_LOG_ERROR, "Didn't add any remote node, exiting.");
-				return false;
-			}
-		} catch (const std::exception &e) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "Could not add any out of %zd nodes.", remotes.size());
-			return false;
+		for (auto it = remotesArray.Begin(); it != remotesArray.End(); ++it) {
+			remotes.emplace_back(std::string(it->GetString(), it->GetStringLength()));
 		}
+
+		node.add_remote(remotes);
 
 		return true;
 	}
 
 	virtual bool prepare_session(const rapidjson::Value &config, elliptics::session &session) {
 		if (!config.HasMember("groups")) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.groups\" field is missed");
+			BH_LOG(m_logger, SWARM_LOG_ERROR, "\"application.groups\" field is missed");
 			return false;
 		}
 
 		if (!config.HasMember("metadata-groups")) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "\"application.metadata-groups\" field is missed");
+			BH_LOG(m_logger, SWARM_LOG_ERROR, "\"application.metadata-groups\" field is missed");
 			return false;
 		}
 
@@ -341,13 +334,13 @@ private:
 
 		host.vfs = *res.statistics();
 
-		m_logger.log(swarm::SWARM_LOG_NOTICE, "%s: VFS statistics updated, generation: %d",
+		BH_LOG(m_logger, SWARM_LOG_NOTICE, "%s: VFS statistics updated, generation: %d",
 				addr.c_str(), host.generation);
 	}
 
 	void vfs_stat_complete(const elliptics::error_info &error) {
 		if (error) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "vfs-stat-completion: error: %d: %s",
+			BH_LOG(m_logger, SWARM_LOG_ERROR, "vfs-stat-completion: error: %d: %s",
 					error.code(), error.message().c_str());
 		}
 
@@ -388,9 +381,9 @@ private:
 			// Only write size summary into the log,
 			// eventually we will export it to clients and/or some other monitoring
 			// tool, which will provide per-bucket statistics
-			m_logger.log(swarm::SWARM_LOG_INFO, "statistics: group: %d, "
+			BH_LOG(m_logger, SWARM_LOG_INFO, "statistics: group: %d, "
 					"total-size: %llu, used-size: %llu, free-size: %llu, "
-					"generation: %d, nodes: %zd/%zd",
+					"generation: %d, nodes: %lld/%lld",
 					group->first,
 					(unsigned long long)total_size, (unsigned long long)used_size,
 						(unsigned long long)free_size,
@@ -448,13 +441,13 @@ private:
 
 		}
 
-		m_logger.log(swarm::SWARM_LOG_NOTICE, "%s: MONITOR statistics updated, generation: %d, base-size: %zd",
+		BH_LOG(m_logger, SWARM_LOG_NOTICE, "%s: MONITOR statistics updated, generation: %d, base-size: %lld",
 				addr.c_str(), generation, base_size);
 	}
 
 	void monitor_stat_complete(const elliptics::error_info &error) {
 		if (error) {
-			m_logger.log(swarm::SWARM_LOG_ERROR, "monitor-stat-completion: error: %d: %s",
+			BH_LOG(m_logger, SWARM_LOG_ERROR, "monitor-stat-completion: error: %d: %s",
 					error.code(), error.message().c_str());
 		}
 	}
@@ -464,10 +457,10 @@ private:
 
 		std::map<int, std::map<std::string, std::vector<dnet_raw_id>>> group_addrs;
 		for (auto it = routes.begin(); it != routes.end(); ++it) {
-			const dnet_addr & addr = it->second;
-			const dnet_id & id = it->first;
-
-			int group_id = id.group_id;
+			const dnet_route_entry &entry = *it;
+			const dnet_addr &addr = entry.addr;
+			const dnet_raw_id id = entry.id;
+			const int group_id = entry.group_id;
 
 			auto group_it = group_addrs.find(group_id);
 			if (group_it == group_addrs.end()) {
@@ -484,10 +477,7 @@ private:
 				tmp = addrs.insert(std::make_pair(addr_string, std::vector<dnet_raw_id>())).first;
 			}
 
-			dnet_raw_id raw;
-			memcpy(raw.id, id.id, DNET_ID_SIZE);
-
-			tmp->second.emplace_back(raw);
+			tmp->second.emplace_back(id);
 		}
 
 		struct id_comp {

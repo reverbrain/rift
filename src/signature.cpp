@@ -3,22 +3,22 @@
 using namespace ioremap;
 using namespace ioremap::rift;
 
-signature::signature()
+signature::signature(const swarm::logger &logger) :
+	m_logger(logger, blackhole::log::attributes_t({ swarm::keyword::source() = "cache" }))
+
 {
 }
 
-bool signature::initialize(const rapidjson::Value &config, const elliptics::node &node, const swarm::logger &logger)
+bool signature::initialize(const rapidjson::Value &config, const elliptics::node &node)
 {
-	m_logger = logger;
-
 	if (!config.HasMember("signature")) {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "\"signature\" field is missed");
+		BH_LOG(m_logger, SWARM_LOG_ERROR, "\"signature\" field is missed");
 		return false;
 	}
 
 	const rapidjson::Value &signature_config = config["signature"];
 	if (!signature_config.HasMember("key")) {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "\"signature.key\" field is missed");
+		BH_LOG(m_logger, SWARM_LOG_ERROR, "\"signature.key\" field is missed");
 		return false;
 	}
 
@@ -61,7 +61,7 @@ std::string signature::sign(const swarm::url &url) const
 	return std::string(signature_str, 2 * DNET_ID_SIZE);
 }
 
-swarm::logger signature::logger() const
+const swarm::logger &signature::logger() const
 {
 	return m_logger;
 }

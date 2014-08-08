@@ -20,12 +20,12 @@ public:
 
 	virtual bool initialize(const rapidjson::Value &config);
 
-	bool check_query(const swarm::http_request &request) const;
+	bool check_query(const thevoid::http_request &request) const;
 
 	template <typename Stream>
-	std::string extract_key(Stream &, const swarm::http_request &request) const;
+	std::string extract_key(Stream &, const thevoid::http_request &request) const;
 	template <typename Stream>
-	std::string extract_bucket(Stream &, const swarm::http_request &request) const;
+	std::string extract_bucket(Stream &, const thevoid::http_request &request) const;
 
 	/*!
 	 * \brief on_upload class provides HTTP API for requesting data from Elliptics storage

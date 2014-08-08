@@ -24,7 +24,7 @@ template <typename Server, typename Stream, list_type Type>
 class on_list_base : public bucket_mixin<thevoid::simple_request_stream<Server>, bucket_acl::handler_read>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
 		elliptics::session session = this->server()->elliptics()->read_data_session(req, this->bucket_mixin_meta);
@@ -46,15 +46,15 @@ public:
 	virtual void on_find_finished(const elliptics::sync_find_indexes_result &result,
 			const elliptics::error_info &error) {
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "list-base: find-finished: error: %s",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "list-base: find-finished: error: %s",
 					error.message().c_str());
 
 			if (error.code() == -ENOENT) {
-				this->send_reply(swarm::http_response::not_found);
+				this->send_reply(thevoid::http_response::not_found);
 				return;
 			}
 
-			this->send_reply(swarm::http_response::service_unavailable);
+			this->send_reply(thevoid::http_response::service_unavailable);
 			return;
 		}
 
@@ -106,8 +106,8 @@ public:
 
 		auto data = result_object.ToString();
 
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::ok);
+		thevoid::http_response reply;
+		reply.set_code(thevoid::http_response::ok);
 		reply.headers().set_content_length(data.size());
 		reply.headers().set_content_type("text/json; charset=utf-8");
 

@@ -10,7 +10,7 @@ namespace ioremap { namespace rift { namespace stat {
 
 template <typename T>
 struct on_stat : public thevoid::simple_request_stream<T> {
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) req;
 		(void) buffer;
 
@@ -18,8 +18,8 @@ struct on_stat : public thevoid::simple_request_stream<T> {
 		const_cast<ioremap::rift::elliptics_base *>(this->server()->elliptics())->stat(ret, ret.GetAllocator());
 		std::string data = ret.ToString();
 
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::ok);
+		thevoid::http_response reply;
+		reply.set_code(thevoid::http_response::ok);
 		reply.headers().set_content_type("text/json; charset=utf-8");
 		reply.headers().set_content_length(data.size());
 

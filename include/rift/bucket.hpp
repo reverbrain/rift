@@ -109,9 +109,9 @@ class authorization_checker_base
 public:
 	typedef std::shared_ptr<authorization_checker_base> ptr;
 	typedef std::shared_ptr<thevoid::base_request_stream> request_stream_ptr;
-	typedef std::tuple<swarm::http_response::status_type, request_stream_ptr, bucket_acl> result_tuple;
+	typedef std::tuple<thevoid::http_response::status_type, request_stream_ptr, bucket_acl> result_tuple;
 
-	authorization_checker_base(const std::shared_ptr<thevoid::base_server> &server);
+	authorization_checker_base();
 
 	/*!
 	 * \brief Aunthenticates user if possible and constructs the authentication proxy if needed.
@@ -124,12 +124,12 @@ public:
 	 *
 	 * \attention This method must not return 404 Not Found as it must be returned only in case if there is no such bucket.
 	 */
-	virtual result_tuple check_permission(const request_stream_ptr &stream, const swarm::http_request &request, const bucket_meta_raw &meta) = 0;
+	virtual result_tuple check_permission(const request_stream_ptr &stream, const thevoid::http_request &request,
+		const bucket_meta_raw &meta, const swarm::logger &logger) = 0;
 
 protected:
-	std::tuple<swarm::http_response::status_type, ioremap::rift::bucket_acl> find_user(const swarm::http_request &request, const bucket_meta_raw &meta, const std::string &user);
-
-	swarm::logger m_logger;
+	std::tuple<thevoid::http_response::status_type, ioremap::rift::bucket_acl>
+	find_user(const thevoid::http_request &request, const bucket_meta_raw &meta, const std::string &user, const swarm::logger &logger);
 };
 
 /*!
@@ -139,7 +139,7 @@ template <typename Server>
 class authorization_checker : public authorization_checker_base
 {
 public:
-	authorization_checker(const std::shared_ptr<Server> &server) : authorization_checker_base(server), m_server(server)
+	authorization_checker(Server *server) : m_server(server)
 	{
 	}
 
@@ -155,12 +155,12 @@ protected:
 		return stream;
 	}
 
-	std::weak_ptr<Server> m_server;
+	Server *m_server;
 };
 
 struct authorization_check_result
 {
-	swarm::http_response::status_type verdict;
+	thevoid::http_response::status_type verdict;
 	bucket_meta_raw meta;
 	bucket_acl acl;
 	std::shared_ptr<thevoid::base_request_stream> stream;
@@ -171,9 +171,10 @@ typedef std::function<void (const authorization_check_result &)> continue_handle
 struct authorization_info
 {
 	authorization_checker_base::ptr checker;
-	const swarm::http_request *request;
+	const thevoid::http_request *request;
 	continue_handler_t handler;
 	std::shared_ptr<thevoid::base_request_stream> stream;
+	const swarm::logger *logger;
 };
 
 class bucket;
@@ -202,7 +203,7 @@ class bucket_meta : public std::enable_shared_from_this<bucket_meta>
 		void update();
 		void update_and_check(const authorization_info &info);
 
-		void update_finished(const ioremap::elliptics::sync_read_result &result,
+		void update_finished(const swarm::logger *logger, const ioremap::elliptics::sync_read_result &result,
 				const ioremap::elliptics::error_info &error);
 		void update_and_check_completed(const authorization_info &info,
 				const ioremap::elliptics::sync_read_result &result, const ioremap::elliptics::error_info &error);
@@ -214,7 +215,7 @@ class elliptics_base;
 class bucket : public metadata_updater, public std::enable_shared_from_this<bucket>
 {
 	public:
-		bucket();
+		bucket(const swarm::logger &logger);
 
 		bool initialize(const rapidjson::Value &config, const elliptics_base &base, async_performer *async);
 		void check(const std::string &bucket_name, const authorization_info &info);
@@ -275,7 +276,7 @@ public:
 	{
 	}
 
-	virtual void on_headers(swarm::http_request &&req)
+	virtual void on_headers(thevoid::http_request &&req)
 	{
 		m_request = std::move(req);
 
@@ -287,15 +288,16 @@ public:
 				authorization_checker_base::ptr(), // authorization_checker will be set in Server's implementation
 				&m_request, // m_request is guaranteed to be alive as this processor will be alive until the callback will be called
 				std::bind(&bucket_processor_base::on_checked, this->shared_from_this(), std::placeholders::_1, stream),
-				stream
+				stream,
+				&this->logger()
 			};
 
 			this->server()->process(static_cast<Stream &>(*this), info);
 		} catch (const std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "url: %s, processing error: %s",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "url: %s, processing error: %s",
 					req.url().to_human_readable().c_str(), e.what());
 
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(thevoid::http_response::bad_request);
 		}
 	}
 
@@ -317,7 +319,7 @@ public:
 		{
 			std::lock_guard<std::mutex> lock(m_stream_mutex);
 			if (!m_stream) {
-				this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: on_close called: url: %s, error: %s",
+				BH_LOG(this->logger(), SWARM_LOG_NOTICE, "bucket_processor_base: on_close called: url: %s, error: %s",
 						m_request.url().to_human_readable().c_str(), err.message().c_str());
 				m_closed = true;
 				m_was_error = !!err;
@@ -333,43 +335,43 @@ protected:
 	{
 		const bucket_meta_raw &meta = info.meta;
 		const bucket_acl &acl = info.acl;
-		swarm::http_response::status_type verdict = info.verdict;
+		thevoid::http_response::status_type verdict = info.verdict;
 		const auto &stream = info.stream;
 
-		if ((bucket_flags & bucket_acl::handler_not_found_is_ok) && verdict == swarm::http_response::not_found) {
+		if ((bucket_flags & bucket_acl::handler_not_found_is_ok) && verdict == thevoid::http_response::not_found) {
 			// If verdict is 404 the bucket is not created yet,
 			// in such case if handler_not_found_is_ok flag is set
 			// we assume that user passes the authentication
-			verdict = swarm::http_response::ok;
-		} else if (verdict == swarm::http_response::ok) {
+			verdict = thevoid::http_response::ok;
+		} else if (verdict == thevoid::http_response::ok) {
 			if ((bucket_flags & bucket_acl::handler_read) && !acl.can_read()) {
 				// Check if user has rights to read
-				verdict = swarm::http_response::forbidden;
+				verdict = thevoid::http_response::forbidden;
 			}
 			if ((bucket_flags & bucket_acl::handler_write) && !acl.can_write()) {
 				// Check if user has rights to write
-				verdict = swarm::http_response::forbidden;
+				verdict = thevoid::http_response::forbidden;
 			}
 			if ((bucket_flags & bucket_acl::handler_bucket) && !acl.can_admin()) {
 				// Check if user has rights to administrate
-				verdict = swarm::http_response::forbidden;
+				verdict = thevoid::http_response::forbidden;
 			}
 		}
 
-		if (verdict != swarm::http_response::ok) {
-			this->log(swarm::SWARM_LOG_ERROR, "bucket_processor_base: checked: url: %s, verdict: %d, did-not-pass-auth-check",
+		if (verdict != thevoid::http_response::ok) {
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "bucket_processor_base: checked: url: %s, verdict: %d, did-not-pass-auth-check",
 					m_request.url().to_human_readable().c_str(), verdict);
 
 			this->send_reply(verdict);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: checked: url: %s, verdict: %d, passed-auth-check, stream: %p",
+		BH_LOG(this->logger(), SWARM_LOG_NOTICE, "bucket_processor_base: checked: url: %s, verdict: %d, passed-auth-check, stream: %p",
 				m_request.url().to_human_readable().c_str(), verdict, info.stream.get());
 
 		base_stream->bucket_mixin_meta = meta;
 		base_stream->bucket_mixin_acl = acl;
-		info.stream->initialize(this->get_reply());
+		info.stream->initialize(this->reply());
 
 		// copy URL here since we will move m_request to on_headers() below
 		std::string url = m_request.url().to_human_readable();
@@ -377,7 +379,7 @@ protected:
 		{
 			std::lock_guard<std::mutex> lock(m_stream_mutex);
 			if (m_closed && m_was_error) {
-				this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: already closed: url: %s", url.c_str());
+				BH_LOG(this->logger(), SWARM_LOG_NOTICE, "bucket_processor_base: already closed: url: %s", url.c_str());
 				// Connection is already closed, so we should die
 				return;
 			}
@@ -385,17 +387,17 @@ protected:
 			m_stream = stream;
 			m_stream->on_headers(std::move(m_request));
 
-			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: on_headers called: url: %s", url.c_str());
+			BH_LOG(this->logger(), SWARM_LOG_NOTICE, "bucket_processor_base: on_headers called: url: %s", url.c_str());
 		}
 
 		if (m_closed) {
 			m_stream->on_data(boost::asio::const_buffer());
 			m_stream->on_close(boost::system::error_code());
 		} else if (m_on_data_called) {
-			this->log(swarm::SWARM_LOG_NOTICE, "bucket_processor_base: want_more called: url: %s", url.c_str());
+			BH_LOG(this->logger(), SWARM_LOG_NOTICE, "bucket_processor_base: want_more called: url: %s", url.c_str());
 
 			// on_data method was already called, so we should to call it again
-			this->get_reply()->want_more();
+			this->reply()->want_more();
 		}
 	}
 
@@ -404,7 +406,7 @@ protected:
 	bool m_was_error;
 	std::mutex m_stream_mutex;
 	std::shared_ptr<thevoid::base_request_stream> m_stream;
-	swarm::http_request m_request;
+	thevoid::http_request m_request;
 };
 
 template <typename Server, typename BaseStream>
@@ -421,7 +423,7 @@ public:
 template <typename BaseStream>
 class indexed_upload_mixin : public BaseStream {
 public:
-	typedef std::function<void (const swarm::http_response::status_type, const std::string &)>
+	typedef std::function<void (const thevoid::http_response::status_type, const std::string &)>
 		upload_completion_callback_t;
 
 	void upload_update_indexes(const elliptics::session &data_session, const bucket_meta_raw &meta,
@@ -431,15 +433,15 @@ public:
 		io::upload_completion::fill_upload_reply(write_result, *result_object, result_object->GetAllocator());
 
 		if (meta.flags & RIFT_BUCKET_META_NO_INDEX_UPDATE) {
-			this->log(swarm::SWARM_LOG_INFO, "indexed_upload_mixin: no-index, url: %s",
+			BH_LOG(this->logger(), SWARM_LOG_INFO, "indexed_upload_mixin: no-index, url: %s",
 					this->request().url().to_human_readable().c_str());
 
 			auto data = result_object->ToString();
 
-			this->log(swarm::SWARM_LOG_INFO, "indexed::upload_update_indexes: url: %s: no index update in metadata, result-size: %zd",
+			BH_LOG(this->logger(), SWARM_LOG_INFO, "indexed::upload_update_indexes: url: %s: no index update in metadata, result-size: %lld",
 					this->request().url().to_human_readable().c_str(), data.size());
 
-			callback(swarm::http_response::ok, data);
+			callback(thevoid::http_response::ok, data);
 			return;
 		}
 
@@ -462,7 +464,7 @@ public:
 			session.set_groups(meta.groups);
 		}
 
-		this->log(swarm::SWARM_LOG_INFO, "indexed::upload_update_indexes: url: %s: adding object: %s to index: %s in '%s' namespace",
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "indexed::upload_update_indexes: url: %s: adding object: %s to index: %s in '%s' namespace",
 				this->request().url().to_human_readable().c_str(),
 				key.to_string().c_str(), indexes.front().c_str(), "<unknown>");
 
@@ -476,11 +478,11 @@ public:
 			const elliptics::sync_set_indexes_result &result, const elliptics::error_info &error) {
 		(void) result;
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: indexed_update_finished: url: %s, err: %s",
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: indexed_update_finished: url: %s, err: %s",
 				this->request().url().to_human_readable().c_str(), error.message().c_str());
 
 		if (error) {
-			callback(swarm::http_response::internal_server_error, std::string());
+			callback(thevoid::http_response::internal_server_error, std::string());
 			return;
 		}
 
@@ -488,21 +490,21 @@ public:
 		// But we don't
 
 		auto data = result_object->ToString();
-		callback(swarm::http_response::ok, data);
+		callback(thevoid::http_response::ok, data);
 	}
 
-	void completion(const swarm::http_response::status_type &status, const std::string &data) {
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: indexed: completion: url: %s, status: %d",
+	void completion(const thevoid::http_response::status_type &status, const std::string &data) {
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: indexed: completion: url: %s, status: %d",
 				this->request().url().to_human_readable().c_str(), int(status));
 
-		if (status != swarm::http_response::ok) {
+		if (status != thevoid::http_response::ok) {
 			this->send_reply(status);
 			return;
 		}
 
-		swarm::http_response reply;
+		thevoid::http_response reply;
 
-		reply.set_code(swarm::http_response::ok);
+		reply.set_code(thevoid::http_response::ok);
 		reply.headers().set_content_type("text/json; charset=utf-8");
 		reply.headers().set_content_length(data.size());
 
@@ -511,15 +513,15 @@ public:
 
 	virtual void on_write_finished(const elliptics::sync_write_result &result,
 			const elliptics::error_info &error) {
-		this->log(swarm::SWARM_LOG_INFO, "indexed::on_write_finished: url: %s: key: %s, namespace: %s, error: %s",
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "indexed::on_write_finished: url: %s: key: %s, namespace: %s, error: %s",
 				this->request().url().to_human_readable().c_str(),
 				this->m_key.to_string().c_str(), this->bucket_mixin_meta.key.c_str(), error.message().c_str());
 		if (error) {
-			this->send_reply(swarm::http_response::service_unavailable);
+			this->send_reply(thevoid::http_response::service_unavailable);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: indexed: on_write_finished: url: %s",
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: indexed: on_write_finished: url: %s",
 				this->request().url().to_human_readable().c_str());
 
 		try {
@@ -527,11 +529,11 @@ public:
 					std::bind(&indexed_upload_mixin::completion, this->shared_from_this(),
 						std::placeholders::_1, std::placeholders::_2));
 		} catch (std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "indexed::on_write_finished: url: %s: key: %s, namespace: %s, exception: %s",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "indexed::on_write_finished: url: %s: key: %s, namespace: %s, exception: %s",
 					this->request().url().to_human_readable().c_str(),
 					this->m_key.to_string().c_str(), this->bucket_mixin_meta.key.c_str(), e.what());
 			this->m_session->remove(this->m_key);
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(thevoid::http_response::bad_request);
 		}
 	}
 };

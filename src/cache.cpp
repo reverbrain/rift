@@ -53,19 +53,20 @@ inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o, const st
 
 using namespace ioremap::rift;
 
-cache::cache()
+cache::cache(const swarm::logger &logger) :
+	metadata_updater(swarm::logger(logger, blackhole::log::attributes_t({ swarm::keyword::source() = "cache" })))
 {
 }
 
 bool cache::initialize(const rapidjson::Value &config, const elliptics::node &node,
-	const swarm::logger &logger, async_performer *async, const std::vector<int> &groups)
+	async_performer *async, const std::vector<int> &groups)
 {
-	if (!metadata_updater::initialize(config, node, logger, async, groups)) {
+	if (!metadata_updater::initialize(config, node, async, groups)) {
 		return false;
 	}
 
 	if (!config.HasMember("name")) {
-		logger.log(swarm::SWARM_LOG_ERROR, "\"application.cache.name\" field is missed");
+		BH_LOG(logger(), SWARM_LOG_ERROR, "\"application.cache.name\" field is missed");
 		return false;
 	}
 
@@ -97,7 +98,7 @@ void cache::on_sync_action()
 void cache::on_read_finished(const elliptics::sync_read_result &result, const elliptics::error_info &error)
 {
 	if (error) {
-		logger().log(swarm::SWARM_LOG_ERROR, "Failed to access groups file: %s", error.message().c_str());
+		BH_LOG(logger(), SWARM_LOG_ERROR, "Failed to access groups file: %s", error.message().c_str());
 		return;
 	}
 

@@ -16,10 +16,10 @@ namespace rift {
 class cache : public metadata_updater, public std::enable_shared_from_this<cache>
 {
 public:
-	cache();
+	cache(const swarm::logger &logger);
 
 	bool initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node,
-		const swarm::logger &logger, async_performer *async, const std::vector<int> &groups);
+		async_performer *async, const std::vector<int> &groups);
 
 	std::vector<int> groups(const ioremap::elliptics::key &key);
 

@@ -24,28 +24,31 @@ public:
 	}
 
 	~base_server() {
-		m_async.stop();
+		if (m_async)
+			m_async->stop();
 		m_cache.reset();
 	}
 
 	bool initialize(const rapidjson::Value &config) {
 		this->daemonize();
 
-		if (!m_elliptics.initialize(config, this->logger()))
+		m_elliptics.reset(new rift::elliptics_base(this->logger()));
+
+		if (!m_elliptics->initialize(config))
 			return false;
 
-		m_async.initialize(this->logger());
+		m_async.reset(new rift::async_performer(this->logger()));
 
 		if (config.HasMember("cache")) {
-			m_cache = std::make_shared<rift::cache>();
-			if (!m_cache->initialize(config["cache"], m_elliptics.node(), this->logger(),
-					&m_async, m_elliptics.metadata_groups()))
+			m_cache = std::make_shared<rift::cache>(this->logger());
+			if (!m_cache->initialize(config["cache"], m_elliptics->node(),
+					m_async.get(), m_elliptics->metadata_groups()))
 				return false;
 		}
 
 		if (config.HasMember("bucket")) {
-			m_bucket = std::make_shared<rift::bucket>();
-			if (!m_bucket->initialize(config["bucket"], m_elliptics, &m_async))
+			m_bucket = std::make_shared<rift::bucket>(this->logger());
+			if (!m_bucket->initialize(config["bucket"], *m_elliptics.get(), m_async.get()))
 				return false;
 		}
 
@@ -54,7 +57,7 @@ public:
 			stat_timeout = config["stat-timeout"].GetInt();
 		}
 
-		m_async.add_action(std::bind(&rift::elliptics_base::stat_update, &m_elliptics), stat_timeout);
+		m_async->add_action(std::bind(&rift::elliptics_base::stat_update, m_elliptics.get()), stat_timeout);
 
 		if (config.HasMember("redirect-port")) {
 			m_redirect_port = config["redirect-port"].GetInt();
@@ -121,7 +124,7 @@ public:
 	}
 
 	const rift::elliptics_base *elliptics() const {
-		return &m_elliptics;
+		return m_elliptics.get();
 	}
 
 	template <typename Stream>
@@ -150,7 +153,7 @@ public:
 				tmp.checker = it->second;
 			} else {
 				// We don't support this authorization method, return 403 Forbidden
-				this->logger().log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, invalid method: %s",
+				BH_LOG(*info.logger, SWARM_LOG_NOTICE, "verdict: url: %s, invalid method: %s",
 						info.request->url().to_human_readable().c_str(), method.c_str());
 
 				rift::authorization_check_result result;
@@ -171,13 +174,13 @@ public:
 	}
 
 	template <typename Stream>
-	elliptics::session create_session(Stream &stream, const swarm::http_request &req, elliptics::key &key) const {
+	elliptics::session create_session(Stream &stream, const thevoid::http_request &req, elliptics::key &key) const {
 		const bool is_read = (Stream::bucket_mixin_flags & rift::bucket_acl::handler_read);
 
 		key = static_cast<const Server *>(this)->extract_key(stream, req);
 		auto session = is_read
-			? m_elliptics.read_data_session(req, stream.bucket_mixin_meta)
-			: m_elliptics.write_data_session(req, stream.bucket_mixin_meta);
+			? m_elliptics->read_data_session(req, stream.bucket_mixin_meta)
+			: m_elliptics->write_data_session(req, stream.bucket_mixin_meta);
 		check_cache(key, session);
 
 		return session;
@@ -199,10 +202,10 @@ protected:
 	bool m_secured_http;
 	bool m_use_hostname;
 	std::string m_path_prefix;
-	rift::elliptics_base m_elliptics;
+	std::unique_ptr<rift::elliptics_base> m_elliptics;
 	std::shared_ptr<rift::cache> m_cache;
 	std::shared_ptr<rift::bucket> m_bucket;
-	rift::async_performer m_async;
+	std::unique_ptr<rift::async_performer> m_async;
 	std::map<std::string, rift::authorization_checker_base::ptr> m_auth;
 };
 

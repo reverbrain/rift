@@ -18,15 +18,17 @@ namespace rift {
 class rift_authorization : public authorization_checker_base
 {
 public:
-	rift_authorization(const std::shared_ptr<thevoid::base_server> &server);
+	rift_authorization();
 
 	virtual result_tuple check_permission(
-		const request_stream_ptr &stream, const swarm::http_request &request, const bucket_meta_raw &meta);
+		const request_stream_ptr &stream, const thevoid::http_request &request, const bucket_meta_raw &meta, const swarm::logger &logger);
 
-	static std::string generate_signature(const swarm::http_request &request, const std::string &key);
+	static std::string generate_signature(const thevoid::http_request &request, const std::string &key);
 
 	result_tuple check_permission_with_username_and_token(
-		const request_stream_ptr &stream, const swarm::http_request &request, const bucket_meta_raw &meta, const std::string &user, const std::string &token);
+		const request_stream_ptr &stream, const thevoid::http_request &request,
+		const bucket_meta_raw &meta, const std::string &user, const std::string &token,
+		const swarm::logger &logger);
 };
 
 /*!
@@ -37,10 +39,11 @@ public:
 class no_authorization : public rift_authorization
 {
 public:
-	no_authorization(const std::shared_ptr<thevoid::base_server> &server);
+	no_authorization();
 
 	virtual result_tuple check_permission(
-		const std::shared_ptr<thevoid::base_request_stream> &stream, const swarm::http_request &request, const bucket_meta_raw &meta);
+		const std::shared_ptr<thevoid::base_request_stream> &stream, const thevoid::http_request &request,
+		const bucket_meta_raw &meta, const swarm::logger &logger);
 };
 
 template <typename Server>
@@ -52,19 +55,19 @@ public:
 	{
 	}
 
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer)
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer)
 	{
 		std::string content_md5 = rift::crypto::calc_hash<CryptoPP::Weak::MD5>(buffer);
 
 		if (content_md5 != m_content_md5) {
-			this->log(swarm::SWARM_LOG_ERROR, "md5_check_proxy, url: %s, mismatched content-md5, local: %s, remote: %s",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "md5_check_proxy, url: %s, mismatched content-md5, local: %s, remote: %s",
 				req.url().to_human_readable().c_str(), content_md5.c_str(), m_content_md5.c_str());
-			this->send_reply(swarm::http_response::forbidden);
+			this->send_reply(thevoid::http_response::forbidden);
 			return;
 		}
 
-		m_stream->initialize(this->get_reply());
-		m_stream->on_headers(swarm::http_request(req));
+		m_stream->initialize(this->reply());
+		m_stream->on_headers(thevoid::http_request(req));
 		m_stream->on_data(buffer);
 		m_stream->on_close(boost::system::error_code());
 	}
@@ -77,7 +80,7 @@ private:
 class s3_v2_signature
 {
 public:
-	s3_v2_signature(const swarm::logger &logger, const std::string &host);
+	s3_v2_signature(const std::string &host);
 
 	struct info
 	{
@@ -85,11 +88,10 @@ public:
 		std::string signature;
 	};
 
-	boost::optional<info> extract_info(const swarm::http_request &request);
-	swarm::http_response::status_type check(const swarm::http_request &request, const info &info, const bucket_acl &acl);
+	boost::optional<info> extract_info(const thevoid::http_request &request, const swarm::logger &logger);
+	thevoid::http_response::status_type check(const thevoid::http_request &request, const info &info, const bucket_acl &acl, const swarm::logger &logger);
 
 protected:
-	swarm::logger m_logger;
 	std::string m_host;
 };
 
@@ -97,30 +99,31 @@ template <typename Server>
 class s3_v2_authorization : public authorization_checker<Server>, public s3_v2_signature
 {
 public:
-	s3_v2_authorization(const std::shared_ptr<Server> &server, const std::string &host) :
-		authorization_checker<Server>(server), s3_v2_signature(server->logger(), host)
+	s3_v2_authorization(Server *server, const std::string &host) :
+		authorization_checker<Server>(server), s3_v2_signature(host)
 	{
 	}
 
-	virtual authorization_checker_base::result_tuple check_permission(const authorization_checker_base::request_stream_ptr &stream, const swarm::http_request &request, const bucket_meta_raw &meta)
+	virtual authorization_checker_base::result_tuple check_permission(const authorization_checker_base::request_stream_ptr &stream,
+		const thevoid::http_request &request, const bucket_meta_raw &meta, const swarm::logger &logger)
 	{
-		boost::optional<s3_v2_signature::info> info = s3_v2_signature::extract_info(request);
+		boost::optional<s3_v2_signature::info> info = s3_v2_signature::extract_info(request, logger);
 		if (!info) {
-			return std::make_tuple(swarm::http_response::forbidden, stream, bucket_acl());
+			return std::make_tuple(thevoid::http_response::forbidden, stream, bucket_acl());
 		}
 
-		swarm::http_response::status_type verdict;
+		thevoid::http_response::status_type verdict;
 		bucket_acl acl;
-		std::tie(verdict, acl) = this->find_user(request, meta, info->access_id);
-		if (verdict != swarm::http_response::continue_code) {
+		std::tie(verdict, acl) = this->find_user(request, meta, info->access_id, logger);
+		if (verdict != thevoid::http_response::continue_code) {
 			return std::make_tuple(verdict, stream, acl);
 		}
 
-		verdict = s3_v2_signature::check(request, *info, acl);
+		verdict = s3_v2_signature::check(request, *info, acl, logger);
 
 		if (auto content_md5 = request.headers().get("Content-MD5")) {
 			auto new_stream = std::make_shared<md5_check_proxy<Server>>(stream, *content_md5);
-			new_stream->set_server(this->m_server.lock());
+			new_stream->set_server(this->m_server);
 			return std::make_tuple(verdict, new_stream, acl);
 		}
 
@@ -131,7 +134,7 @@ public:
 class s3_v4_signature
 {
 public:
-	s3_v4_signature(const swarm::logger &logger);
+	s3_v4_signature();
 
 	struct info
 	{
@@ -141,36 +144,34 @@ public:
 		std::string signature;
 	};
 
-	boost::optional<info> extract_info(const swarm::http_request &request);
-	swarm::http_response::status_type check(const swarm::http_request &request, const info &info, const bucket_acl &acl);
-
-protected:
-	swarm::logger m_logger;
+	boost::optional<info> extract_info(const thevoid::http_request &request, const swarm::logger &logger);
+	thevoid::http_response::status_type check(const thevoid::http_request &request, const info &info, const bucket_acl &acl, const swarm::logger &logger);
 };
 
 template <typename Server>
 class s3_v4_authorization : public authorization_checker<Server>, public s3_v4_signature
 {
 public:
-	s3_v4_authorization(const std::shared_ptr<Server> &server) : authorization_checker<Server>(server), s3_v4_signature(server->logger())
+	s3_v4_authorization(Server *server) : authorization_checker<Server>(server)
 	{
 	}
 
-	virtual authorization_checker_base::result_tuple check_permission(const authorization_checker_base::request_stream_ptr &stream, const swarm::http_request &request, const bucket_meta_raw &meta)
+	virtual authorization_checker_base::result_tuple check_permission(const authorization_checker_base::request_stream_ptr &stream,
+		const thevoid::http_request &request, const bucket_meta_raw &meta, const swarm::logger &logger)
 	{
-		boost::optional<s3_v4_signature::info> info = s3_v4_signature::extract_info(request);
+		boost::optional<s3_v4_signature::info> info = s3_v4_signature::extract_info(request, logger);
 		if (!info) {
-			return std::make_tuple(swarm::http_response::forbidden, stream, bucket_acl());
+			return std::make_tuple(thevoid::http_response::forbidden, stream, bucket_acl());
 		}
 
-		swarm::http_response::status_type verdict;
+		thevoid::http_response::status_type verdict;
 		bucket_acl acl;
-		std::tie(verdict, acl) = this->find_user(request, meta, info->access_id);
-		if (verdict != swarm::http_response::continue_code) {
+		std::tie(verdict, acl) = this->find_user(request, meta, info->access_id, logger);
+		if (verdict != thevoid::http_response::continue_code) {
 			return std::make_tuple(verdict, stream, acl);
 		}
 
-		verdict = s3_v4_signature::check(request, *info, acl);
+		verdict = s3_v4_signature::check(request, *info, acl, logger);
 
 		return std::make_tuple(verdict, stream, acl);
 	}

@@ -7,7 +7,7 @@ example_server::example_server() {
 }
 
 example_server::~example_server() {
-	m_async.stop();
+	m_async->stop();
 	m_cache.reset();
 }
 
@@ -15,8 +15,8 @@ bool example_server::initialize(const rapidjson::Value &config) {
 	if (!base_server::initialize(config))
 		return false;
 
-	m_auth[std::string()] = std::make_shared<rift::no_authorization>(shared_from_this());
-	m_auth["riftv1"] = std::make_shared<rift::rift_authorization>(shared_from_this());
+	m_auth[std::string()] = std::make_shared<rift::no_authorization>();
+	m_auth["riftv1"] = std::make_shared<rift::rift_authorization>();
 
 	on<rift::bucket_processor<example_server, on_update>>(
 		options::prefix_match("/update/"),
@@ -104,7 +104,7 @@ bool example_server::initialize(const rapidjson::Value &config) {
 	return true;
 }
 
-bool example_server::check_query(const swarm::http_request &request) const {
+bool example_server::check_query(const thevoid::http_request &request) const {
 	const auto &pc = request.url().path_components();
 	size_t min_component_num = 2;
 	if (m_bucket) {
@@ -117,7 +117,7 @@ bool example_server::check_query(const swarm::http_request &request) const {
 	}
 
 	if (pc.size() < min_component_num) {
-		elliptics::throw_error(swarm::http_response::bad_request, "query parser error: path: '%s?%s', "
+		elliptics::throw_error(thevoid::http_response::bad_request, "query parser error: path: '%s?%s', "
 			"error: path must have at least %zd '/'-separated components",
 			request.url().path().c_str(), request.url().query().to_string().c_str(), min_component_num);
 	}
@@ -126,13 +126,13 @@ bool example_server::check_query(const swarm::http_request &request) const {
 }
 
 template <typename Stream>
-std::string example_server::extract_key(Stream &, const swarm::http_request &request) const
+std::string example_server::extract_key(Stream &, const thevoid::http_request &request) const
 {
 	return rift::url::key(request, !!m_bucket);
 }
 
 template <typename Stream>
-std::string example_server::extract_bucket(Stream &, const swarm::http_request &request) const
+std::string example_server::extract_bucket(Stream &, const thevoid::http_request &request) const
 {
 	return rift::url::bucket(request);
 }

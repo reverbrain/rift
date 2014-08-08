@@ -13,6 +13,13 @@ bucket_meta::bucket_meta(bucket *b, const std::string &bucket_name, const author
 	update_and_check(info);
 }
 
+static std::string groups_to_string(const std::vector<int> &groups)
+{
+	std::ostringstream ss;
+	std::copy(groups.begin(), groups.end(), std::ostream_iterator<int>(ss, ":"));
+	return ss.str();
+}
+
 void bucket_meta::check_and_run_raw(const authorization_info &info, bool uptodate)
 {
 	rift::authorization_check_result result;
@@ -20,33 +27,28 @@ void bucket_meta::check_and_run_raw(const authorization_info &info, bool uptodat
 
 	if (result.meta.groups.empty()) {
 		// if no groups exist, then given bucket is 'empty', or basically it was not written into the storage
-		result.verdict = swarm::http_response::not_found;
+		result.verdict = thevoid::http_response::not_found;
 		result.stream = info.stream;
 
-		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: no groups in bucket -> %d",
-				info.request->url().to_human_readable().c_str(), result.meta.key.c_str(), result.verdict);
+		BH_LOG(*info.logger, SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: no groups in bucket -> %d",
+				info.request->url().to_human_readable(), result.meta.key, result.verdict);
 	} else if (result.meta.acl.empty()) {
 		// acl list is empty, nothing to check
-		result.verdict = swarm::http_response::ok;
+		result.verdict = thevoid::http_response::ok;
 		result.stream = info.stream;
 
-		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: acls: %zd: acl list is empty -> %d",
-				info.request->url().to_human_readable().c_str(), result.meta.key.c_str(), result.meta.acl.size(), result.verdict);
+		BH_LOG(*info.logger, SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: acls: %lld: acl list is empty -> %d",
+				info.request->url().to_human_readable(), result.meta.key, result.meta.acl.size(), result.verdict);
 	} else {
-		std::tie(result.verdict, result.stream, result.acl) = info.checker->check_permission(info.stream, *info.request, result.meta);
+		std::tie(result.verdict, result.stream, result.acl) = info.checker->check_permission(info.stream, *info.request, result.meta, *info.logger);
 	}
 
-	if (m_bucket->logger().level() >= swarm::SWARM_LOG_NOTICE) {
-		std::ostringstream ss;
-		std::copy(result.meta.groups.begin(), result.meta.groups.end(), std::ostream_iterator<int>(ss, ":"));
+	BH_LOG(*info.logger, SWARM_LOG_NOTICE,
+		"bucket: check-and-run-raw: bucket: %s, groups: %s, uptodate: %d, req: %s, acl: '%s', verdict: %d",
+		result.meta.key, groups_to_string(result.meta.groups), uptodate, info.request->url().to_human_readable(),
+		result.acl.to_string(), result.verdict);
 
-		m_bucket->logger().log(swarm::SWARM_LOG_NOTICE,
-				"bucket: check-and-run-raw: bucket: %s, groups: %s, uptodate: %d, req: %s, acl: '%s', verdict: %d",
-				result.meta.key.c_str(), ss.str().c_str(), uptodate, info.request->url().to_human_readable().c_str(),
-				result.acl.to_string().c_str(), result.verdict);
-	}
-
-	if ((result.verdict != swarm::http_response::ok) && !uptodate) {
+	if ((result.verdict != thevoid::http_response::ok) && !uptodate) {
 		update_and_check(info);
 	} else {
 		info.handler(result);
@@ -79,10 +81,10 @@ void bucket_meta::update()
 	// metadata_session() clones metadata session
 	elliptics::session sess = m_bucket->metadata_session();
 	std::string ns = "bucket";
-	sess.set_namespace(ns.c_str(), ns.size());
+	sess.set_namespace(ns);
 
 	sess.read_data(m_raw.key, 0, 0).connect(std::bind(&bucket_meta::update_finished, this,
-				std::placeholders::_1, std::placeholders::_2));
+				&m_bucket->logger(), std::placeholders::_1, std::placeholders::_2));
 }
 
 void bucket_meta::update_and_check(const authorization_info &info)
@@ -90,18 +92,18 @@ void bucket_meta::update_and_check(const authorization_info &info)
 	// metadata_session() clones metadata session
 	elliptics::session sess = m_bucket->metadata_session();
 	std::string ns = "bucket";
-	sess.set_namespace(ns.c_str(), ns.size());
+	sess.set_namespace(ns);
 
 	sess.read_data(m_raw.key, 0, 0).connect(std::bind(&bucket_meta::update_and_check_completed, this,
 				info, std::placeholders::_1, std::placeholders::_2));
 }
 
-void bucket_meta::update_finished(const ioremap::elliptics::sync_read_result &result,
+void bucket_meta::update_finished(const swarm::logger *logger, const ioremap::elliptics::sync_read_result &result,
 			const ioremap::elliptics::error_info &error)
 {
 	if (error) {
-		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "bucket-update-failed: bucket: %s, error: %s",
-				m_raw.key.c_str(), error.message().c_str());
+		BH_LOG(*logger, SWARM_LOG_ERROR, "bucket-update-failed: bucket: %s, error: %s",
+				m_raw.key, error.message());
 	} else {
 		try {
 			const elliptics::read_result_entry &entry = result[0];
@@ -116,14 +118,14 @@ void bucket_meta::update_finished(const ioremap::elliptics::sync_read_result &re
 			std::ostringstream ss;
 			std::copy(m_raw.groups.begin(), m_raw.groups.end(), std::ostream_iterator<int>(ss, ":"));
 
-			m_bucket->logger().log(swarm::SWARM_LOG_NOTICE,
-					"bucket-update: bucket: %s, acls: %zd, flags: 0x%lx, groups: %s",
-					m_raw.key.c_str(), m_raw.acl.size(), m_raw.flags, ss.str().c_str());
+			BH_LOG(*logger, SWARM_LOG_NOTICE,
+					"bucket-update: bucket: %s, acls: %lld, flags: 0x%lx, groups: %s",
+					m_raw.key, m_raw.acl.size(), m_raw.flags, ss.str());
 
 		} catch (const std::exception &e) {
-			m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "bucket-update-failed: read exception: "
+			BH_LOG(*logger, SWARM_LOG_ERROR, "bucket-update-failed: read exception: "
 					"bucket: %s, exception: %s",
-					m_raw.key.c_str(), e.what());
+					m_raw.key, e.what());
 		}
 	}
 }
@@ -131,14 +133,14 @@ void bucket_meta::update_finished(const ioremap::elliptics::sync_read_result &re
 void bucket_meta::update_and_check_completed(const authorization_info &info,
 			const ioremap::elliptics::sync_read_result &result, const ioremap::elliptics::error_info &error)
 {
-	update_finished(result, error);
+	update_finished(info.logger, result, error);
 
 	if (error) {
 		rift::authorization_check_result check_result;
 
-		check_result.verdict = swarm::http_response::forbidden;
+		check_result.verdict = thevoid::http_response::forbidden;
 		if (error.code() == -ENOENT)
-			check_result.verdict = swarm::http_response::not_found;
+			check_result.verdict = thevoid::http_response::not_found;
 
 		check_result.stream = info.stream;
 
@@ -148,13 +150,14 @@ void bucket_meta::update_and_check_completed(const authorization_info &info,
 	}
 }
 
-bucket::bucket()
+bucket::bucket(const swarm::logger &logger) :
+	metadata_updater(swarm::logger(logger, blackhole::log::attributes_t({ swarm::keyword::source() = "bucket" })))
 {
 }
 
 bool bucket::initialize(const rapidjson::Value &config, const elliptics_base &base, async_performer *async)
 {
-	if (!metadata_updater::initialize(config, base.node(), base.logger(), async, base.metadata_groups())) {
+	if (!metadata_updater::initialize(config, base.node(), async, base.metadata_groups())) {
 		return false;
 	}
 

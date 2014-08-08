@@ -7,7 +7,7 @@
 
 namespace ioremap { namespace rift { namespace url {
 
-static inline const std::string key(const swarm::http_request &req, bool has_bucket) {
+static inline const std::string key(const thevoid::http_request &req, bool has_bucket) {
 	std::string key;
 
 	const auto &path = req.url().path_components();
@@ -23,7 +23,7 @@ static inline const std::string key(const swarm::http_request &req, bool has_buc
 	return key;
 }
 
-static inline const std::string bucket(const swarm::http_request &req) {
+static inline const std::string bucket(const thevoid::http_request &req) {
 	const auto &path = req.url().path_components();
 
 	// This is the only method where bucket's name is second component but not the first one

@@ -7,22 +7,22 @@ namespace ioremap { namespace rift { namespace common {
 
 template <typename T>
 struct on_ping : public thevoid::simple_request_stream<T> {
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 		(void) req;
 
-		this->send_reply(swarm::http_response::ok);
+		this->send_reply(thevoid::http_response::ok);
 	}
 };
 
 template <typename T>
 struct on_echo : public thevoid::simple_request_stream<T> {
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		auto data = boost::asio::buffer_cast<const char*>(buffer);
 		auto size = boost::asio::buffer_size(buffer);
 
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::ok);
+		thevoid::http_response reply;
+		reply.set_code(thevoid::http_response::ok);
 		reply.set_headers(req.headers());
 		reply.headers().set_content_length(size);
 

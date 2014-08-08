@@ -14,22 +14,22 @@ template <typename Server, typename Stream>
 class on_update_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		std::string buf(boost::asio::buffer_cast<const char*>(buffer), boost::asio::buffer_size(buffer));
 		rapidjson::Document doc;
 		doc.Parse<0>(buf.c_str());
 
 		if (doc.HasParseError()) {
-			this->log(swarm::SWARM_LOG_ERROR, "update-base: url: %s: request parsing error offset: %zd, message: %s",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "update-base: url: %s: request parsing error offset: %lld, message: %s",
 					req.url().to_human_readable().c_str(), doc.GetErrorOffset(), doc.GetParseError());
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(thevoid::http_response::bad_request);
 			return;
 		}
 
 		if (!doc.HasMember("indexes")) {
-			this->log(swarm::SWARM_LOG_ERROR, "update-base: url: %s: document doesn't contain 'indexes' member",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "update-base: url: %s: document doesn't contain 'indexes' member",
 					req.url().to_human_readable().c_str());
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(thevoid::http_response::bad_request);
 			return;
 		}
 
@@ -56,11 +56,11 @@ public:
 
 	virtual void on_update_finished(const elliptics::error_info &error) {
 		if (error) {
-			this->send_reply(swarm::http_response::service_unavailable);
+			this->send_reply(thevoid::http_response::service_unavailable);
 			return;
 		}
 
-		this->send_reply(swarm::http_response::ok);
+		this->send_reply(thevoid::http_response::ok);
 	}
 };
 
@@ -155,18 +155,18 @@ template <typename Server, typename Stream>
 class on_find_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		std::string buf(boost::asio::buffer_cast<const char*>(buffer), boost::asio::buffer_size(buffer));
 		rapidjson::Document data;
 		data.Parse<0>(buf.c_str());
 
 		if (data.HasParseError()) {
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(thevoid::http_response::bad_request);
 			return;
 		}
 
 		if (!data.HasMember("type") || !data.HasMember("indexes")) {
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(thevoid::http_response::bad_request);
 			return;
 		}
 
@@ -192,9 +192,9 @@ public:
 		}
 
 		if (type != "and" && type != "or") {
-			this->log(swarm::SWARM_LOG_ERROR, "find-base: checked: url: %s, 'type' field must be 'and' or 'or', not '%s'",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "find-base: checked: url: %s, 'type' field must be 'and' or 'or', not '%s'",
 				req.url().to_human_readable().c_str(), type.c_str());
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(thevoid::http_response::bad_request);
 			return;
 		}
 
@@ -206,7 +206,7 @@ public:
 	virtual void on_find_finished(const elliptics::sync_find_indexes_result &result,
 			const elliptics::error_info &error) {
 		if (error) {
-			this->send_reply(swarm::http_response::service_unavailable);
+			this->send_reply(thevoid::http_response::service_unavailable);
 			return;
 		}
 
@@ -228,7 +228,7 @@ public:
 	virtual void on_ready_to_parse_indexes(const elliptics::sync_read_result &data,
 			const elliptics::error_info &error) {
 		if (error) {
-			this->send_reply(swarm::http_response::service_unavailable);
+			this->send_reply(thevoid::http_response::service_unavailable);
 			return;
 		}
 
@@ -243,8 +243,8 @@ public:
 
 		auto data = result_object.ToString();
 
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::ok);
+		thevoid::http_response reply;
+		reply.set_code(thevoid::http_response::ok);
 		reply.headers().set_content_type("text/json; charset=utf-8");
 		reply.headers().set_content_length(data.size());
 

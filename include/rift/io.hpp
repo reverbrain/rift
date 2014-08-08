@@ -193,7 +193,7 @@ template <typename Server, typename Stream>
 class on_upload_base : public thevoid::buffered_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req) {
+	virtual void on_request(const thevoid::http_request &req) {
 		m_timer.restart();
 
 		this->set_chunk_size(10 * 1024 * 1024);
@@ -202,9 +202,9 @@ public:
 			const auto &query = this->request().url().query();
 			m_orig_offset = m_offset = query.item_value("offset", 0llu);
 		} catch (const std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: url: %s: invalid offset parameter: %s",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "buffered-write: url: %s: invalid offset parameter: %s",
 					req.url().to_human_readable().c_str(), e.what());
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(thevoid::http_response::bad_request);
 			return;
 		}
 
@@ -213,7 +213,7 @@ public:
 		else
 			m_size = 0;
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_request: url: %s, offset: %llu, size: %llu",
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: on_request: url: %s, offset: %llu, size: %llu",
 				this->request().url().to_human_readable().c_str(),
 				(unsigned long long)m_offset, (unsigned long long)m_size);
 
@@ -223,7 +223,7 @@ public:
 	virtual void on_chunk(const boost::asio::const_buffer &buffer, unsigned int flags) {
 		const auto data = create_data(buffer);
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_chunk: url: %s, size: %zu, m_offset: %lu, flags: %u",
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: on_chunk: url: %s, size: %llu, m_offset: %lu, flags: %u",
 				this->request().url().to_human_readable().c_str(), data.size(), m_offset, flags);
 
 		elliptics::async_write_result result = write(data, flags);
@@ -240,40 +240,40 @@ public:
 
 	elliptics::async_write_result write(const elliptics::data_pointer &data, unsigned int flags) {
 		if (flags == thevoid::buffered_request_stream<Server>::single_chunk) {
-			this->log(swarm::SWARM_LOG_INFO, "buffered-write: write-data-single-chunk: url: %s, offset: %lu, size: %zu",
+			BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: write-data-single-chunk: url: %s, offset: %lu, size: %llu",
 					this->request().url().to_human_readable().c_str(), m_offset, data.size());
 			return m_session->write_data(m_key, data, m_offset);
 		} else if (m_size > 0) {
 			if (flags & thevoid::buffered_request_stream<Server>::first_chunk) {
-				this->log(swarm::SWARM_LOG_INFO, "buffered-write: prepare: url: %s, offset: %lu, size: %lu",
+				BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: prepare: url: %s, offset: %lu, size: %lu",
 						this->request().url().to_human_readable().c_str(), m_offset, m_size);
 				return m_session->write_prepare(m_key, data, m_offset, m_offset + m_size);
 			} else if (flags & thevoid::buffered_request_stream<Server>::last_chunk) {
-				this->log(swarm::SWARM_LOG_INFO, "buffered-write: commit: url: %s, offset: %lu, size: %lu",
+				BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: commit: url: %s, offset: %lu, size: %lu",
 						this->request().url().to_human_readable().c_str(), m_offset, m_offset + data.size());
 				return m_session->write_commit(m_key, data, m_offset, m_offset + data.size());
 			} else {
-				this->log(swarm::SWARM_LOG_INFO, "buffered-write: plain: url: %s, offset: %lu, size: %zu",
+				BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: plain: url: %s, offset: %lu, size: %llu",
 						this->request().url().to_human_readable().c_str(), m_offset, data.size());
 				return m_session->write_plain(m_key, data, m_offset);
 			}
 		} else {
-			this->log(swarm::SWARM_LOG_INFO, "buffered-write: write-data: url: %s, offset: %lu, size: %zu",
+			BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: write-data: url: %s, offset: %lu, size: %llu",
 					this->request().url().to_human_readable().c_str(), m_offset, data.size());
 			return m_session->write_data(m_key, data, m_offset);
 		}
 	}
 
 	virtual void on_error(const boost::system::error_code &error) {
-		this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_error: url: %s, error: %s, written: %zu/%zu, time: %ld msecs",
+		BH_LOG(this->logger(), SWARM_LOG_ERROR, "buffered-write: on_error: url: %s, error: %s, written: %llu/%llu, time: %ld msecs",
 				this->request().url().to_human_readable().c_str(), error.message().c_str(),
 				m_offset - m_orig_offset, m_size, m_timer.elapsed());
 	}
 
 	virtual void on_write_partial(const elliptics::sync_write_result &result, const elliptics::error_info &error) {
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_write_partial: url: %s, partial write error: %s, "
-					"written: %zu/%zu, time: %ld msecs",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "buffered-write: on_write_partial: url: %s, partial write error: %s, "
+					"written: %llu/%llu, time: %ld msecs",
 					this->request().url().to_human_readable().c_str(), error.message().c_str(),
 					m_offset - m_orig_offset, m_size, m_timer.elapsed());
 			this->on_write_finished(result, error);
@@ -305,8 +305,8 @@ public:
 			}
 		}
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_partial: url: %s: "
-				"success-groups: %s, error-groups: %s, offset: %lu, written: %zu/%zu, time: %ld msecs",
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: on_write_partial: url: %s: "
+				"success-groups: %s, error-groups: %s, offset: %lu, written: %llu/%llu, time: %ld msecs",
 				this->request().url().to_human_readable().c_str(), sgroups.str().c_str(), egroups.str().c_str(),
 				m_offset, m_offset - m_orig_offset, m_size, m_timer.elapsed());
 
@@ -322,11 +322,11 @@ public:
 	virtual void on_write_finished(const elliptics::sync_write_result &result,
 			const elliptics::error_info &error) {
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-write: on_write_finished: url: %s, full write error: %s, "
-					"written: %zu/%zu, time: %ld msecs",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "buffered-write: on_write_finished: url: %s, full write error: %s, "
+					"written: %llu/%llu, time: %ld msecs",
 					this->request().url().to_human_readable().c_str(), error.message().c_str(),
 					m_offset - m_orig_offset, m_size, m_timer.elapsed());
-			this->send_reply(swarm::http_response::service_unavailable);
+			this->send_reply(thevoid::http_response::service_unavailable);
 			return;
 		}
 
@@ -357,8 +357,8 @@ public:
 			}
 		}
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-write: on_write_finished: url: %s: "
-				"success-groups: %s, error-groups: %s, offset: %lu, written: %zu/%zu, time: %ld msecs",
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-write: on_write_finished: url: %s: "
+				"success-groups: %s, error-groups: %s, offset: %lu, written: %llu/%llu, time: %ld msecs",
 				this->request().url().to_human_readable().c_str(), sgroups.str().c_str(), egroups.str().c_str(),
 				m_offset, m_offset - m_orig_offset, m_size, m_timer.elapsed());
 
@@ -369,8 +369,8 @@ public:
 
 		std::string data = value.ToString();
 
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::ok);
+		thevoid::http_response reply;
+		reply.set_code(thevoid::http_response::ok);
 		reply.headers().set_content_type("text/json; charset=utf-8");
 		reply.headers().set_content_length(data.size());
 
@@ -399,7 +399,7 @@ template <typename Server, typename Stream>
 class on_download_info_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
 		elliptics::key key;
@@ -410,7 +410,7 @@ public:
 	}
 
 	std::string generate_signature(const elliptics::lookup_result_entry &entry, const std::string &time,
-			const std::string &token, std::string *url_ptr, swarm::http_response::status_type *type) {
+			const std::string &token, std::string *url_ptr, thevoid::http_response::status_type *type) {
 		if (token.empty() && !url_ptr)
 			return std::string();
 
@@ -432,7 +432,7 @@ public:
 		 * Please note, that above URL will be hashed in escaped form, i.e. ':' and other symbols will be encoded
 		 */
 		swarm::url url = this->server()->generate_url_base(entry.address(), entry.file_path(), type);
-		if (swarm::http_response::http_response::ok != *type)
+		if (thevoid::http_response::http_response::ok != *type)
 			return std::string();
 
 		swarm::url_query &query = url.query();
@@ -476,10 +476,10 @@ public:
 	virtual void on_download_lookup_finished(const elliptics::sync_lookup_result &result,
 			const elliptics::error_info &error) {
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
 					error.message().c_str());
 
-			this->send_reply(swarm::http_response::service_unavailable);
+			this->send_reply(thevoid::http_response::service_unavailable);
 			return;
 		}
 
@@ -492,11 +492,11 @@ public:
 		const std::string token = this->server()->signature_token(static_cast<Stream&>(*this));
 
 		if (!token.empty()) {
-			swarm::http_response::status_type status = swarm::http_response::ok;
+			thevoid::http_response::status_type status = thevoid::http_response::ok;
 			std::string url;
 			std::string signature = generate_signature(result[0], time_str, token, &url, &status);
-			if (status != swarm::http_response::ok) {
-				this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
+			if (status != thevoid::http_response::ok) {
+				BH_LOG(this->logger(), SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
 						error.message().c_str());
 
 				this->send_reply(status);
@@ -518,8 +518,8 @@ public:
 
 		auto data = result_object.ToString();
 
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::ok);
+		thevoid::http_response reply;
+		reply.set_code(thevoid::http_response::ok);
 		reply.headers().set_content_type("text/json; charset=utf-8");
 		reply.headers().set_content_length(data.size());
 
@@ -541,12 +541,12 @@ public:
 	virtual void on_download_lookup_finished(const elliptics::sync_lookup_result &result,
 			const elliptics::error_info &error) {
 		if (error.code() == -ENOENT) {
-			this->send_reply(swarm::http_response::not_found);
+			this->send_reply(thevoid::http_response::not_found);
 			return;
 		} else if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "redirect-base: lookup-finished: error: %s",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "redirect-base: lookup-finished: error: %s",
 					error.message().c_str());
-			this->send_reply(swarm::http_response::service_unavailable);
+			this->send_reply(thevoid::http_response::service_unavailable);
 			return;
 		}
 
@@ -557,20 +557,20 @@ public:
 
 		std::string url;
 
-		swarm::http_response::status_type status = swarm::http_response::ok;
+		thevoid::http_response::status_type status = thevoid::http_response::ok;
 		this->generate_signature(result[0], time_str, token, &url, &status);
-		if (status != swarm::http_response::ok) {
-			this->log(swarm::SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
+		if (status != thevoid::http_response::ok) {
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "download-lookup-finished: checked: error: %s",
 					error.message().c_str());
 
 			this->send_reply(status);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "redirect-base: lookup-finished: url: %s", url.c_str());
+		BH_LOG(this->logger(), SWARM_LOG_NOTICE, "redirect-base: lookup-finished: url: %s", url.c_str());
 
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::moved_temporarily);
+		thevoid::http_response reply;
+		reply.set_code(thevoid::http_response::moved_temporarily);
 		reply.headers().set("Location", url);
 		reply.headers().set_content_length(0);
 
@@ -676,7 +676,7 @@ public:
 	{
 	}
 
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &query = req.url().query();
 		m_url = req.url().to_human_readable();
 
@@ -684,8 +684,8 @@ public:
 			m_offset = query.item_value("offset", 0llu);
 			m_size = query.item_value("size", 0llu);
 		} catch (const std::exception &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_request: url: %s: invalid size/offset parameters: %s", m_url.c_str(), e.what());
-			this->send_reply(swarm::http_response::bad_request);
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "buffered-get: on_request: url: %s: invalid size/offset parameters: %s", m_url.c_str(), e.what());
+			this->send_reply(thevoid::http_response::bad_request);
 			return;
 		}
 
@@ -696,7 +696,7 @@ public:
 		auto range = this->request().headers().get("Range");
 
 		if (range) {
-			this->log(swarm::SWARM_LOG_INFO, "buffered-get: on_request: url: %s: range: \"%s\"", m_url.c_str(), range->c_str());
+			BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-get: on_request: url: %s: range: \"%s\"", m_url.c_str(), range->c_str());
 			bool ok = false;
 
 			m_ranges = srange_info::parse(*range, &m_many_ranges, &ok);
@@ -741,10 +741,10 @@ public:
 			size = std::min(size, m_offset + m_size);
 
 		if (size <= m_offset) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_first_chunk_read: url: %s: requested offset is too big: offset: %llu, file-size: %llu",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "buffered-get: on_first_chunk_read: url: %s: requested offset is too big: offset: %llu, file-size: %llu",
 					m_url.c_str(), (unsigned long long)m_offset, (unsigned long long)size);
 
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(thevoid::http_response::bad_request);
 			return;
 		}
 
@@ -756,7 +756,7 @@ public:
 			}
 
 			if (ranges.empty()) {
-				this->send_reply(swarm::http_response::requested_range_not_satisfiable);
+				this->send_reply(thevoid::http_response::requested_range_not_satisfiable);
 				return;
 			}
 
@@ -767,8 +767,8 @@ public:
 			return;
 		}
 
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::ok);
+		thevoid::http_response reply;
+		reply.set_code(thevoid::http_response::ok);
 		reply.headers().set_content_type("application/octet-stream");
 		reply.headers().set_last_modified(ts.tsec);
 
@@ -779,18 +779,18 @@ public:
 
 	void on_read_data_finished(const elliptics::sync_read_result &result, const elliptics::error_info &error) {
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_read_data_finished: url: %s: error: %s", m_url.c_str(), error.message().c_str());
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "buffered-get: on_read_data_finished: url: %s: error: %s", m_url.c_str(), error.message().c_str());
 
 			if (error.code() == -ENOENT) {
-				this->send_reply(swarm::http_response::not_found);
+				this->send_reply(thevoid::http_response::not_found);
 				return;
 			} else if (error.code() == -E2BIG) {
-				this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_read_data_finished: url: %s: requested offset is too big: offset: %llu",
+				BH_LOG(this->logger(), SWARM_LOG_ERROR, "buffered-get: on_read_data_finished: url: %s: requested offset is too big: offset: %llu",
 						m_url.c_str(), (unsigned long long)m_offset);
-				this->send_reply(swarm::http_response::bad_request);
+				this->send_reply(thevoid::http_response::bad_request);
 				return;
 			} else {
-				this->send_reply(swarm::http_response::internal_server_error);
+				this->send_reply(thevoid::http_response::internal_server_error);
 				return;
 			}
 		}
@@ -814,14 +814,14 @@ public:
 
 	void on_buffered_get_lookup_finished(const elliptics::sync_lookup_result &result, const elliptics::error_info &error) {
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_buffered_get_lookup_finished: url: %s: error: %s",
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "buffered-get: on_buffered_get_lookup_finished: url: %s: error: %s",
 					m_url.c_str(), error.message().c_str());
 
 			if (error.code() == -ENOENT) {
-				this->send_reply(swarm::http_response::not_found);
+				this->send_reply(thevoid::http_response::not_found);
 				return;
 			} else {
-				this->send_reply(swarm::http_response::internal_server_error);
+				this->send_reply(thevoid::http_response::internal_server_error);
 				return;
 			}
 		}
@@ -846,14 +846,14 @@ public:
 	virtual void on_range(const range_info &range, size_t data_size, const dnet_time &ts) {
 		auto content_range = create_content_range(range.begin, range.end, data_size);
 
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::partial_content);
+		thevoid::http_response reply;
+		reply.set_code(thevoid::http_response::partial_content);
 		reply.headers().set_content_type("application/octet-stream");
 		reply.headers().set_last_modified(ts.tsec);
 		reply.headers().add("Accept-Ranges", "bytes");
 		reply.headers().add("Content-Range", content_range);
 
-		this->log(swarm::SWARM_LOG_INFO, "buffered-get: on_range: url: %s: Content-Range: %s", m_url.c_str(), content_range.c_str());
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "buffered-get: on_range: url: %s: Content-Range: %s", m_url.c_str(), content_range.c_str());
 
 		add_async(range.begin, range.end - range.begin + 1);
 
@@ -887,8 +887,8 @@ public:
 		result += "--\r\n";
 		add_buffer(std::move(result));
 
-		swarm::http_response reply;
-		reply.set_code(swarm::http_response::partial_content);
+		thevoid::http_response reply;
+		reply.set_code(thevoid::http_response::partial_content);
 		reply.headers().set_content_type(std::string("multipart/byteranges; boundary=") + boundary);
 		reply.headers().set_last_modified(ts.tsec);
 		reply.headers().add("Accept-Ranges", "bytes");
@@ -907,18 +907,18 @@ public:
 			const elliptics::error_info &error, bool last)
 	{
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_read_finished: url: %s: error: %s, "
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "buffered-get: on_read_finished: url: %s: error: %s, "
 					"offset: %llu, last: %d",
 					m_url.c_str(), error.message().c_str(), (unsigned long long)offset, last);
 
 			auto ec = boost::system::errc::make_error_code(static_cast<boost::system::errc::errc_t>(-error.code()));
-			this->get_reply()->close(ec);
+			this->reply()->close(ec);
 			return;
 		}
 
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: "
-				"offset: %llu, data-size: %llu, last-in-current-device: %d, device: %zd/%zd",
-				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last,
+		BH_LOG(this->logger(), SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: "
+				"offset: %llu, data-size: %llu, last-in-current-device: %d, device: %lld/%lld",
+				m_url.c_str(), offset, file.size(), last,
 				m_devices_index, m_devices.size());
 
 		if (last) {
@@ -935,9 +935,9 @@ public:
 		auto first_part = file.slice(0, file.size() - second_size);
 		auto second_part = file.slice(first_part.size(), second_size);
 
-		this->log(swarm::SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: "
+		BH_LOG(this->logger(), SWARM_LOG_NOTICE, "buffered-get-redirect: on_read_finished: url: %s: "
 				"fset: %llu, data-size: %llu, last: %d, "
-				"first-part: offset: %zd, size: %zd, second-part: offset: %zd, size: %zd",
+				"first-part: offset: %lld, size: %lld, second-part: offset: %lld, size: %lld",
 				m_url.c_str(), (unsigned long long)offset, (unsigned long long)file.size(), last,
 				first_part.offset(), first_part.size(), second_part.offset(), second_part.size());
 
@@ -948,12 +948,12 @@ public:
 	virtual void on_part_sent(size_t offset, const boost::system::error_code &error, const elliptics::data_pointer &second_part)
 	{
 		if (error) {
-			this->log(swarm::SWARM_LOG_ERROR, "buffered-get: on_part_sent: url: %s: error: %s, "
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "buffered-get: on_part_sent: url: %s: error: %s, "
 					"next-read-offset: %llu, second-part-size: %llu",
 					m_url.c_str(), error.message().c_str(),
 					(unsigned long long)offset, (unsigned long long)second_part.size());
 		} else {
-			this->log(swarm::SWARM_LOG_NOTICE, "buffered-get: on_part_sent: url: %s: "
+			BH_LOG(this->logger(), SWARM_LOG_NOTICE, "buffered-get: on_part_sent: url: %s: "
 					"next-read-offset: %llu, second-part-size: %llu",
 					m_url.c_str(), (unsigned long long)offset, (unsigned long long)second_part.size());
 		}
@@ -965,7 +965,7 @@ public:
 	}
 
 protected:
-	void start(swarm::http_response &&response)
+	void start(thevoid::http_response &&response)
 	{
 		m_prefetched_offset = 0;
 		m_prefetched_data = elliptics::data_pointer();
@@ -1062,10 +1062,10 @@ template <typename Server, typename Stream>
 class on_delete_base : public thevoid::simple_request_stream<Server>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
-		this->log(swarm::SWARM_LOG_INFO, "delete: on_request: url: %s",
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "delete: on_request: url: %s",
 				req.url().to_human_readable().c_str());
 
 		elliptics::key key;
@@ -1078,20 +1078,20 @@ public:
 
 	virtual void on_delete_finished(const elliptics::sync_remove_result &result,
 			const elliptics::error_info &error) {
-		this->log(swarm::SWARM_LOG_INFO, "delete: on_delete_finished: url: %s, error: %s",
+		BH_LOG(this->logger(), SWARM_LOG_INFO, "delete: on_delete_finished: url: %s, error: %s",
 				this->request().url().to_human_readable().c_str(), error.message().c_str());
 
 		if (error.code() == -ENOENT) {
-			this->send_reply(swarm::http_response::not_found);
+			this->send_reply(thevoid::http_response::not_found);
 			return;
 		} else if (error) {
-			this->send_reply(swarm::http_response::service_unavailable);
+			this->send_reply(thevoid::http_response::service_unavailable);
 			return;
 		}
 
 		(void) result;
 
-		this->send_reply(swarm::http_response::ok);
+		this->send_reply(thevoid::http_response::ok);
 	}
 };
 

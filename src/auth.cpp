@@ -6,27 +6,28 @@
 namespace ioremap {
 namespace rift {
 
-authorization_checker_base::authorization_checker_base(const std::shared_ptr<thevoid::base_server> &server) : m_logger(server->logger())
+authorization_checker_base::authorization_checker_base()
 {
 }
 
-std::tuple<swarm::http_response::status_type, ioremap::rift::bucket_acl> authorization_checker_base::find_user(const swarm::http_request &request, const bucket_meta_raw &meta, const std::string &user)
+std::tuple<thevoid::http_response::status_type, ioremap::rift::bucket_acl>
+authorization_checker_base::find_user(const thevoid::http_request &request, const bucket_meta_raw &meta, const std::string &user, const swarm::logger &logger)
 {
-	swarm::http_response::status_type verdict;
+	thevoid::http_response::status_type verdict;
 
 	auto it = meta.acl.find(user);
 	if (it == meta.acl.end()) {
 		// There is no user with this name, return error
-		verdict = swarm::http_response::forbidden;
+		verdict = thevoid::http_response::forbidden;
 
 
-		m_logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
+		BH_LOG(logger, SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %lld: "
 				"no user in acl list -> %d",
 				request.url().to_human_readable().c_str(), meta.key.c_str(), user.c_str(),
 				meta.acl.size(), verdict);
 
 		for (auto a = meta.acl.begin(); a != meta.acl.end(); ++a) {
-			m_logger.log(swarm::SWARM_LOG_INFO, "url: %s, acl: '%s'\n",
+			BH_LOG(logger, SWARM_LOG_INFO, "url: %s, acl: '%s'\n",
 					request.url().to_human_readable().c_str(), a->first.c_str());
 		}
 		return std::make_tuple(verdict, rift::bucket_acl());
@@ -36,15 +37,15 @@ std::tuple<swarm::http_response::status_type, ioremap::rift::bucket_acl> authori
 
 	if (acl.has_no_token()) {
 		// User has no token so we don't have to authenticate him
-		verdict = swarm::http_response::ok;
+		verdict = thevoid::http_response::ok;
 
-		m_logger.log(swarm::SWARM_LOG_INFO, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
+		BH_LOG(logger, SWARM_LOG_INFO, "verdict: url: %s, bucket: %s: user: %s, acls: %lld: "
 				"passed total noauth check -> %d",
 				request.url().to_human_readable().c_str(), meta.key.c_str(), user.c_str(), meta.acl.size(), verdict);
 		return std::make_tuple(verdict, acl);
 	}
 
-	return std::make_tuple(swarm::http_response::continue_code, acl);
+	return std::make_tuple(thevoid::http_response::continue_code, acl);
 }
 
 static std::string to_lower(const std::string &str)
@@ -73,7 +74,7 @@ static std::vector<swarm::headers_entry> extract_special_headers(const swarm::ht
 	return std::move(result);
 }
 
-std::string rift_authorization::generate_signature(const swarm::http_request &request, const std::string &key)
+std::string rift_authorization::generate_signature(const thevoid::http_request &request, const std::string &key)
 {
 	const auto &url = request.url();
 	const auto &query = url.query();
@@ -119,23 +120,23 @@ std::string rift_authorization::generate_signature(const swarm::http_request &re
 	return signature_str;
 }
 
-std::tuple<swarm::http_response::status_type, no_authorization::request_stream_ptr, bucket_acl> no_authorization::check_permission(
-	const request_stream_ptr &stream, const swarm::http_request &request, const bucket_meta_raw &meta)
+std::tuple<thevoid::http_response::status_type, no_authorization::request_stream_ptr, bucket_acl> no_authorization::check_permission(
+	const request_stream_ptr &stream, const thevoid::http_request &request, const bucket_meta_raw &meta, const swarm::logger &logger)
 {
 	std::string user = "*";
 	std::string token;
 
-	return check_permission_with_username_and_token(stream, request, meta, user, token);
+	return check_permission_with_username_and_token(stream, request, meta, user, token, logger);
 }
 
-rift_authorization::rift_authorization(const std::shared_ptr<thevoid::base_server> &server) : authorization_checker_base(server)
+rift_authorization::rift_authorization()
 {
 }
 
 rift_authorization::result_tuple rift_authorization::check_permission(
-	const request_stream_ptr &stream, const swarm::http_request &request, const bucket_meta_raw &meta)
+	const request_stream_ptr &stream, const thevoid::http_request &request, const bucket_meta_raw &meta, const swarm::logger &logger)
 {
-	auto verdict = swarm::http_response::not_found;
+	auto verdict = thevoid::http_response::not_found;
 
 	std::string user;
 	std::string token;
@@ -146,14 +147,14 @@ rift_authorization::result_tuple rift_authorization::check_permission(
 		const std::string &authorization = *auth;
 		const size_t end_of_method = authorization.find(' ');
 		if (end_of_method == std::string::npos) {
-			verdict = swarm::http_response::forbidden;
-			m_logger.log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %zd: invalid auth: %s",
+			verdict = thevoid::http_response::forbidden;
+			BH_LOG(logger, SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %lld: invalid auth: %s",
 					request.url().to_human_readable().c_str(), meta.key.c_str(), meta.acl.size(), auth->c_str());
 			return std::make_tuple(verdict, stream, bucket_acl());
 		} else {
 			if (authorization.compare(0, end_of_method, "riftv1", 6) != 0) {
-				verdict = swarm::http_response::forbidden;
-				m_logger.log(swarm::SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %zd: unknown auth: %s",
+				verdict = thevoid::http_response::forbidden;
+				BH_LOG(logger, SWARM_LOG_NOTICE, "verdict: url: %s, bucket: %s: acls: %lld: unknown auth: %s",
 						request.url().to_human_readable().c_str(), meta.key.c_str(), meta.acl.size(), auth->c_str());
 				return std::make_tuple(verdict, stream, bucket_acl());
 			}
@@ -168,27 +169,30 @@ rift_authorization::result_tuple rift_authorization::check_permission(
 		user = "*";
 	}
 
-	return check_permission_with_username_and_token(stream, request, meta, user, token);
+	return check_permission_with_username_and_token(stream, request, meta, user, token, logger);
 }
 
-no_authorization::no_authorization(const std::shared_ptr<thevoid::base_server> &server) : rift_authorization(server)
+no_authorization::no_authorization()
 {
 }
 
-authorization_checker_base::result_tuple rift_authorization::check_permission_with_username_and_token(const request_stream_ptr &stream, const swarm::http_request &request, const bucket_meta_raw &meta, const std::string &user, const std::string &token)
+authorization_checker_base::result_tuple rift_authorization::check_permission_with_username_and_token(
+	const request_stream_ptr &stream, const thevoid::http_request &request,
+	const bucket_meta_raw &meta, const std::string &user, const std::string &token,
+	const swarm::logger &logger)
 {
-	auto verdict = swarm::http_response::not_found;
+	auto verdict = thevoid::http_response::not_found;
 
 	bucket_acl acl;
-	std::tie(verdict, acl) = find_user(request, meta, user);
-	if (verdict != swarm::http_response::continue_code) {
+	std::tie(verdict, acl) = find_user(request, meta, user, logger);
+	if (verdict != thevoid::http_response::continue_code) {
 		return std::make_tuple(verdict, stream, acl);
 	}
 
 	if (token.empty()) {
-		verdict = swarm::http_response::unauthorized;
+		verdict = thevoid::http_response::unauthorized;
 
-		m_logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
+		BH_LOG(logger, SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %lld: "
 				"no 'Authorization' header -> %d",
 				request.url().to_human_readable().c_str(), meta.key.c_str(), user.c_str(),
 				meta.acl.size(), verdict);
@@ -197,28 +201,28 @@ authorization_checker_base::result_tuple rift_authorization::check_permission_wi
 
 	auto key = generate_signature(request, acl.token);
 	if (key != token) {
-		verdict = swarm::http_response::forbidden;
+		verdict = thevoid::http_response::forbidden;
 
-		m_logger.log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: "
+		BH_LOG(logger, SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: user: %s, acls: %lld: "
 				"calculated-key: %s, auth-header: %s: incorrect auth header -> %d",
 				request.url().to_human_readable().c_str(), meta.key.c_str(), user.c_str(), meta.acl.size(),
 				key.c_str(), token.c_str(), verdict);
 		return std::make_tuple(verdict, stream, acl);
 	}
 
-	verdict = swarm::http_response::ok;
+	verdict = thevoid::http_response::ok;
 
-	m_logger.log(swarm::SWARM_LOG_INFO, "verdict: url: %s, bucket: %s: user: %s, acls: %zd: auth-header: %s: OK -> %d",
+	BH_LOG(logger, SWARM_LOG_INFO, "verdict: url: %s, bucket: %s: user: %s, acls: %lld: auth-header: %s: OK -> %d",
 			request.url().to_human_readable().c_str(), meta.key.c_str(), user.c_str(), meta.acl.size(), key.c_str(), verdict);
 
 	return std::make_tuple(verdict, stream, acl);
 }
 
-s3_v2_signature::s3_v2_signature(const swarm::logger &logger, const std::string &host) : m_logger(logger), m_host(host)
+s3_v2_signature::s3_v2_signature(const std::string &host) : m_host(host)
 {
 }
 
-boost::optional<s3_v2_signature::info> s3_v2_signature::extract_info(const swarm::http_request &request)
+boost::optional<s3_v2_signature::info> s3_v2_signature::extract_info(const thevoid::http_request &request, const swarm::logger &logger)
 {
 	auto auth_ptr = request.headers().get("Authorization");
 	if (!auth_ptr)
@@ -241,12 +245,13 @@ boost::optional<s3_v2_signature::info> s3_v2_signature::extract_info(const swarm
 	info.access_id = authorization.substr(token_begin, token_end - token_begin);
 	info.signature = authorization.substr(token_end + 1);
 
-	m_logger.log(swarm::SWARM_LOG_DEBUG, "auth: '%s', access_id: '%s', signature: '%s'", authorization.c_str(), info.access_id.c_str(), info.signature.c_str());
+	BH_LOG(logger, SWARM_LOG_DEBUG, "auth: '%s', access_id: '%s', signature: '%s'", authorization.c_str(), info.access_id.c_str(), info.signature.c_str());
 
 	return std::move(info);
 }
 
-swarm::http_response::status_type s3_v2_signature::check(const swarm::http_request &request, const s3_v2_signature::info &info, const bucket_acl &acl)
+thevoid::http_response::status_type s3_v2_signature::check(const thevoid::http_request &request, const s3_v2_signature::info &info,
+	const bucket_acl &acl, const swarm::logger &logger)
 {
 	std::string string_to_sign;
 	string_to_sign += request.method();
@@ -261,8 +266,8 @@ swarm::http_response::status_type s3_v2_signature::check(const swarm::http_reque
 	if (auto date = request.headers().get("Date")) {
 		string_to_sign += *date;
 	} else {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "s3_v2_signature: url: %s, verdict: 403, 'Date' field is missed", request.url().original().c_str());
-		return swarm::http_response::forbidden;
+		BH_LOG(logger, SWARM_LOG_ERROR, "s3_v2_signature: url: %s, verdict: 403, 'Date' field is missed", request.url().original().c_str());
+		return thevoid::http_response::forbidden;
 	}
 	string_to_sign += '\n';
 
@@ -288,42 +293,48 @@ swarm::http_response::status_type s3_v2_signature::check(const swarm::http_reque
 
 	string_to_sign += request.url().path();
 
-	m_logger.log(swarm::SWARM_LOG_DEBUG, "s3_v2_signature: url: %s, string: '%s'", request.url().original().c_str(), string_to_sign.c_str());
+	BH_LOG(logger, SWARM_LOG_DEBUG, "s3_v2_signature: url: %s, string: '%s'", request.url().original().c_str(), string_to_sign.c_str());
 
 	std::string signature = rift::crypto::calc_hmac<CryptoPP::SHA1>(string_to_sign, acl.token);
 
 	if (signature != info.signature) {
-		m_logger.log(swarm::SWARM_LOG_DEBUG, "s3_v2_signature: url: %s, signature mismatch, remote: '%s', local: '%s'",
+		BH_LOG(logger, SWARM_LOG_DEBUG, "s3_v2_signature: url: %s, signature mismatch, remote: '%s', local: '%s'",
 			request.url().original().c_str(), info.signature.c_str(), signature.c_str());
-		return swarm::http_response::forbidden;
+		return thevoid::http_response::forbidden;
 	}
 
-	m_logger.log(swarm::SWARM_LOG_DEBUG, "s3_v2_signature: url: %s, signature: '%s'", request.url().original().c_str(), signature.c_str());
+	BH_LOG(logger, SWARM_LOG_DEBUG, "s3_v2_signature: url: %s, signature: '%s'", request.url().original().c_str(), signature.c_str());
 
-	return swarm::http_response::ok;
+	return thevoid::http_response::ok;
 }
 
-s3_v4_signature::s3_v4_signature(const swarm::logger &logger) : m_logger(logger)
+s3_v4_signature::s3_v4_signature()
 {
 }
 
-boost::optional<s3_v4_signature::info> s3_v4_signature::extract_info(const swarm::http_request &request)
+boost::optional<s3_v4_signature::info> s3_v4_signature::extract_info(const thevoid::http_request &request, const swarm::logger &logger)
 {
+	(void) logger;
 	if (auto auth = request.headers().get("Authorization")) {
 		// Authorization: AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request,
 		// SignedHeaders=host;range;x-amz-date,
 		// Signature=fe5f80f77d5fa3beca038a248ff027d0445342fe2855ddc963176630326f1024
 
 		const std::string &authorization = *auth;
+		(void) authorization;
 //		size_t authorization.find(' ');
 	}
 
 	return boost::optional<s3_v4_signature::info>();
 }
 
-swarm::http_response::status_type s3_v4_signature::check(const swarm::http_request &request, const s3_v4_signature::info &info, const bucket_acl &acl)
+thevoid::http_response::status_type s3_v4_signature::check(const thevoid::http_request &request, const s3_v4_signature::info &info, const bucket_acl &acl, const swarm::logger &logger)
 {
-	return swarm::http_response::forbidden;
+	(void) request;
+	(void) info;
+	(void) acl;
+	(void) logger;
+	return thevoid::http_response::forbidden;
 }
 
 }} // namespace ioremap::rift

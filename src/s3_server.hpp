@@ -16,12 +16,12 @@ public:
 
 	virtual bool initialize(const rapidjson::Value &config);
 
-	bool check_query(const swarm::http_request &request) const;
+	bool check_query(const thevoid::http_request &request) const;
 
 	template <typename Stream>
-	std::string extract_key(Stream &stream, const swarm::http_request &request) const;
+	std::string extract_key(Stream &stream, const thevoid::http_request &request) const;
 	template <typename Stream>
-	std::string extract_bucket(Stream &stream, const swarm::http_request &request) const;
+	std::string extract_bucket(Stream &stream, const thevoid::http_request &request) const;
 
 	enum calling_format {
 		subdomain_format,
@@ -82,7 +82,7 @@ public:
 		void on_write_finished(const elliptics::sync_write_result &,
 				const elliptics::error_info &error) {
 			if (error) {
-				this->send_reply(swarm::http_response::service_unavailable);
+				this->send_reply(thevoid::http_response::service_unavailable);
 				return;
 			}
 
@@ -93,8 +93,8 @@ public:
 			etag += rift::crypto::to_hex(digest);
 			etag += "\"";
 
-			swarm::http_response reply;
-			reply.set_code(swarm::http_response::ok);
+			thevoid::http_response reply;
+			reply.set_code(thevoid::http_response::ok);
 			reply.headers().set_content_length(0);
 			reply.headers().add("ETag", etag);
 

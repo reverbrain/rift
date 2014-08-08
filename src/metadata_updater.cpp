@@ -2,18 +2,19 @@
 
 using namespace ioremap::rift;
 
-metadata_updater::metadata_updater() : m_async(NULL)
+metadata_updater::metadata_updater(const swarm::logger &logger) :
+	m_async(NULL),
+	m_logger(logger, blackhole::log::attributes_t())
 {
 }
 
 bool metadata_updater::initialize(const rapidjson::Value &config, const elliptics::node &node,
-	const swarm::logger &logger, async_performer *async, const std::vector<int> &groups)
+	async_performer *async, const std::vector<int> &groups)
 {
-	m_logger = logger;
 	m_async = async;
 
 	if (!groups.size()) {
-		m_logger.log(swarm::SWARM_LOG_ERROR, "invalid metadata-groups, size: 0");
+		BH_LOG(m_logger, SWARM_LOG_ERROR, "invalid metadata-groups, size: 0");
 		return false;
 	}
 
@@ -33,7 +34,7 @@ void metadata_updater::add_action(const std::function<void ()> &handler)
 	m_async->add_action(handler, m_timeout);
 }
 
-ioremap::swarm::logger metadata_updater::logger() const
+const ioremap::swarm::logger &metadata_updater::logger() const
 {
 	return m_logger;
 }

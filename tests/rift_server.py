@@ -14,9 +14,34 @@ class Server:
             "threads": 2,
             "buffer_size": 65536,
             "logger": {
-                "file": "/dev/stderr",
-                "level": 4
+                "level": "debug",
+                "frontends": [
+                    {
+                        "formatter": {
+                            "type": "string",
+                            "pattern": "%(timestamp)s %(request_id)s/%(lwp)s/%(pid)s %(severity)s: %(message)s, %(...L)s"
+                        },
+                        "sink": {
+                            "type": "files",
+                            "path": "/dev/stderr",
+                            "autoflush": True
+                        }
+                    },
+		    {
+                        "formatter": {
+                            "type": "string",
+                            "pattern": "%(timestamp)s %(request_id)s/%(lwp)s/%(pid)s %(severity)s: %(message)s, %(...L)s"
+                        },
+                        "sink": {
+                            "type": "files",
+                            "path": "{0}/{1}.log".format(option.temporary_path, port),
+                            "autoflush": True
+                        }
+                    }
+                ]
             },
+            "trace_header": "X-Trace",
+            "request_header": "X-Request",
             "daemon": {
                 "fork": False,
                 "uid": 1000

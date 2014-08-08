@@ -27,29 +27,29 @@ public:
 		}
 	}
 
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		const auto &pc = req.url().path_components();
 		if (pc.size() < 2) {
-			this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket/bucket-directory-name/bucket-name or "
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket/bucket-directory-name/bucket-name or "
 					"/update-bucket-directory/bucket-directory-name",
 					req.url().path().c_str());
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(thevoid::http_response::bad_request);
 			return;
 		}
 
 		if (Type == update_bucket_directory) {
 			if (pc.size() != 2) {
-				this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket-directory/bucket-directory-name",
+				BH_LOG(this->logger(), SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket-directory/bucket-directory-name",
 						req.url().path().c_str());
-				this->send_reply(swarm::http_response::bad_request);
+				this->send_reply(thevoid::http_response::bad_request);
 				return;
 			}
 			m_ctl_meta.key = pc[1];
 		} else if (Type == update_bucket) {
 			if (pc.size() != 3) {
-				this->log(swarm::SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket/bucket-directory-name/bucket-name",
+				BH_LOG(this->logger(), SWARM_LOG_ERROR, "bucket-meta-create: url: %s: path format: /update-bucket/bucket-directory-name/bucket-name",
 						req.url().path().c_str());
-				this->send_reply(swarm::http_response::bad_request);
+				this->send_reply(thevoid::http_response::bad_request);
 				return;
 			}
 			m_parent = pc[1];
@@ -62,7 +62,7 @@ public:
 
 			write_metadata();
 		} catch (const elliptics::error &e) {
-			this->log(swarm::SWARM_LOG_ERROR, "%s: code: %d", e.what(), e.error_code());
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "%s: code: %d", e.what(), e.error_code());
 			this->send_reply(e.error_code());
 		}
 	}
@@ -104,7 +104,7 @@ protected:
 		tmp.key = m_parent;
 		tmp.groups = session.get_groups();
 
-		this->log(swarm::SWARM_LOG_NOTICE, "%s: write meta key '%s', namespace: '%s', parent: '%s'",
+		BH_LOG(this->logger(), SWARM_LOG_NOTICE, "%s: write meta key '%s', namespace: '%s', parent: '%s'",
 				this->request().url().to_human_readable().c_str(), m_ctl_meta.key.c_str(), m_ctl_meta_namespace.c_str(), m_parent.c_str());
 
 		meta_create_base::set_meta(tmp);
@@ -116,27 +116,27 @@ protected:
 				std::placeholders::_1, std::placeholders::_2));
 	}
 
-	void parse_request(const swarm::http_request &request, const boost::asio::const_buffer &buffer, bucket_meta_raw &meta) {
+	void parse_request(const thevoid::http_request &request, const boost::asio::const_buffer &buffer, bucket_meta_raw &meta) {
 		std::string buf(boost::asio::buffer_cast<const char*>(buffer), boost::asio::buffer_size(buffer));
 		rapidjson::Document doc;
 		doc.Parse<0>(buf.c_str());
 
 		if (doc.HasParseError()) {
-			elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: request parsing error offset: %zd, message: %s",
+			elliptics::throw_error(thevoid::http_response::bad_request, "bucket-meta-create: url: %s: request parsing error offset: %zd, message: %s",
 					request.url().to_human_readable().c_str(), doc.GetErrorOffset(), doc.GetParseError());
 		}
 
 		const char *mandatory_members[] = {"groups", NULL};
 		for (auto ptr = mandatory_members; *ptr != NULL; ++ptr) {
 			if (!doc.HasMember(*ptr)) {
-				elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: request doesn't have '%s' member",
+				elliptics::throw_error(thevoid::http_response::bad_request, "bucket-meta-create: url: %s: request doesn't have '%s' member",
 						request.url().to_human_readable().c_str(), *ptr);
 			}
 		}
 
 		auto & groups = doc["groups"];
 		if (!groups.IsArray()) {
-			elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: 'groups' member is not array",
+			elliptics::throw_error(thevoid::http_response::bad_request, "bucket-meta-create: url: %s: 'groups' member is not array",
 					request.url().to_human_readable().c_str());
 		}
 		for (auto it = groups.Begin(); it != groups.End(); ++it) {
@@ -146,7 +146,7 @@ protected:
 		const char *optional_members[] = {"acl", "flags", "max-size", "max-key-num", NULL};
 		for (auto ptr = optional_members; *ptr != NULL; ++ptr) {
 			if (!doc.HasMember(*ptr)) {
-				this->log(swarm::SWARM_LOG_NOTICE, "bucket-meta-create: url: %s: (warning) request doesn't have '%s' member",
+				BH_LOG(this->logger(), SWARM_LOG_NOTICE, "bucket-meta-create: url: %s: (warning) request doesn't have '%s' member",
 						request.url().to_human_readable().c_str(), *ptr);
 			}
 		}
@@ -154,7 +154,7 @@ protected:
 		if (doc.HasMember("acl")) {
 			auto & acl_array = doc["acl"];
 			if (!acl_array.IsArray()) {
-				elliptics::throw_error(swarm::http_response::bad_request, "bucket-meta-create: url: %s: 'acl' member is not array",
+				elliptics::throw_error(thevoid::http_response::bad_request, "bucket-meta-create: url: %s: 'acl' member is not array",
 						request.url().to_human_readable().c_str());
 			}
 
@@ -162,7 +162,7 @@ protected:
 
 			for (auto it = acl_array.Begin(); it != acl_array.End(); ++it) {
 				if (!it->IsObject()) {
-					elliptics::throw_error(swarm::http_response::bad_request,
+					elliptics::throw_error(thevoid::http_response::bad_request,
 							"bucket-meta-create: url: %s: %zd'th ACL member array isnt't valid object, but has type %d",
 							request.url().to_human_readable().c_str(), it - acl_array.Begin(), it->GetType());
 				}
@@ -170,7 +170,7 @@ protected:
 				auto & acl_obj = *it;
 				for (auto ptr = acl_members; *ptr != NULL; ++ptr) {
 					if (!acl_obj.HasMember(*ptr)) {
-						elliptics::throw_error(swarm::http_response::bad_request,
+						elliptics::throw_error(thevoid::http_response::bad_request,
 								"bucket-meta-create: url: %s: %zd'th ACL member doesn't contain '%s' member",
 								request.url().to_human_readable().c_str(), it - acl_array.Begin(), *ptr);
 					}
@@ -183,7 +183,7 @@ protected:
 
 				meta.acl[acl.user] = acl;
 
-				this->log(swarm::SWARM_LOG_DEBUG, "bucket-meta-create: url: %s: found acl '%s:%s:%llx'",
+				BH_LOG(this->logger(), SWARM_LOG_DEBUG, "bucket-meta-create: url: %s: found acl '%s:%s:%llx'",
 						request.url().to_human_readable().c_str(), acl.user.c_str(), acl.token.c_str(), (unsigned long long)acl.flags);
 			}
 		}
@@ -208,12 +208,12 @@ template <typename Server, typename Stream>
 class on_delete_base : public bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::handler_bucket>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
 		elliptics::session session = this->server()->elliptics()->write_metadata_session(req, this->bucket_mixin_meta);
 
-		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using data session",
+		BH_LOG(this->logger(), SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using data session",
 				req.url().to_human_readable().c_str(), this->bucket_mixin_meta.key.c_str());
 		session.remove_index(this->bucket_mixin_meta.key + ".index", true).connect(std::bind(&on_delete_base::on_delete_finished, this->shared_from_this(),
 					std::placeholders::_1, std::placeholders::_2));
@@ -223,19 +223,19 @@ public:
 		elliptics::session metadata_session = this->server()->elliptics()->write_metadata_session(req, this->bucket_mixin_meta);
 		metadata_session.set_namespace(bucket_namespace.c_str(), bucket_namespace.size());
 
-		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using metadata session in '%s' namespace",
+		BH_LOG(this->logger(), SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: using metadata session in '%s' namespace",
 				req.url().path().c_str(), this->bucket_mixin_meta.key.c_str(), bucket_namespace.c_str());
 		metadata_session.clone().remove(this->bucket_mixin_meta.key);
 
 		std::vector<elliptics::index_entry> parent_indexes;
 
-		this->log(swarm::SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: clearing its indexes in '%s' namespace",
+		BH_LOG(this->logger(), SWARM_LOG_NOTICE, "delete-base: checked: url: %s, removing: %s: clearing its indexes in '%s' namespace",
 				req.url().path().c_str(), this->bucket_mixin_meta.key.c_str(), bucket_namespace.c_str());
 
 		metadata_session.clone().set_indexes(this->bucket_mixin_meta.key, parent_indexes).connect([this] (elliptics::sync_set_indexes_result result, elliptics::error_info error) {
-			this->log(swarm::SWARM_LOG_ERROR, "FINISHED set_indexes, result.size: %zu, error: '%s'", result.size(), error.message().c_str());
+			BH_LOG(this->logger(), SWARM_LOG_ERROR, "FINISHED set_indexes, result.size: %llu, error: '%s'", result.size(), error.message().c_str());
 			for (auto it = result.begin(); it != result.end(); ++it) {
-				this->log(swarm::SWARM_LOG_ERROR, "FINISHED command: %s, error: '%s'", dnet_cmd_string(it->command()->cmd), it->error().message().c_str());
+				BH_LOG(this->logger(), SWARM_LOG_ERROR, "FINISHED command: %s, error: '%s'", dnet_cmd_string(it->command()->cmd), it->error().message().c_str());
 			}
 		});
 	}
@@ -244,11 +244,11 @@ public:
 		(void) result;
 
 		if (error.code() == -ENOENT) {
-			this->send_reply(swarm::http_response::ok);
+			this->send_reply(thevoid::http_response::ok);
 		} else if (error) {
-			this->send_reply(swarm::http_response::bad_request);
+			this->send_reply(thevoid::http_response::bad_request);
 		}
-		this->send_reply(swarm::http_response::ok);
+		this->send_reply(thevoid::http_response::ok);
 	}
 };
 
@@ -262,7 +262,7 @@ template <typename Server, typename Stream>
 class meta_read_base : public bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::handler_bucket>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) buffer;
 
 		const bucket_meta_raw &meta = this->bucket_mixin_meta;
@@ -275,7 +275,7 @@ public:
 
 		auto & allocator = result_object.GetAllocator();
 
-		this->log(swarm::SWARM_LOG_NOTICE, "meta-read-base: checked: url: %s, meta: '%s'",
+		BH_LOG(this->logger(), SWARM_LOG_NOTICE, "meta-read-base: checked: url: %s, meta: '%s'",
 				req.url().to_human_readable().c_str(), meta.key.c_str());
 
 
@@ -318,9 +318,9 @@ public:
 
 		auto data = result_object.ToString();
 
-		swarm::http_response reply;
+		thevoid::http_response reply;
 
-		reply.set_code(swarm::http_response::ok);
+		reply.set_code(thevoid::http_response::ok);
 		reply.headers().set_content_type("text/json; charset=utf-8");
 		reply.headers().set_content_length(data.size());
 
@@ -332,13 +332,13 @@ template <typename Server, typename Stream>
 class meta_head_base : public bucket_mixin<thevoid::simple_request_stream<Server>, rift::bucket_acl::handler_read>, public std::enable_shared_from_this<Stream>
 {
 public:
-	virtual void on_request(const swarm::http_request &req, const boost::asio::const_buffer &buffer) {
+	virtual void on_request(const thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 		(void) req;
 		(void) buffer;
 
-		swarm::http_response reply;
+		thevoid::http_response reply;
 
-		reply.set_code(swarm::http_response::ok);
+		reply.set_code(thevoid::http_response::ok);
 
 		this->send_reply(std::move(reply));
 	}

@@ -3,20 +3,17 @@
 
 namespace ioremap { namespace rift {
 
-async_performer::async_performer() : m_need_exit(false)
+async_performer::async_performer(const swarm::logger &logger) :
+	m_logger(logger, blackhole::log::attributes_t({ swarm::keyword::source() = "async_performer" })),
+	m_need_exit(false)
 {
+	m_thread = boost::thread(std::bind(&async_performer::action_thread, this));
 }
 
 async_performer::~async_performer()
 {
 	std::lock_guard<std::mutex> guard(m_lock);
 	m_set.clear();
-}
-
-void async_performer::initialize(const swarm::logger &logger)
-{
-	m_logger = logger;
-	m_thread = boost::thread(std::bind(&async_performer::action_thread, this));
 }
 
 void async_performer::stop()
@@ -27,7 +24,7 @@ void async_performer::stop()
 
 void async_performer::add_action(const std::function<void ()> &handler, int timeout)
 {
-	m_logger.log(swarm::SWARM_LOG_DEBUG, "add_action: timeout: %d secs", timeout);
+	BH_LOG(m_logger, SWARM_LOG_DEBUG, "add_action: timeout: %d secs", timeout);
 
 	auto action = std::make_shared<info>();
 	action->handler = handler;
@@ -57,7 +54,7 @@ void async_performer::action_thread()
 
 			guard.unlock();
 
-			m_logger.log(swarm::SWARM_LOG_DEBUG, "action: %p, time: %zu sec", info.get(), time);
+			BH_LOG(m_logger, SWARM_LOG_DEBUG, "action: %p, time: %llu sec", info.get(), time);
 
 			info->handler();
 			info->time = time + info->timeout;

@@ -17,7 +17,7 @@ bool s3_server::initialize(const rapidjson::Value &config)
 		return false;
 
 	if (!m_bucket) {
-		logger().log(swarm::SWARM_LOG_ERROR, "\"bucket\" field is missed");
+		BH_LOG(logger(), SWARM_LOG_ERROR, "\"bucket\" field is missed");
 		return false;
 	}
 
@@ -26,9 +26,9 @@ bool s3_server::initialize(const rapidjson::Value &config)
 		m_host.assign(host.GetString(), host.GetStringLength());
 	}
 
-	m_auth[std::string()] = std::make_shared<rift::no_authorization>(shared_from_this());
-	m_auth["AWS"] = std::make_shared<rift::s3_v2_authorization<s3_server>>(shared_from_this(), m_host);
-	m_auth["AWS4-HMAC-SHA256"] = std::make_shared<rift::s3_v4_authorization<s3_server>>(shared_from_this());
+	m_auth[std::string()] = std::make_shared<rift::no_authorization>();
+	m_auth["AWS"] = std::make_shared<rift::s3_v2_authorization<s3_server>>(this, m_host);
+	m_auth["AWS4-HMAC-SHA256"] = std::make_shared<rift::s3_v4_authorization<s3_server>>(this);
 
 	on_bucket<meta_head>(
 		options::methods("HEAD")
@@ -45,14 +45,14 @@ bool s3_server::initialize(const rapidjson::Value &config)
 	return true;
 }
 
-bool s3_server::check_query(const swarm::http_request &request) const
+bool s3_server::check_query(const thevoid::http_request &request) const
 {
 	(void) request;
 	return true;
 }
 
 template <typename Stream>
-std::string s3_server::extract_key(Stream &stream, const swarm::http_request &request) const
+std::string s3_server::extract_key(Stream &stream, const thevoid::http_request &request) const
 {
 	switch (stream.mixin_s3_calling_format) {
 	case ordinary_format: {
@@ -65,14 +65,14 @@ std::string s3_server::extract_key(Stream &stream, const swarm::http_request &re
 	}
 	}
 
-	logger().log(swarm::SWARM_LOG_ERROR, "url: %s, invalid calling format: %d",
+	BH_LOG(logger(), SWARM_LOG_ERROR, "url: %s, invalid calling format: %d",
 		request.url().to_human_readable().c_str(), int(stream.mixin_s3_calling_format));
 	abort();
 	return std::string();
 }
 
 template <typename Stream>
-std::string s3_server::extract_bucket(Stream &, const swarm::http_request &request) const
+std::string s3_server::extract_bucket(Stream &, const thevoid::http_request &request) const
 {
 	switch (static_cast<calling_format>(Stream::s3_calling_format)) {
 	case ordinary_format: {

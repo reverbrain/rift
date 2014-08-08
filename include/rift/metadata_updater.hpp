@@ -17,13 +17,13 @@ namespace rift {
 class metadata_updater
 {
 public:
-	metadata_updater();
+	metadata_updater(const swarm::logger &logger);
 
 	bool initialize(const rapidjson::Value &config, const elliptics::node &node,
-		const swarm::logger &logger, async_performer *async, const std::vector<int> &groups);
+		async_performer *async, const std::vector<int> &groups);
 
 	void add_action(const std::function<void ()> &handler);
-	swarm::logger logger() const;
+	const swarm::logger &logger() const;
 	elliptics::session metadata_session() const;
 
 private:

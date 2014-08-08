@@ -11,14 +11,14 @@ namespace rift {
 class signature
 {
 public:
-    signature();
+    signature(const swarm::logger &logger);
 
-    bool initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node, const swarm::logger &logger);
+    bool initialize(const rapidjson::Value &config, const ioremap::elliptics::node &node);
 
     std::string sign(const swarm::url &url) const;
 
 protected:
-    swarm::logger logger() const;
+    const swarm::logger &logger() const;
 
 private:
     std::string m_key;
