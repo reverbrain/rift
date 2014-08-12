@@ -36,6 +36,7 @@ void bucket_meta::check_and_run_raw(const authorization_info &info, bool uptodat
 		// acl list is empty, nothing to check
 		result.verdict = thevoid::http_response::ok;
 		result.stream = info.stream;
+		result.acl.flags = bucket_acl::auth_all;
 
 		BH_LOG(*info.logger, SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: acls: %lld: acl list is empty -> %d",
 				info.request->url().to_human_readable(), result.meta.key, result.meta.acl.size(), result.verdict);

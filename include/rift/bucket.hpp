@@ -37,7 +37,8 @@ struct bucket_acl {
 	enum auth_flags {
 		auth_no_token = 0x01, // this user is able to perform requests without the authorization
 		auth_write = 0x02, // this user is able to write to this bucket
-		auth_admin = 0x04 // this user is able to change this bucket
+		auth_admin = 0x04, // this user is able to change this bucket,
+		auth_all = auth_write | auth_admin,
 	};
 
 	// This enum describes per-handler authorization flags
