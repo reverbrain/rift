@@ -29,6 +29,7 @@ void bucket_meta::check_and_run_raw(const authorization_info &info, bool uptodat
 		// acl list is empty, nothing to check
 		result.verdict = swarm::http_response::ok;
 		result.stream = info.stream;
+		result.acl.flags = bucket_acl::auth_all;
 
 		m_bucket->logger().log(swarm::SWARM_LOG_ERROR, "verdict: url: %s, bucket: %s: acls: %zd: acl list is empty -> %d",
 				info.request->url().to_human_readable().c_str(), result.meta.key.c_str(), result.meta.acl.size(), result.verdict);
