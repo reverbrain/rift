@@ -1,3 +1,13 @@
+rift (2.26.0.1.0) unstable; urgency=low
+
+  * rift: switched to 2.26 elliptics
+  * Long line indentation cleanups
+  * total: blackhole & elliptics-2.26 & swarm-0.7
+  * auth: Empty acl === there is not restrictions
+  * package: fixed elliptics/swarm dependencies
+
+ -- Evgeniy Polyakov <zbr@ioremap.net>  Sat, 23 Aug 2014 01:55:56 +0400
+
 rift (2.25.0.10.7) unstable; urgency=low
 
   * upload: return rate in bytes per second

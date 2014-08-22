@@ -1,6 +1,6 @@
 Summary:	The rift
 Name:		rift
-Version:	2.25.0.10.7
+Version:	2.26.0.1.0
 Release:	1%{?dist}
 
 License:	Apache 2.0
@@ -67,6 +67,13 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Sat Aug 23 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.26.0.1.0
+- rift: switched to 2.26 elliptics
+- Long line indentation cleanups
+- total: blackhole & elliptics-2.26 & swarm-0.7
+- auth: Empty acl === there is not restrictions
+- package: fixed elliptics/swarm dependencies
+
 * Fri Jul 25 2014 Evgeniy Polyakov <zbr@ioremap.net> - 2.25.0.10.7
 - upload: return rate in bytes per second
 - stat: get rid of /route/ handler, instead put ids into /stat/ data
