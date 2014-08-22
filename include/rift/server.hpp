@@ -115,9 +115,6 @@ public:
 		m_session->monitor_stat(DNET_MONITOR_BACKEND).connect(
 				std::bind(&elliptics_base::monitor_stat_result, this, std::placeholders::_1),
 				std::bind(&elliptics_base::monitor_stat_complete, this, std::placeholders::_1));
-		m_session->stat_log().connect(
-				std::bind(&elliptics_base::vfs_stat_result, this, std::placeholders::_1),
-				std::bind(&elliptics_base::vfs_stat_complete, this, std::placeholders::_1));
 	}
 
 	template <typename Allocator>
@@ -213,8 +210,6 @@ private:
 	long m_write_timeout;
 
 	struct node_stat {
-		struct dnet_stat	vfs;
-
 		std::vector<dnet_raw_id>	ids;
 
 		// 'backend' monitoring output (json) from elliptics node
@@ -230,15 +225,11 @@ private:
 		int			generation;
 
 		node_stat() : used_size(0), generation(0) {
-			memset(&vfs, 0, sizeof(struct dnet_stat));
 		}
 
 		template <typename Allocator>
 		void stat(rapidjson::Value &ret, Allocator &allocator) {
 			rapidjson::Value v(rapidjson::kObjectType);
-			v.AddMember("bsize", vfs.bsize, allocator);
-
-			ret.AddMember("vfs", v, allocator);
 
 			if (doc_backend.size()) {
 				rapidjson::Document doc(&allocator);
@@ -323,72 +314,6 @@ private:
 		// but we do not really care - next replies will overwrite it with more recent data when arrived
 		it->second.generation = m_generation;
 		return it->second;
-	}
-
-	void vfs_stat_result(const elliptics::stat_result_entry &res) {
-		int group_id = res.command()->id.group_id;
-		std::string addr(dnet_server_convert_dnet_addr(res.address()));
-
-		std::unique_lock<std::mutex> guard(m_lock);
-		auto & host = get_host_stat(group_id, addr);
-
-		host.vfs = *res.statistics();
-
-		BH_LOG(m_logger, SWARM_LOG_NOTICE, "%s: VFS statistics updated, generation: %d",
-				addr.c_str(), host.generation);
-	}
-
-	void vfs_stat_complete(const elliptics::error_info &error) {
-		if (error) {
-			BH_LOG(m_logger, SWARM_LOG_ERROR, "vfs-stat-completion: error: %d: %s",
-					error.code(), error.message().c_str());
-		}
-
-		// iterate over all groups and nodes and sum up size statistics
-		// we do this in VFS completion callback, since this command was started after monitor request,
-		// this doesn't mean vfs stat command will be completed after monitor one,
-		// but its probability is rather high
-		//
-		// If vfs stat command comes before monitor one, it is possible,
-		// that we will account previous generation of the monitor data
-		// This is not a huge problem (stats are updated periodically, so error will not accumulate) though.
-		std::unique_lock<std::mutex> guard(m_lock);
-
-		for (auto group = m_group_meta.begin(); group != m_group_meta.end(); ++group) {
-			auto & group_meta = group->second;
-
-			uint64_t total_size = 0;
-			uint64_t used_size = 0;
-			uint64_t free_size = 0;
-			size_t nodes = 0;
-
-			for (auto it = group_meta.nodes.begin(); it != group_meta.nodes.end(); ++it) {
-				auto & host = it->second;
-
-				int diff = m_generation - host.generation;
-				if (diff <= 1) {
-					nodes++;
-					free_size += host.vfs.bsize * host.vfs.bavail;
-					total_size += host.vfs.frsize * host.vfs.blocks;
-					used_size += host.used_size;
-				}
-			}
-
-			group_meta.total_size = total_size;
-			group_meta.used_size = used_size;
-			group_meta.free_size = free_size;
-
-			// Only write size summary into the log,
-			// eventually we will export it to clients and/or some other monitoring
-			// tool, which will provide per-bucket statistics
-			BH_LOG(m_logger, SWARM_LOG_INFO, "statistics: group: %d, "
-					"total-size: %llu, used-size: %llu, free-size: %llu, "
-					"generation: %d, nodes: %lld/%lld",
-					group->first,
-					(unsigned long long)total_size, (unsigned long long)used_size,
-						(unsigned long long)free_size,
-					m_generation, nodes, group_meta.nodes.size());
-		}
 	}
 
 	void monitor_stat_result(const elliptics::monitor_stat_result_entry &res) {
