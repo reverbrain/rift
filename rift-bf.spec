@@ -10,8 +10,9 @@ Source0:	%{name}-%{version}.tar.bz2
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:	boost-devel, boost-system, boost-thread
-BuildRequires:	elliptics >= 2.25.5.0, elliptics-devel >= 2.25.5.0, elliptics-client-devel >= 2.25.5.0
-BuildRequires:  cmake, libthevoid-devel >= 0.6.5.0, msgpack-devel, python-virtualenv, cryptopp-devel
+BuildRequires:	elliptics >= 2.26.3.12, elliptics-devel >= 2.26.3.12, elliptics-client-devel >= 2.26.3.12
+BuildRequires:  cmake, libthevoid-devel >= 0.7.0.5, msgpack-devel, python-virtualenv, cryptopp-devel
+BuildRequires:  cocaine-framework-native-devel >= 0.11.1.2
 
 %description
 Blah, Blah, minor
