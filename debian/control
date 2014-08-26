@@ -3,7 +3,7 @@ Priority: extra
 Maintainer: Ruslan Nigmatullin <euroelessar@yandex.ru>
 Build-Depends: cdbs, debhelper (>= 7), cmake, libthevoid-dev (>= 0.7.0.5), libswarm-dev (>= 0.7.0.5), libmsgpack-dev,
   libboost-system-dev, libboost-thread-dev, libboost-program-options-dev, elliptics-dev (>= 2.26.3.12), elliptics (>= 2.26.3.12), elliptics-client (>= 2.26.3.12),
-  python-pip, python-virtualenv, cocaine-framework-native (>= 0.11.1.2), libcrypto++-dev
+  python-pip, python-virtualenv, cocaine-framework-native (>= 0.11.1.2), libcrypto++-dev, libboost-filesystem-dev
 Standards-Version: 3.9.3
 Section: libs
 Homepage: https://github.com/reverbrain/rift
